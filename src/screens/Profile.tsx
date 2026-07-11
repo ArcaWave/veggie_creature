@@ -51,10 +51,7 @@ export function Profile({ onDone }: { onDone: () => void }) {
 
         <label className="check">
           <input type="checkbox" checked={consentPhoto} onChange={(e) => setConsentPhoto(e.target.checked)} />
-          <span>
-            I'm a parent/guardian. Photos taken here are processed by AI (Google) to create the character, then
-            discarded from the AI service. *
-          </span>
+          <span>I'm a parent/guardian and agree that photos are processed by AI (Google) to create the character. *</span>
         </label>
         <label className="check">
           <input type="checkbox" checked={consentData} onChange={(e) => setConsentData(e.target.checked)} />

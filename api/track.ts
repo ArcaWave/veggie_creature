@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { checkLimit, clientIp } from "./_ratelimit";
+import { checkLimit, clientIp } from "./_ratelimit.js";
 
 export const maxDuration = 10;
 

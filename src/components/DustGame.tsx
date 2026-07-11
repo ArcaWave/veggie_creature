@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { speak } from "../lib/tts";
+import { pop, sparkle } from "../lib/sfx";
 
 // "Magic dust" mini-game, played WHILE the wake video generates.
 // gather 3 ingredients -> grind them into dust (circular motion) -> SPRINKLE to give life.
@@ -37,12 +37,9 @@ export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => voi
     if (picked.length >= PICK_COUNT) return;
     const next = [...picked, ing];
     setPicked(next);
-    speak(ing.name + "!");
+    pop();
     if (next.length === PICK_COUNT) {
-      setTimeout(() => {
-        setPhase("grind");
-        speak("Now grind them into magic dust! Draw circles!");
-      }, 500);
+      setTimeout(() => setPhase("grind"), 500);
     }
   }
 
@@ -68,9 +65,9 @@ export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => voi
           const n = Math.min(g + 1, GRINDS_NEEDED);
           if (n === GRINDS_NEEDED) {
             setPhase("sprinkle");
-            speak("The magic dust is ready! Sprinkle it!");
+            sparkle();
           } else {
-            speak("Grind!");
+            pop();
           }
           return n;
         });
@@ -83,7 +80,7 @@ export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => voi
     <div className="potion">
       {phase === "pick" && (
         <>
-          <p className="potion-title">✨ Gather {PICK_COUNT} things for the magic dust!</p>
+          <p className="potion-title">✨ Pick {PICK_COUNT} magic ingredients!</p>
           <div className="ing-grid">
             {INGREDIENTS.map((ing) => {
               const on = picked.some((p) => p.id === ing.id);
@@ -101,7 +98,7 @@ export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => voi
       {phase !== "pick" && (
         <>
           <p className="potion-title">
-            {phase === "grind" ? `🥣 Grind into dust! Draw circles! (${grinds}/${GRINDS_NEEDED})` : "✨ The magic dust is ready!"}
+            {phase === "grind" ? `🥣 Draw circles to grind! (${grinds}/${GRINDS_NEEDED})` : "✨ The magic dust is ready!"}
           </p>
           <div
             ref={bowlRef}
@@ -131,7 +128,7 @@ export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => voi
             </div>
           </div>
           {phase === "sprinkle" && (
-            <button className="btn-primary" onClick={() => onSprinkle(picked.map((p) => p.trait))}>
+            <button className="btn-primary" onClick={() => { sparkle(); onSprinkle(picked.map((p) => p.trait)); }}>
               ✨ Sprinkle the magic dust!
             </button>
           )}

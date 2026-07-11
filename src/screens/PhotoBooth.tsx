@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { removeBackground } from "../lib/cutout";
-import { speak } from "../lib/tts";
+import { pop } from "../lib/sfx";
 import { track } from "../lib/analytics";
 import type { Monster } from "../types";
 
@@ -20,11 +20,6 @@ export function PhotoBooth({
   const [camTry, setCamTry] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
   const [cutout, setCutout] = useState<string | null>(null);
-
-  useEffect(() => {
-    speak(`Say cheese with ${monster.name}!`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // remove the clay background so only the character remains
   useEffect(() => {
@@ -117,6 +112,7 @@ export function PhotoBooth({
     }
 
     setShot(canvas.toDataURL("image/jpeg", 0.9));
+    pop();
     track("booth_snap");
   }
 

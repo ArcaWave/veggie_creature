@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
-import { setTts, ttsEnabled } from "../lib/tts";
+import { setSfx, sfxEnabled, pop } from "../lib/sfx";
 
 // Persistent overlay bar: brand placeholder (left) + sound toggle (right).
 // Staff access: tap the logo 5 times quickly.
 export function TopBar({ onStaff }: { onStaff: () => void }) {
-  const [sound, setSound] = useState(ttsEnabled());
+  const [sound, setSound] = useState(sfxEnabled());
   const taps = useRef<number[]>([]);
 
   function brandTap() {
@@ -19,15 +19,15 @@ export function TopBar({ onStaff }: { onStaff: () => void }) {
   return (
     <>
       <button className="brand" onClick={brandTap} aria-label="Monggle Kids">
-        {/* LOGO PLACEHOLDER — replace the box below with the real logo image */}
-        <span className="brand-logo">LOGO</span>
-        <span className="brand-name">Monggle Kids</span>
+        <img src="/monggle-logo.png" className="brand-logo" alt="Monggle Kids" />
       </button>
       <button
         className="sound-toggle"
         onClick={() => {
-          setTts(!sound);
-          setSound(!sound);
+          const next = !sound;
+          setSfx(next);
+          setSound(next);
+          if (next) pop();
         }}
         aria-label="Toggle sound"
       >

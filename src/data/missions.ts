@@ -23,7 +23,7 @@ export const MISSIONS: Mission[] = [
     title: "Wake the Sleepy Garden",
     emoji: "🌻",
     tagline: "The garden won't wake up!",
-    prompt: "Oh no — the veggie garden is fast asleep! How will you two wake it up?",
+    prompt: "The garden is fast asleep! How will you wake it up?",
     paths: [
       { id: "dance", label: "Sunshine dance", emoji: "☀️", success: "{name} wiggle-danced and the garden stretched awake, giggling!" },
       { id: "song", label: "Good-morning song", emoji: "🎵", success: "{name} sang la-la-laaa — every veggie popped up to join the chorus!" },
@@ -36,7 +36,7 @@ export const MISSIONS: Mission[] = [
     title: "The Veggie Party",
     emoji: "🎉",
     tagline: "Friends are coming over!",
-    prompt: "The veggie friends are coming to play! What surprise will you two make for the party?",
+    prompt: "Friends are coming! What surprise will you make?",
     paths: [
       { id: "band", label: "A crunchy veggie band", emoji: "🥁", success: "{name} drummed on a pumpkin and shook carrot shakers — best band ever!" },
       { id: "tower", label: "A giant veggie tower", emoji: "🗼", success: "{name} stacked veggies sky-high — whoa, don't wobble!" },

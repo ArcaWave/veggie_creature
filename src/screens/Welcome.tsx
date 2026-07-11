@@ -1,17 +1,9 @@
-import { useEffect } from "react";
-import { speak } from "../lib/tts";
-
 export function Welcome({ onStart }: { onStart: () => void }) {
-  useEffect(() => {
-    speak("Welcome to Veggie Monster! Ready to play?");
-  }, []);
-
   return (
     <div className="screen welcome">
       <div className="welcome-left">
         <div className="welcome-hero">
-          <div className="welcome-emoji">🥦</div>
-          <h1>Veggie Monster</h1>
+          <img src="/veggie-creature-logo.png" className="welcome-logo" alt="Veggie Creature" />
           <p className="welcome-strap">a Monggle Kids experience</p>
           <p className="welcome-tag">Your veggie creation comes to life!</p>
         </div>

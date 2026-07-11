@@ -9,7 +9,6 @@ import { Staff } from "./screens/Staff";
 import { TopBar } from "./components/TopBar";
 import { clearProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
-import { stop as stopTts } from "./lib/tts";
 import type { Monster } from "./types";
 
 type Stage = "welcome" | "profile" | "build" | "quest" | "booth" | "certificate";
@@ -28,7 +27,6 @@ export default function App() {
 
   function reset(reason: string) {
     track("session_reset", { reason });
-    stopTts();
     clearProfile(); // next family starts with a fresh profile
     setMonster(null);
     setVideo(null);

@@ -4,7 +4,7 @@ import { SparkleLoading } from "../components/SparkleLoading";
 import { DustGame } from "../components/DustGame";
 import { stylizePhoto } from "../api/stylize";
 import { animateMonster } from "../api/animate";
-import { speak } from "../lib/tts";
+import { pop, sparkle } from "../lib/sfx";
 import { track } from "../lib/analytics";
 import type { Monster } from "../types";
 
@@ -29,18 +29,6 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
   const [camOn, setCamOn] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
-
-  // narrate each step (short!)
-  useEffect(() => {
-    const lines: Record<Step, string> = {
-      photo: "Snap a photo of your monster!",
-      style: "Clay magic time!",
-      wake: "Let's bring it to life!",
-      eyes: "Put the eyes on!",
-      name: "What's its name?",
-    };
-    speak(lines[step]);
-  }, [step]);
 
   useEffect(() => {
     if (step !== "photo") {
@@ -100,6 +88,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
   function capture() {
     const v = videoRef.current;
     if (!v) return;
+    pop();
     const side = Math.min(v.videoWidth, v.videoHeight);
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 480;
@@ -146,7 +135,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
             ) : (
               <div className="camera placeholder">
                 <span>📷</span>
-                <p>{camError ?? "Point at your veggie monster!"}</p>
+                <p>{camError ?? "Show me your creature!"}</p>
               </div>
             )}
           </div>
@@ -245,7 +234,7 @@ function StyleStep({
       setStylized(res.stylized);
       setStatus("done");
       track("clay_success");
-      speak("Ta-da! Clay monster!");
+      sparkle();
     } else if (res.reason === "no_key") {
       setStatus("nokey");
     } else {
@@ -339,7 +328,7 @@ function WakeStep({
       setDust((d) => Math.max(0, d - 50));
       setStatus("done");
       track("wake_success");
-      speak("It's alive!");
+      sparkle();
     }
   }, [ready, sprinkled, needGame, revealed, setVideo]);
 
@@ -349,7 +338,7 @@ function WakeStep({
     setSprinkled(false);
     setRevealed(false);
     track("wake_start");
-    speak(needGame ? "Let's make some magic dust!" : "A little more magic!");
+    pop();
     cancel.current = { cancelled: false };
     const res = await animateMonster(image, () => {}, cancel.current);
     if (res.video) {

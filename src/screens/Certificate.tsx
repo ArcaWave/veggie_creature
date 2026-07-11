@@ -3,7 +3,7 @@ import { MonsterFace } from "../components/MonsterFace";
 import { saveToGallery } from "../lib/gallery";
 import { getProfile } from "../lib/profile";
 import { track } from "../lib/analytics";
-import { speak } from "../lib/tts";
+import { sparkle } from "../lib/sfx";
 import type { Monster } from "../types";
 
 // TODO: point the QR placeholder at the real Monggle Kids landing URL
@@ -32,7 +32,7 @@ export function Certificate({
       if (alive) setReady(true);
     });
     track("cert_view");
-    speak(`Amazing! ${monster.name} earned a certificate!`);
+    sparkle();
     // archive this creation on the device
     saveToGallery({
       id: `g_${Date.now()}`,
@@ -223,11 +223,16 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   ctx.fillStyle = "#8a9a7c";
   ctx.font = "600 24px 'Baloo 2', sans-serif";
-  ctx.fillText(date, cx, 950);
-  ctx.fillStyle = "#5ba12c";
-  ctx.font = "800 30px 'Baloo 2', sans-serif";
-  ctx.fillText("🥦 Veggie Monster", cx, 1010);
-  ctx.fillStyle = "#8a9a7c";
-  ctx.font = "700 22px 'Baloo 2', sans-serif";
-  ctx.fillText("a Monggle Kids experience", cx, 1046);
+  ctx.fillText(date, cx, 946);
+
+  // Monggle Kids logo footer
+  try {
+    const logo = await loadImage("/monggle-logo.png");
+    const lw = 300, lh = logo.height * (lw / logo.width);
+    ctx.drawImage(logo, cx - lw / 2, 982, lw, lh);
+  } catch {
+    ctx.fillStyle = "#5ba12c";
+    ctx.font = "800 30px 'Baloo 2', sans-serif";
+    ctx.fillText("Monggle Kids", cx, 1020);
+  }
 }

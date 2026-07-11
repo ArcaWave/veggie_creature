@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MISSIONS, type Mission, type SolutionPath } from "../data/missions";
 import { MonsterFace } from "../components/MonsterFace";
-import { speak } from "../lib/tts";
+import { pop, sparkle } from "../lib/sfx";
 import { track } from "../lib/analytics";
 import type { Monster } from "../types";
 
@@ -17,11 +17,6 @@ export function Quest({
   const [mission, setMission] = useState<Mission | null>(null);
   const [win, setWin] = useState<SolutionPath | null>(null);
 
-  useEffect(() => {
-    speak(mission ? mission.prompt : "Pick your quest!");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mission?.id]);
-
   // 1) pick a quest (the child chooses — self-direction)
   if (!mission) {
     return (
@@ -35,6 +30,7 @@ export function Quest({
               key={m.id}
               className="quest-card"
               onClick={() => {
+                pop();
                 track("quest_pick", { mission: m.id });
                 setMission(m);
               }}
@@ -97,8 +93,8 @@ export function Quest({
             key={p.id}
             className="path"
             onClick={() => {
+              sparkle();
               setWin(p);
-              speak(story(p.success));
             }}
           >
             <span className="path-emoji">{p.emoji}</span>

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { animateStatus } from "./_gemini";
-import { checkLimit, limitKey } from "./_ratelimit";
+import { animateStatus } from "./_gemini.js";
+import { checkLimit, limitKey } from "./_ratelimit.js";
 
 export const maxDuration = 60;
 
