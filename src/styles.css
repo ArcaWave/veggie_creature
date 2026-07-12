@@ -400,6 +400,8 @@ body {
 .booth-monster { position: absolute; left: 16px; bottom: 8px; height: 56%; width: auto; z-index: 2; filter: drop-shadow(0 8px 10px rgba(0,0,0,0.35)); pointer-events: none; }
 /* fallback when a clean cutout wasn't possible: round white-ring sticker */
 .booth-monster.sticker { height: 44%; aspect-ratio: 1; object-fit: cover; border-radius: 50%; border: 6px solid #fff; background: #fff; }
+/* virtual background on/off (Zoom-style clay world) */
+.bg-toggle { position: absolute; top: 12px; right: 12px; z-index: 4; border: none; border-radius: 999px; background: rgba(255, 255, 255, 0.9); padding: 10px 16px; font-family: inherit; font-weight: 800; font-size: 16px; color: var(--green-dark); box-shadow: var(--shadow); cursor: pointer; }
 .booth-result { width: 100%; max-width: 760px; border-radius: 24px; box-shadow: var(--shadow); }
 
 /* ---- certificate (2-column landscape) ---- */

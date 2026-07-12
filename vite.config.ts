@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { stylize, startAnimate, animateStatus } from "./api/_gemini";
+import { sendKeepsakes } from "./api/_email";
 import { checkLimit, limitKey } from "./api/_ratelimit";
 
 const readBody = (req: IncomingMessage) =>
@@ -94,6 +95,11 @@ function devApiPlugin(): Plugin {
           return { status: 500, body: { error: "server_error", detail: String(e?.message || e) } };
         }
       });
+      // dev keepsake email (really sends if RESEND_API_KEY is in .env)
+      route("/api/email", "email", async (b) => {
+        const result = await sendKeepsakes(String(b.to ?? ""), String(b.monsterName ?? ""), b.attachments ?? []);
+        return { status: 200, body: result };
+      });
     },
   };
 }
@@ -104,6 +110,8 @@ export default defineConfig(({ mode }) => {
   process.env.GEMINI_API_KEY = env.GEMINI_API_KEY || "";
   process.env.GEMINI_IMAGE_MODEL = env.GEMINI_IMAGE_MODEL || "";
   process.env.GEMINI_VIDEO_MODEL = env.GEMINI_VIDEO_MODEL || "";
+  process.env.RESEND_API_KEY = env.RESEND_API_KEY || "";
+  process.env.EMAIL_FROM = env.EMAIL_FROM || "";
 
   return {
     plugins: [react(), devApiPlugin()],

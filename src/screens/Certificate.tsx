@@ -4,6 +4,7 @@ import { saveToGallery } from "../lib/gallery";
 import { getProfile } from "../lib/profile";
 import { track } from "../lib/analytics";
 import { sparkle } from "../lib/sfx";
+import { shareOrDownload } from "../lib/share";
 import type { Monster } from "../types";
 
 // TODO: point the QR placeholder at the real Monggle Kids landing URL
@@ -25,6 +26,7 @@ export function Certificate({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  const [mail, setMail] = useState<"idle" | "sending" | "sent" | "unavailable" | "failed">("idle");
   const savedRef = useRef(false); // guards the saves against double-run effects
 
   useEffect(() => {
@@ -112,6 +114,35 @@ export function Certificate({
     }, "image/png");
   }
 
+  async function emailKeepsakes() {
+    const email = getProfile()?.email;
+    const canvas = canvasRef.current;
+    if (!email || !canvas || mail === "sending" || mail === "sent") return;
+    setMail("sending");
+    track("keepsake_email");
+    const attachments = [
+      { filename: `${slug(monster.name)}-certificate.png`, dataUrl: canvas.toDataURL("image/png") },
+      { filename: `${slug(monster.name)}-clay.png`, dataUrl: monster.photo },
+    ];
+    if (video) attachments.push({ filename: `${slug(monster.name)}-alive.mp4`, dataUrl: video });
+    // stay under the request limit — drop the video first if too big
+    while (attachments.reduce((n, a) => n + a.dataUrl.length, 0) > 3_700_000 && attachments.length > 1) {
+      attachments.pop();
+    }
+    try {
+      const r = await fetch("/api/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-mk-profile": getProfile()?.id ?? "" },
+        body: JSON.stringify({ to: email, monsterName: monster.name, attachments }),
+      });
+      const j = (await r.json()) as { sent?: boolean; reason?: string };
+      if (j.sent) setMail("sent");
+      else setMail(j.reason === "no_email_key" ? "unavailable" : "failed");
+    } catch {
+      setMail("failed");
+    }
+  }
+
   return (
     <div className="screen center-screen cert-screen">
       <div className="cert-left">
@@ -120,7 +151,39 @@ export function Certificate({
           <h2>🎉 Quest complete!</h2>
         </div>
         <button className="btn-primary big" disabled={!ready} onClick={saveOrShare}>
-          📤 Share card
+          🏅 Share certificate
+        </button>
+
+        {/* keepsakes: AirDrop / Mail / save via the native share sheet (download on desktop) */}
+        <div className="row">
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              track("keepsake_clay");
+              shareOrDownload(monster.photo, `${slug(monster.name)}-clay.png`, `${monster.name} (clay)`);
+            }}
+          >
+            🎨 Clay art
+          </button>
+          {video && (
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                track("keepsake_video");
+                shareOrDownload(video, `${slug(monster.name)}-alive.mp4`, `${monster.name} is alive!`);
+              }}
+            >
+              🎬 Live clip
+            </button>
+          )}
+        </div>
+
+        <button className="btn-secondary" disabled={!ready || mail === "sending" || mail === "sent"} onClick={emailKeepsakes}>
+          {mail === "idle" && "✉️ Email them to me"}
+          {mail === "sending" && "✉️ Sending…"}
+          {mail === "sent" && "✅ Sent! Check your inbox"}
+          {mail === "unavailable" && "✉️ Email isn't set up yet"}
+          {mail === "failed" && "✉️ Didn't send — tap to retry"}
         </button>
 
         <div className="lead-cta">
