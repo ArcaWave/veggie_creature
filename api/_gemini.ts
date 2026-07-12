@@ -57,24 +57,41 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
   }
 }
 
-// Clay image -> start video generation (long-running)
+// Clay image -> start video generation (long-running).
+// QUOTA FALLBACK CHAIN: each Veo model has its own quota bucket, so when the
+// primary model returns 429 (rate/daily limit) we automatically try the next
+// one. Costs rise down the chain (lite ≈ $0.03-0.05/s → fast ≈ $0.10-0.15/s →
+// quality ≈ $0.20-0.40/s) — remove "veo-3.1-generate-preview" below to cap
+// spend at fast. Non-429 errors are real failures and do NOT fall through.
+const VIDEO_FALLBACKS = ["veo-3.1-fast-generate-preview", "veo-3.1-generate-preview"];
+
 export async function startAnimate(image: string, prompt?: string): Promise<Result> {
   if (!key()) return { status: 200, body: { operation: null, reason: "no_key" } };
   const img = parseDataUrl(image);
   if (!img) return { status: 400, body: { error: "bad_image" } };
+  const chain = [...new Set([videoModel(), ...VIDEO_FALLBACKS])];
   try {
-    const r = await fetch(`${GEMINI}/models/${videoModel()}:predictLongRunning`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
-      body: JSON.stringify({
-        instances: [{ prompt: prompt || ANIMATE_PROMPT, image: { bytesBase64Encoded: img.data, mimeType: img.mimeType } }],
-        parameters: { aspectRatio: "16:9" },
-      }),
-    });
-    if (!r.ok) return { status: 502, body: { error: "veo_error", status: r.status, detail: (await r.text()).slice(0, 600) } };
-    const j = (await r.json()) as any;
-    if (!j?.name) return { status: 502, body: { error: "no_operation", detail: JSON.stringify(j).slice(0, 400) } };
-    return { status: 200, body: { operation: j.name } };
+    let last: { status: number; detail: string } = { status: 0, detail: "" };
+    for (const model of chain) {
+      const r = await fetch(`${GEMINI}/models/${model}:predictLongRunning`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
+        body: JSON.stringify({
+          instances: [{ prompt: prompt || ANIMATE_PROMPT, image: { bytesBase64Encoded: img.data, mimeType: img.mimeType } }],
+          parameters: { aspectRatio: "16:9" },
+        }),
+      });
+      if (r.ok) {
+        const j = (await r.json()) as any;
+        if (!j?.name) return { status: 502, body: { error: "no_operation", detail: JSON.stringify(j).slice(0, 400) } };
+        console.log(`[veo] started on ${model}`);
+        return { status: 200, body: { operation: j.name, model } };
+      }
+      last = { status: r.status, detail: (await r.text()).slice(0, 600) };
+      if (r.status !== 429) break; // real error — don't burn the fallbacks
+      console.log(`[veo] ${model} quota-exhausted (429), trying next model`);
+    }
+    return { status: 502, body: { error: "veo_error", status: last.status, detail: last.detail } };
   } catch (e: any) {
     return { status: 500, body: { error: "server_error", detail: String(e?.message || e) } };
   }
