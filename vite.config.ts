@@ -53,6 +53,47 @@ function devApiPlugin(): Plugin {
         }
         return { status: 200, body: { ok: true } };
       });
+      // dev durable-save sink: mirrors api/save.ts into .data/ (prod uses Vercel Blob)
+      route("/api/save", "save", async (b) => {
+        try {
+          const dir = path.join(process.cwd(), ".data");
+          fs.mkdirSync(dir, { recursive: true });
+          if (b.kind === "profile" && b.profile) {
+            fs.appendFileSync(path.join(dir, "profiles.jsonl"), JSON.stringify({ ...b.profile, savedAt: Date.now() }) + "\n");
+            return { status: 200, body: { saved: true } };
+          }
+          if (b.kind === "monster" && b.monster) {
+            const m = b.monster;
+            const stamp = `${m.profileId ?? "anon"}-${Date.now()}`;
+            let imageSaved = false;
+            const img = /^data:image\/(\w+);base64,(.*)$/s.exec(m.image || "");
+            if (img) {
+              fs.mkdirSync(path.join(dir, "monsters"), { recursive: true });
+              fs.writeFileSync(path.join(dir, "monsters", `${stamp}.${img[1] === "jpeg" ? "jpg" : img[1]}`), Buffer.from(img[2], "base64"));
+              imageSaved = true;
+            }
+            fs.appendFileSync(
+              path.join(dir, "monsters.jsonl"),
+              JSON.stringify({ profileId: m.profileId ?? null, name: m.name, traits: m.traits, eyes: m.eyes ?? [], stars: m.stars, imageFile: imageSaved ? `monsters/${stamp}` : null, savedAt: Date.now() }) + "\n"
+            );
+            return { status: 200, body: { saved: true, imageSaved } };
+          }
+          if (b.kind === "asset" && b.asset) {
+            const a = b.asset;
+            const data = typeof a.data === "string" ? a.data : "";
+            const m2 = /^data:(\w+)\/(\w+);base64,(.*)$/s.exec(data);
+            if (!m2) return { status: 400, body: { error: "bad_data" } };
+            const type = String(a.type ?? "asset").replace(/[^a-z0-9-]/gi, "");
+            const ext = m2[1] === "video" ? "mp4" : m2[2] === "jpeg" ? "jpg" : m2[2];
+            fs.mkdirSync(path.join(dir, "gallery"), { recursive: true });
+            fs.writeFileSync(path.join(dir, "gallery", `${a.profileId ?? "anon"}-${type}-${Date.now()}.${ext}`), Buffer.from(m2[3], "base64"));
+            return { status: 200, body: { saved: true } };
+          }
+          return { status: 400, body: { error: "bad_kind" } };
+        } catch (e: any) {
+          return { status: 500, body: { error: "server_error", detail: String(e?.message || e) } };
+        }
+      });
     },
   };
 }

@@ -16,6 +16,7 @@ const LIMITS: Record<string, Cfg> = {
   animate: { max: 4, windowMs: 600_000 }, // video (expensive!): 4 / 10 minutes
   "animate-status": { max: 150, windowMs: 60_000 }, // polling is frequent — keep loose
   track: { max: 300, windowMs: 60_000 }, // analytics events
+  save: { max: 30, windowMs: 60_000 }, // profile / monster saves
 };
 
 const hits: Record<string, Map<string, number[]>> = {};

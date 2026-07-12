@@ -30,6 +30,12 @@ export function saveProfile(p: Omit<Profile, "id" | "createdAt">): Profile {
   } catch {
     /* storage full — session continues in memory */
   }
+  // durable server-side copy (consented; graceful no-op when no store is connected)
+  fetch("/api/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-mk-profile": full.id },
+    body: JSON.stringify({ kind: "profile", profile: full }),
+  }).catch(() => {});
   return full;
 }
 

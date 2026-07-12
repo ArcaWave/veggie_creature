@@ -25,12 +25,19 @@ export function Certificate({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  const savedRef = useRef(false); // guards the saves against double-run effects
 
   useEffect(() => {
     let alive = true;
     drawCertificate(canvasRef.current!, monster, stars, profilePhoto ?? monster.photo).then(() => {
       if (alive) setReady(true);
     });
+    if (savedRef.current) {
+      return () => {
+        alive = false;
+      };
+    }
+    savedRef.current = true;
     track("cert_view");
     sparkle();
     // archive this creation on the device
@@ -43,6 +50,22 @@ export function Certificate({
       profileId: getProfile()?.id ?? null,
       createdAt: Date.now(),
     });
+    // durable server-side copy of the creation (consented; no-op without a store)
+    fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-mk-profile": getProfile()?.id ?? "" },
+      body: JSON.stringify({
+        kind: "monster",
+        monster: {
+          profileId: getProfile()?.id ?? null,
+          name: monster.name,
+          traits: monster.traits,
+          eyes: monster.eyes,
+          stars,
+          image: monster.photo,
+        },
+      }),
+    }).catch(() => {});
     return () => {
       alive = false;
     };

@@ -55,7 +55,10 @@ export function Profile({ onDone }: { onDone: () => void }) {
         </label>
         <label className="check">
           <input type="checkbox" checked={consentData} onChange={(e) => setConsentData(e.target.checked)} />
-          <span>I agree to usage data collection to improve Monggle Kids. *</span>
+          <span>
+            I agree that my email, my child's creation (name and artwork), and usage data are saved to improve
+            Monggle Kids. *
+          </span>
         </label>
         <label className="check">
           <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />

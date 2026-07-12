@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { MonsterFace } from "../components/MonsterFace";
 import { SparkleLoading } from "../components/SparkleLoading";
 import { DustGame } from "../components/DustGame";
+import { ClayGame } from "../components/ClayGame";
 import { stylizePhoto } from "../api/stylize";
 import { animateMonster } from "../api/animate";
 import { pop, sparkle } from "../lib/sfx";
 import { track } from "../lib/analytics";
+import { keepAsset } from "../lib/keep";
 import type { Monster } from "../types";
 
 type Step = "photo" | "style" | "wake" | "eyes" | "name";
@@ -94,9 +96,11 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
     canvas.width = canvas.height = 480;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 480, 480);
-    setPhoto(canvas.toDataURL("image/jpeg", 0.8));
+    const url = canvas.toDataURL("image/jpeg", 0.8);
+    setPhoto(url);
     setStylized(null);
     track("photo_captured");
+    keepAsset("original", url); // gallery raw material
     setStep("style");
   }
 
@@ -108,6 +112,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
       setPhoto(String(reader.result));
       setStylized(null);
       track("photo_uploaded");
+      keepAsset("original", String(reader.result)); // gallery raw material
       setStep("style");
     };
     reader.readAsDataURL(file);
@@ -154,7 +159,19 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
       )}
 
       {step === "style" && (
-        <StyleStep photo={photo} stylized={stylized} setStylized={setStylized} onNext={() => setStep("wake")} />
+        <StyleStep
+          photo={photo}
+          stylized={stylized}
+          setStylized={setStylized}
+          onNext={() => setStep("wake")}
+          onRetake={() => {
+            // back to the camera for a brand-new photo (clay result is discarded)
+            setPhoto("");
+            setStylized(null);
+            track("photo_retake");
+            setStep("photo");
+          }}
+        />
       )}
 
       {step === "wake" && (
@@ -211,30 +228,46 @@ function Steps({ step }: { step: Step }) {
   );
 }
 
-// Photo -> clay image. Falls back to the original if no key.
+// Photo -> clay image. The AI runs in the background while the child kneads the
+// photo (ClayGame). The reveal is HELD until BOTH the kneading is finished and
+// the AI result is ready — then a short beat, then ta-da. Redo skips the game.
 function StyleStep({
   photo,
   stylized,
   setStylized,
   onNext,
+  onRetake,
 }: {
   photo: string;
   stylized: string | null;
   setStylized: (s: string | null) => void;
   onNext: () => void;
+  onRetake: () => void;
 }) {
-  type Status = "loading" | "done" | "nokey" | "error";
-  const [status, setStatus] = useState<Status>(stylized ? "done" : "loading");
+  type Status = "working" | "done" | "nokey" | "error";
+  const [status, setStatus] = useState<Status>(stylized ? "done" : "working");
+  const [ready, setReady] = useState<string | null>(null); // AI result waiting for the game
+  const [gameDone, setGameDone] = useState(!!stylized);
+  const [revealed, setRevealed] = useState(!!stylized);
+  const [progress, setProgress] = useState(0); // top loading bar (eases to 90, jumps on ready)
   const started = useRef(false);
 
-  async function run() {
-    setStatus("loading");
+  useEffect(() => {
+    if (status !== "working") return;
+    const id = setInterval(() => setProgress((p) => (p > 90 ? p : Math.min(90, p + Math.max(0.4, (90 - p) * 0.04)))), 250);
+    return () => clearInterval(id);
+  }, [status]);
+
+  async function run(withGame: boolean) {
+    setStatus("working");
+    setProgress(0);
+    setReady(null);
+    setRevealed(false);
+    setGameDone(!withGame);
     const res = await stylizePhoto(photo);
     if (res.stylized) {
-      setStylized(res.stylized);
-      setStatus("done");
-      track("clay_success");
-      sparkle();
+      setReady(res.stylized);
+      setProgress(100);
     } else if (res.reason === "no_key") {
       setStatus("nokey");
     } else {
@@ -246,13 +279,53 @@ function StyleStep({
   useEffect(() => {
     if (started.current || stylized) return;
     started.current = true;
-    run();
+    run(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // reveal when BOTH the AI is ready and the kneading is done (+ a short beat)
+  useEffect(() => {
+    if (ready && gameDone && !revealed) {
+      const t = setTimeout(() => {
+        setStylized(ready);
+        setReady(null);
+        setRevealed(true);
+        setStatus("done");
+        track("clay_success");
+        sparkle();
+      }, 900);
+      return () => clearTimeout(t);
+    }
+  }, [ready, gameDone, revealed, setStylized]);
+
+  // kneading in progress (first run)
+  if (status === "working" && !gameDone) {
+    return (
+      <div className="stack center">
+        <ClayGame photo={photo} progress={progress} onDone={() => { setGameDone(true); track("clay_game_done"); }} />
+      </div>
+    );
+  }
+
+  // kneading finished but the AI is still cooking (or a redo is running)
+  if (status === "working") {
+    return (
+      <div className="stack center">
+        <div className="clay-bar">
+          <div className="clay-bar-fill" style={{ width: `${progress}%` }} />
+          <span>✨ Clay magic…</span>
+        </div>
+        <div className="wake-frame">
+          <img src={photo} className="wake-media" alt="" style={{ filter: "saturate(1.5) blur(1.4px)" }} />
+          <SparkleLoading messages={["The clay is setting…", "Almost there…"]} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="stack center">
-      <p className="lead">✨ Clay magic!</p>
+      <p className="lead">✨ Ta-da!</p>
       <div className="style-row">
         <div className="style-card">
           <div className="style-frame">
@@ -264,9 +337,6 @@ function StyleStep({
         <div className="style-card">
           <div className="style-frame">
             {stylized ? <img src={stylized} alt="clay" /> : <div className="eyes-placeholder">🪄</div>}
-            {status === "loading" && (
-              <SparkleLoading messages={["Squishing the clay…", "Adding the cute…", "Almost there…"]} />
-            )}
           </div>
           <span className="style-label">Clay</span>
         </div>
@@ -276,10 +346,11 @@ function StyleStep({
       {status === "error" && <div className="style-note">Oops! Try again or keep the photo.</div>}
 
       <div className="row">
+        <button className="btn-secondary" onClick={onRetake}>📷 Retake</button>
         {(status === "done" || status === "error") && (
-          <button className="btn-secondary" onClick={run}>🔄 Redo</button>
+          <button className="btn-secondary" onClick={() => run(false)}>🔄 Redo</button>
         )}
-        <button className="btn-primary" onClick={onNext} disabled={status === "loading"}>Next →</button>
+        <button className="btn-primary" onClick={onNext}>Next →</button>
       </div>
     </div>
   );
@@ -324,6 +395,7 @@ function WakeStep({
     if (ready && sprinkleDone && !revealed) {
       setRevealed(true);
       setVideo(ready);
+      keepAsset("wake-video", ready); // the moving gallery asset!
       setReady(null);
       setDust((d) => Math.max(0, d - 50));
       setStatus("done");
@@ -352,34 +424,59 @@ function WakeStep({
   }
 
   const waitingAfterSprinkle = status === "working" && sprinkled && !revealed;
+  const gameOn = status === "working" && needGame && !sprinkled;
+
+  const frame = (
+    <div className="wake-frame">
+      {video ? (
+        <video src={video} className="wake-media" autoPlay loop muted playsInline />
+      ) : image ? (
+        <img src={image} className="wake-media" alt="" />
+      ) : (
+        <div className="eyes-placeholder">🌱</div>
+      )}
+      {status === "working" && (sprinkled ? (
+        <div className="dust-shower">
+          {Array.from({ length: 14 }).map((_, k) => (
+            <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
+          ))}
+          <span className="sparkle-msg">Sprinkling magic dust…</span>
+        </div>
+      ) : (
+        <SparkleLoading messages={["Cooking up the magic…", "Almost ready…"]} />
+      ))}
+    </div>
+  );
+
+  const meter = (
+    <div className="dust">
+      <span className="dust-label">✨ Magic dust</span>
+      <div className="dust-bar"><div className="dust-fill" style={{ width: `${dust}%` }} /></div>
+    </div>
+  );
+
+  // game running: the monster hides backstage — the child dives into the powder game
+  if (gameOn) {
+    return (
+      <div className="stack center">
+        <p className="lead">✨ Give it life!</p>
+        <DustGame
+          onSprinkle={(t) => {
+            setTraits(t);
+            setSprinkled(true);
+            track("dust_sprinkle", { traits: t });
+          }}
+        />
+        <p className="hint-small">Your creature is getting ready backstage… 🎬</p>
+      </div>
+    );
+  }
 
   return (
     <div className="stack center">
       <p className="lead">✨ Give it life!</p>
-      <div className="wake-frame">
-        {video ? (
-          <video src={video} className="wake-media" autoPlay loop muted playsInline />
-        ) : image ? (
-          <img src={image} className="wake-media" alt="" />
-        ) : (
-          <div className="eyes-placeholder">🌱</div>
-        )}
-        {status === "working" && (sprinkled ? (
-          <div className="dust-shower">
-            {Array.from({ length: 14 }).map((_, k) => (
-              <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
-            ))}
-            <span className="sparkle-msg">Sprinkling magic dust…</span>
-          </div>
-        ) : (
-          <SparkleLoading messages={["Cooking up the magic…", "Almost ready…"]} />
-        ))}
-      </div>
-
-      <div className="dust">
-        <span className="dust-label">✨ Magic dust</span>
-        <div className="dust-bar"><div className="dust-fill" style={{ width: `${dust}%` }} /></div>
-      </div>
+      {frame}
+      {meter}
 
       {status === "idle" && (
         <>
@@ -390,22 +487,7 @@ function WakeStep({
         </>
       )}
       {status === "working" && (
-        <>
-          {needGame && !sprinkled ? (
-            <DustGame
-              onSprinkle={(t) => {
-                setTraits(t);
-                setSprinkled(true);
-                track("dust_sprinkle", { traits: t });
-              }}
-            />
-          ) : (
-            <p className="hint-small">{waitingAfterSprinkle ? "The magic is working… ✨" : "Almost alive… ✨"}</p>
-          )}
-          {!sprinkled && (
-            <button className="btn-ghost" onClick={() => (cancel.current.cancelled = true)}>Stop</button>
-          )}
-        </>
+        <p className="hint-small">{waitingAfterSprinkle ? "The magic is working… ✨" : "Almost alive… ✨"}</p>
       )}
       {status === "done" && (
         <div className="row">

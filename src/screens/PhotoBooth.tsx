@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { removeBackground } from "../lib/cutout";
 import { pop } from "../lib/sfx";
 import { track } from "../lib/analytics";
+import { keepAsset } from "../lib/keep";
 import type { Monster } from "../types";
 
 // Photo booth: take a selfie WITH your monster. The monster sits at the bottom-left
@@ -19,14 +20,19 @@ export function PhotoBooth({
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
   const [shot, setShot] = useState<string | null>(null);
-  const [cutout, setCutout] = useState<string | null>(null);
+  const [cutout, setCutout] = useState<{ url: string; isCutout: boolean } | null>(null);
 
-  // remove the clay background so only the character remains
+  // remove the clay background; if it can't be done cleanly, fall back to a
+  // sticker-framed photo (never a broken half-cutout — this is a keepsake)
   useEffect(() => {
     let alive = true;
     removeBackground(monster.photo)
-      .then((c) => alive && setCutout(c))
-      .catch(() => alive && setCutout(monster.photo));
+      .then((c) => {
+        if (!alive) return;
+        setCutout(c);
+        if (c.isCutout) keepAsset("cutout", c.url); // gallery raw material
+      })
+      .catch(() => alive && setCutout({ url: monster.photo, isCutout: false }));
     return () => {
       alive = false;
     };
@@ -96,19 +102,48 @@ export function PhotoBooth({
     ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh);
     ctx.restore();
 
-    // character cutout (background-free), bottom-left, big
+    // character at the bottom-left: background-free cutout when it's clean,
+    // otherwise a round white-ring sticker (a keepsake must never look broken)
     try {
-      const cut = await loadImage(cutout ?? monster.photo);
-      const ch = Math.round(H * 0.54);
-      const cw = Math.round(cut.width * (ch / cut.height));
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.35)";
-      ctx.shadowBlur = 26;
-      ctx.shadowOffsetY = 14;
-      ctx.drawImage(cut, Math.round(W * 0.03), H - ch - Math.round(H * 0.02), cw, ch);
-      ctx.restore();
+      const img = await loadImage(cutout?.url ?? monster.photo);
+      if (cutout?.isCutout) {
+        const ch = Math.round(H * 0.54);
+        const cw = Math.round(img.width * (ch / img.height));
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 26;
+        ctx.shadowOffsetY = 14;
+        ctx.drawImage(img, Math.round(W * 0.03), H - ch - Math.round(H * 0.02), cw, ch);
+        ctx.restore();
+      } else {
+        const size = Math.round(H * 0.44);
+        const r = size / 2;
+        const cx = Math.round(W * 0.03) + r;
+        const cy = H - Math.round(H * 0.03) - r;
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 22;
+        ctx.shadowOffsetY = 10;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+        const side = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, cx - r, cy - r, size, size);
+        ctx.restore();
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     } catch {
-      /* keep just the camera photo if the cutout can't draw */
+      /* keep just the camera photo if the character can't draw */
     }
 
     setShot(canvas.toDataURL("image/jpeg", 0.9));
@@ -151,7 +186,9 @@ export function PhotoBooth({
                 <p>{camError ?? "Starting the camera…"}</p>
               </div>
             )}
-            {cutout && <img src={cutout} className="booth-monster" alt="" />}
+            {cutout && (
+              <img src={cutout.url} className={`booth-monster${cutout.isCutout ? "" : " sticker"}`} alt="" />
+            )}
           </div>
 
           {camOn ? (

@@ -1,8 +1,13 @@
 // Client-side background removal for the clay image.
-// The clay is generated on a "solid pastel background", so we flood-fill from the
-// edges (removing only the connected background, not similar colors inside the
-// character), then crop tightly to the character. Returns a transparent PNG data URL.
-export async function removeBackground(dataUrl: string): Promise<string> {
+// Flood-fills the background from the edges, but with two safety nets so a kid's
+// keepsake photo can never look broken:
+//  1. a protected central zone (the character's face/body) is NEVER removed
+//  2. if the background couldn't be detected confidently, we give up on the
+//     cutout entirely and report isCutout:false — the caller shows a clean
+//     sticker-framed photo instead of a glitchy half-cutout.
+export type CutoutResult = { url: string; isCutout: boolean };
+
+export async function removeBackground(dataUrl: string): Promise<CutoutResult> {
   const img = await loadImage(dataUrl);
   const W = img.width, H = img.height;
   const c = document.createElement("canvas");
@@ -28,23 +33,39 @@ export async function removeBackground(dataUrl: string): Promise<string> {
       return dr * dr + dg * dg + db * db < tol2;
     });
 
+  // protected zone: an ellipse over the image center, where the character's
+  // face/body lives — the fill may never eat into it.
+  const ecx = W * 0.5, ecy = H * 0.55, erx = W * 0.32, ery = H * 0.38;
+  const inSafeZone = (x: number, y: number) => {
+    const nx = (x - ecx) / erx, ny = (y - ecy) / ery;
+    return nx * nx + ny * ny <= 1;
+  };
+
   const visited = new Uint8Array(W * H);
   const stack: number[] = [];
   for (let x = 0; x < W; x++) stack.push(x, (H - 1) * W + x);
   for (let y = 0; y < H; y++) stack.push(y * W, y * W + W - 1);
+  let removed = 0;
   while (stack.length) {
     const p = stack.pop()!;
     if (p < 0 || p >= W * H || visited[p]) continue;
+    const x = p % W, y = (p / W) | 0;
+    if (inSafeZone(x, y)) continue;
     const o = p * 4;
     if (!near(o)) continue;
     visited[p] = 1;
     d[o + 3] = 0; // make transparent
-    const x = p % W, y = (p / W) | 0;
+    removed++;
     if (x > 0) stack.push(p - 1);
     if (x < W - 1) stack.push(p + 1);
     if (y > 0) stack.push(p - W);
     if (y < H - 1) stack.push(p + W);
   }
+
+  // confidence check: a real solid-background clay image loses a big chunk of
+  // its pixels here. If barely anything was removed, the background wasn't a
+  // solid color — a partial cutout would look broken, so keep the full photo.
+  if (removed / (W * H) < 0.12) return { url: dataUrl, isCutout: false };
 
   // edge-restore pass: bring back removed pixels that are mostly surrounded by
   // the character (fixes nibbled outlines/highlights along its silhouette).
@@ -74,13 +95,13 @@ export async function removeBackground(dataUrl: string): Promise<string> {
       }
     }
   }
-  if (!any) return dataUrl;
+  if (!any) return { url: dataUrl, isCutout: false };
   const cw = maxx - minx + 1, ch = maxy - miny + 1;
   const out = document.createElement("canvas");
   out.width = cw;
   out.height = ch;
   out.getContext("2d")!.drawImage(c, minx, miny, cw, ch, 0, 0, cw, ch);
-  return out.toDataURL("image/png");
+  return { url: out.toDataURL("image/png"), isCutout: true };
 }
 
 // In-place per-frame background removal (edge flood-fill), for live video keying.

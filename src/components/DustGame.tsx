@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { pop, sparkle } from "../lib/sfx";
 
 // "Magic dust" mini-game, played WHILE the wake video generates.
-// gather 3 ingredients -> grind them into dust (circular motion) -> SPRINKLE to give life.
-// The reveal is held until the sprinkle — the dust is what "causes" the magic.
+// Ingredients float scattered around the pot — tap the ones you like and they
+// FLY into the pot. Then tap-tap-tap the pot to grind, and SPRINKLE to give life.
 type Ingredient = { id: string; emoji: string; name: string; trait: string };
 
 const INGREDIENTS: Ingredient[] = [
@@ -16,123 +16,107 @@ const INGREDIENTS: Ingredient[] = [
 ];
 
 const PICK_COUNT = 3;
-const GRINDS_NEEDED = 5;
+const GRIND_TAPS = 8;
 
 export function DustGame({ onSprinkle }: { onSprinkle: (traits: string[]) => void }) {
   const [phase, setPhase] = useState<"pick" | "grind" | "sprinkle">("pick");
   const [picked, setPicked] = useState<Ingredient[]>([]);
+  const [flying, setFlying] = useState<Record<string, { dx: number; dy: number }>>({});
   const [grinds, setGrinds] = useState(0);
+  const [wob, setWob] = useState(0);
+  const potRef = useRef<HTMLDivElement>(null);
 
-  const bowlRef = useRef<HTMLDivElement>(null);
-  const lastAngle = useRef<number | null>(null);
-  const accum = useRef(0);
-  const grinding = useRef(false);
+  const inFlight = Object.keys(flying).length;
+  const chosen = picked.length + inFlight;
 
-  function toggle(ing: Ingredient) {
-    const has = picked.some((p) => p.id === ing.id);
-    if (has) {
-      setPicked(picked.filter((p) => p.id !== ing.id));
-      return;
-    }
-    if (picked.length >= PICK_COUNT) return;
-    const next = [...picked, ing];
-    setPicked(next);
+  // tap an ingredient -> it flies into the pot
+  function tapIngredient(ing: Ingredient, e: React.MouseEvent<HTMLButtonElement>) {
+    if (phase !== "pick" || flying[ing.id] || picked.some((p) => p.id === ing.id)) return;
+    if (chosen >= PICK_COUNT || !potRef.current) return;
+    const ir = e.currentTarget.getBoundingClientRect();
+    const pr = potRef.current.getBoundingClientRect();
+    const dx = pr.left + pr.width / 2 - (ir.left + ir.width / 2);
+    const dy = pr.top + pr.height * 0.3 - (ir.top + ir.height / 2);
+    setFlying((f) => ({ ...f, [ing.id]: { dx, dy } }));
     pop();
-    if (next.length === PICK_COUNT) {
-      setTimeout(() => setPhase("grind"), 500);
-    }
+    setTimeout(() => {
+      setFlying((f) => {
+        const { [ing.id]: _gone, ...rest } = f;
+        return rest;
+      });
+      setPicked((p) => {
+        const next = [...p, ing];
+        if (next.length === PICK_COUNT) setTimeout(() => setPhase("grind"), 450);
+        return next;
+      });
+      setWob((w) => w + 1); // pot gulps
+    }, 560);
   }
 
-  function angleAt(e: React.PointerEvent): number | null {
-    const el = bowlRef.current;
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
-  }
-
-  function onBowlMove(e: React.PointerEvent) {
-    if (!grinding.current || phase !== "grind") return;
-    const a = angleAt(e);
-    if (a === null) return;
-    if (lastAngle.current !== null) {
-      let d = a - lastAngle.current;
-      if (d > Math.PI) d -= 2 * Math.PI;
-      if (d < -Math.PI) d += 2 * Math.PI;
-      accum.current += Math.abs(d);
-      if (accum.current >= Math.PI * 2) {
-        accum.current -= Math.PI * 2;
-        setGrinds((g) => {
-          const n = Math.min(g + 1, GRINDS_NEEDED);
-          if (n === GRINDS_NEEDED) {
-            setPhase("sprinkle");
-            sparkle();
-          } else {
-            pop();
-          }
-          return n;
-        });
+  // tap-tap-tap the pot to grind
+  function tapPot() {
+    if (phase !== "grind") return;
+    setWob((w) => w + 1);
+    setGrinds((g) => {
+      const n = Math.min(g + 1, GRIND_TAPS);
+      if (n === GRIND_TAPS) {
+        setPhase("sprinkle");
+        sparkle();
+      } else {
+        pop();
       }
-    }
-    lastAngle.current = a;
+      return n;
+    });
   }
+
+  const title =
+    phase === "pick"
+      ? `✨ Tap your favorites into the pot! (${chosen}/${PICK_COUNT})`
+      : phase === "grind"
+        ? `🥣 Tap tap tap! Grind it! (${grinds}/${GRIND_TAPS})`
+        : "✨ The magic dust is ready!";
 
   return (
     <div className="potion">
-      {phase === "pick" && (
-        <>
-          <p className="potion-title">✨ Pick {PICK_COUNT} magic ingredients!</p>
-          <div className="ing-grid">
-            {INGREDIENTS.map((ing) => {
-              const on = picked.some((p) => p.id === ing.id);
-              return (
-                <button key={ing.id} className={`ing ${on ? "on" : ""}`} onClick={() => toggle(ing)}>
-                  <span className="ing-emoji">{ing.emoji}</span>
-                  <span>{ing.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
+      <p className="potion-title">{title}</p>
 
-      {phase !== "pick" && (
-        <>
-          <p className="potion-title">
-            {phase === "grind" ? `🥣 Draw circles to grind! (${grinds}/${GRINDS_NEEDED})` : "✨ The magic dust is ready!"}
-          </p>
-          <div
-            ref={bowlRef}
-            className="bowl"
-            onPointerDown={(e) => {
-              grinding.current = true;
-              lastAngle.current = angleAt(e);
-              (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-            }}
-            onPointerMove={onBowlMove}
-            onPointerUp={() => {
-              grinding.current = false;
-              lastAngle.current = null;
-            }}
-          >
-            <div className="bowl-contents">
-              {grinds < GRINDS_NEEDED ? (
-                <>
-                  <span className="bowl-ings" style={{ opacity: 1 - grinds / GRINDS_NEEDED }}>
-                    {picked.map((p) => p.emoji).join(" ")}
-                  </span>
-                  <span className="bowl-dust">{"✨".repeat(grinds)}</span>
-                </>
-              ) : (
-                <span className="bowl-dust glow">✨✨✨✨✨</span>
-              )}
-            </div>
-          </div>
-          {phase === "sprinkle" && (
-            <button className="btn-primary" onClick={() => { sparkle(); onSprinkle(picked.map((p) => p.trait)); }}>
-              ✨ Sprinkle the magic dust!
+      <div className="dust-area">
+        {INGREDIENTS.map((ing, i) => {
+          if (picked.some((p) => p.id === ing.id)) return null;
+          const fly = flying[ing.id];
+          return (
+            <button
+              key={ing.id}
+              className={`ing-float f${i + 1} ${fly ? "fly" : ""} ${phase !== "pick" ? "dim" : ""}`}
+              style={fly ? ({ "--fx": `${fly.dx}px`, "--fy": `${fly.dy}px` } as React.CSSProperties) : undefined}
+              onClick={(e) => tapIngredient(ing, e)}
+            >
+              <span className="ing-emoji">{ing.emoji}</span>
+              <span>{ing.name}</span>
             </button>
-          )}
-        </>
+          );
+        })}
+
+        <div key={wob} className={`bowl pot-bottom ${wob ? "wob" : ""}`} ref={potRef} onPointerDown={tapPot}>
+          <div className="bowl-contents">
+            {phase === "pick" && <span className="bowl-ings">{picked.map((p) => p.emoji).join(" ")}</span>}
+            {phase === "grind" && (
+              <>
+                <span className="bowl-ings" style={{ opacity: 1 - grinds / GRIND_TAPS }}>
+                  {picked.map((p) => p.emoji).join(" ")}
+                </span>
+                <span className="bowl-dust">{"✨".repeat(Math.min(grinds, 5))}</span>
+              </>
+            )}
+            {phase === "sprinkle" && <span className="bowl-dust glow">✨✨✨✨✨</span>}
+          </div>
+        </div>
+      </div>
+
+      {phase === "sprinkle" && (
+        <button className="btn-primary" onClick={() => { sparkle(); onSprinkle(picked.map((p) => p.trait)); }}>
+          ✨ Sprinkle the magic dust!
+        </button>
       )}
     </div>
   );
