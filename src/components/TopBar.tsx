@@ -18,8 +18,8 @@ export function TopBar({ onStaff }: { onStaff: () => void }) {
 
   return (
     <>
-      <button className="brand" onClick={brandTap} aria-label="Monggle Kids">
-        <img src="/monggle-logo.png" className="brand-logo" alt="Monggle Kids" />
+      <button className="brand" onClick={brandTap} aria-label="Monglekids">
+        <img src="/monggle-logo.png" className="brand-logo" alt="Monglekids" />
       </button>
       <button
         className="sound-toggle"

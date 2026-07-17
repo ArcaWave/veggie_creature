@@ -1,32 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { MonsterFace } from "../components/MonsterFace";
 import { saveToGallery } from "../lib/gallery";
-import { getProfile } from "../lib/profile";
+import { getProfile, completeProfile } from "../lib/profile";
 import { track } from "../lib/analytics";
 import { sparkle } from "../lib/sfx";
 import { shareOrDownload } from "../lib/share";
 import type { Monster } from "../types";
 
-// TODO: point the QR placeholder at the real Monggle Kids landing URL
+// TODO: point the QR placeholder at the real Monglekids landing URL
 // (generate a QR for it and drop the image into the .qr-box below)
 const IDLE_RESET_MS = 150_000; // attract-loop: back to Welcome after 2.5 min idle
 
 export function Certificate({
   monster,
   video,
+  originalPhoto,
   profilePhoto,
   stars,
   onRestart,
 }: {
   monster: Monster;
   video: string | null;
+  originalPhoto?: string | null; // the very first veggie snapshot
   profilePhoto?: string | null; // the booth selfie — used as the certificate photo
   stars: number;
   onRestart: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const [mail, setMail] = useState<"idle" | "sending" | "sent" | "unavailable" | "failed">("idle");
+  const [mail, setMail] = useState<"idle" | "form" | "sending" | "sent" | "unavailable" | "failed">("idle");
+  const [mailAddr, setMailAddr] = useState("");
+  const [mailChild, setMailChild] = useState("");
+  const [mailNews, setMailNews] = useState(true);
+  const [agreePhoto, setAgreePhoto] = useState(false);
+  const [agreeData, setAgreeData] = useState(false);
   const savedRef = useRef(false); // guards the saves against double-run effects
 
   useEffect(() => {
@@ -114,20 +121,29 @@ export function Certificate({
     }, "image/png");
   }
 
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailAddr.trim());
+  const formReady = emailOk && agreePhoto && agreeData;
+
+  // all five keepsakes: original photo · clay art · live clip · booth photo · certificate
   async function emailKeepsakes() {
-    const email = getProfile()?.email;
+    const email = mailAddr.trim();
     const canvas = canvasRef.current;
-    if (!email || !canvas || mail === "sending" || mail === "sent") return;
+    if (!formReady || !canvas || mail === "sending") return;
     setMail("sending");
-    track("keepsake_email");
-    const attachments = [
-      { filename: `${slug(monster.name)}-certificate.png`, dataUrl: canvas.toDataURL("image/png") },
-      { filename: `${slug(monster.name)}-clay.png`, dataUrl: monster.photo },
-    ];
-    if (video) attachments.push({ filename: `${slug(monster.name)}-alive.mp4`, dataUrl: video });
-    // stay under the request limit — drop the video first if too big
-    while (attachments.reduce((n, a) => n + a.dataUrl.length, 0) > 3_700_000 && attachments.length > 1) {
-      attachments.pop();
+    track("keepsake_email", { newsletter: mailNews });
+    // email + child name + the consents are recorded here (end of the journey)
+    completeProfile({ email, childName: mailChild.trim() || undefined, newsletter: mailNews });
+    const n = slug(monster.name);
+    const attachments: { filename: string; dataUrl: string }[] = [];
+    if (originalPhoto) attachments.push({ filename: `${n}-original.jpg`, dataUrl: originalPhoto });
+    attachments.push({ filename: `${n}-clay.png`, dataUrl: monster.photo });
+    if (video) attachments.push({ filename: `${n}-alive.mp4`, dataUrl: video });
+    if (profilePhoto) attachments.push({ filename: `${n}-together.jpg`, dataUrl: profilePhoto });
+    attachments.push({ filename: `${n}-certificate.png`, dataUrl: canvas.toDataURL("image/png") });
+    // stay under the request limit — drop the (big) video first if needed
+    if (attachments.reduce((t, a) => t + a.dataUrl.length, 0) > 3_700_000 && video) {
+      const i = attachments.findIndex((a) => a.filename.endsWith(".mp4"));
+      if (i >= 0) attachments.splice(i, 1);
     }
     try {
       const r = await fetch("/api/email", {
@@ -178,20 +194,64 @@ export function Certificate({
           )}
         </div>
 
-        <button className="btn-secondary" disabled={!ready || mail === "sending" || mail === "sent"} onClick={emailKeepsakes}>
-          {mail === "idle" && "✉️ Email them to me"}
-          {mail === "sending" && "✉️ Sending…"}
-          {mail === "sent" && "✅ Sent! Check your inbox"}
-          {mail === "unavailable" && "✉️ Email isn't set up yet"}
-          {mail === "failed" && "✉️ Didn't send — tap to retry"}
-        </button>
+        {/* Email me! — email + child name + consents are asked HERE, in a popup */}
+        {(mail === "idle" || mail === "form" || mail === "sending" || mail === "failed") && (
+          <button className="btn-secondary" disabled={!ready} onClick={() => setMail("form")}>
+            ✉️ Email me everything!
+          </button>
+        )}
+        {mail === "sent" && <p className="mail-note ok">✅ Sent! Check your inbox</p>}
+        {mail === "unavailable" && <p className="mail-note">✉️ Email isn't set up yet — use the share buttons above</p>}
+
+        {(mail === "form" || mail === "sending" || mail === "failed") && (
+          <div className="modal-backdrop" onClick={() => mail !== "sending" && setMail("idle")}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <h3>👋 Grown-ups — one quick step!</h3>
+              <label className="field">
+                <span>Parent email *</span>
+                <input
+                  type="email"
+                  placeholder="you@email.com"
+                  value={mailAddr}
+                  onChange={(e) => setMailAddr(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label className="field">
+                <span>Child's first name (optional)</span>
+                <input value={mailChild} onChange={(e) => setMailChild(e.target.value)} placeholder="Alex" maxLength={20} />
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={agreePhoto} onChange={(e) => setAgreePhoto(e.target.checked)} />
+                <span>I'm a parent/guardian and agree that photos were processed by AI (Google) to create the character. *</span>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={agreeData} onChange={(e) => setAgreeData(e.target.checked)} />
+                <span>I agree that my email, my child's creation (name and artwork), and usage data are saved to improve Monglekids. *</span>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={mailNews} onChange={(e) => setMailNews(e.target.checked)} />
+                <span>Also send me the Monglekids newsletter (unsubscribe anytime).</span>
+              </label>
+              {mail === "failed" && <p className="mail-note">Didn't send — try again?</p>}
+              <div className="row">
+                <button className="btn-ghost" disabled={mail === "sending"} onClick={() => setMail("idle")}>
+                  Cancel
+                </button>
+                <button className="btn-primary" disabled={mail === "sending" || !formReady} onClick={emailKeepsakes}>
+                  {mail === "sending" ? "Sending…" : mail === "failed" ? "Retry 📮" : "Send 📮"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="lead-cta">
           {/* QR PLACEHOLDER — replace with a real QR image pointing at LEARN_MORE_URL */}
           <div className="qr-box">QR</div>
           <div className="lead-text">
             <strong>Love it?</strong>
-            <span>Scan for more Monggle Kids adventures ✨</span>
+            <span>Scan for more Monglekids adventures ✨</span>
           </div>
         </div>
 
@@ -285,23 +345,21 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   ctx.arc(cx, cyc, r, 0, Math.PI * 2);
   ctx.stroke();
 
+  // (no character name on the certificate — by request)
   ctx.fillStyle = "#3a4a2f";
-  ctx.font = "800 50px 'Baloo 2', sans-serif";
-  ctx.fillText(monster.name, cx, 640);
+  ctx.font = "800 34px 'Baloo 2', sans-serif";
+  ctx.fillText("My veggie creature came to life", cx, 655);
+  ctx.fillText("and completed a quest!", cx, 700);
 
   // traits line (from the character-creation questions)
   if (monster.traits.length) {
     ctx.fillStyle = "#8a9a7c";
     ctx.font = "700 24px 'Baloo 2', sans-serif";
-    ctx.fillText(monster.traits.join("  ·  "), cx, 680);
+    ctx.fillText(monster.traits.join("  ·  "), cx, 745);
   }
 
-  ctx.fillStyle = "#6b7a5e";
-  ctx.font = "600 26px 'Baloo 2', sans-serif";
-  ctx.fillText("came to life and completed a quest", cx, 730);
-
   ctx.font = "40px sans-serif";
-  ctx.fillText("⭐".repeat(Math.max(1, Math.min(stars, 3))), cx, 795);
+  ctx.fillText("⭐".repeat(Math.max(1, Math.min(stars, 3))), cx, 800);
 
   badge(ctx, cx - 130, 835, "Creativity", "#eaf6d9", "#3b6d11");
   badge(ctx, cx + 130, 835, "Problem-solving", "#fff4d6", "#854f0b");
@@ -311,7 +369,7 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   ctx.font = "600 24px 'Baloo 2', sans-serif";
   ctx.fillText(date, cx, 946);
 
-  // Monggle Kids logo footer
+  // Monglekids logo footer
   try {
     const logo = await loadImage("/monggle-logo.png");
     const lw = 300, lh = logo.height * (lw / logo.width);
@@ -319,6 +377,6 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   } catch {
     ctx.fillStyle = "#5ba12c";
     ctx.font = "800 30px 'Baloo 2', sans-serif";
-    ctx.fillText("Monggle Kids", cx, 1020);
+    ctx.fillText("Monglekids", cx, 1020);
   }
 }

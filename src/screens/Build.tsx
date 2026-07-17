@@ -12,7 +12,7 @@ import type { Monster } from "../types";
 
 type Step = "photo" | "style" | "wake" | "eyes" | "name";
 
-export function Build({ onDone }: { onDone: (m: Monster, video: string | null) => void }) {
+export function Build({ onDone }: { onDone: (m: Monster, video: string | null, originalPhoto: string) => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
   const [stylized, setStylized] = useState<string | null>(null);
@@ -31,9 +31,11 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
   const [camOn, setCamOn] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
+  // the camera does NOT auto-start: a cover invites the child to tap first
+  const [camArmed, setCamArmed] = useState(false);
 
   useEffect(() => {
-    if (step !== "photo") {
+    if (step !== "photo" || !camArmed) {
       stopCam();
       return;
     }
@@ -70,7 +72,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
       stopCam();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, camTry]);
+  }, [step, camTry, camArmed]);
 
   // bind the stream after the <video> renders (prevents a black screen)
   useEffect(() => {
@@ -121,7 +123,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
   function finish() {
     const m: Monster = { name: name.trim() || "My Monster", photo: active, eyes, traits };
     track("named", { name: m.name });
-    onDone(m, wakeVideo);
+    onDone(m, wakeVideo, photo); // photo = the original veggie snapshot
   }
 
   return (
@@ -135,22 +137,36 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null) =
       {step === "photo" && (
         <div className="stack center">
           <div className="camera-box">
-            {camOn ? (
+            {!camArmed ? (
+              // cover: the camera only turns on when the child taps this
+              <button
+                className="camera-cover"
+                onClick={() => {
+                  pop();
+                  track("camera_armed");
+                  setCamArmed(true);
+                }}
+              >
+                <span className="cover-emoji">🥕🥦🍅</span>
+                <span className="cover-title">Make your own veggie creature!</span>
+                <span className="cover-hint">👉 Tap to open the camera</span>
+              </button>
+            ) : camOn ? (
               <video ref={videoRef} autoPlay playsInline muted className="camera" />
             ) : (
               <div className="camera placeholder">
                 <span>📷</span>
-                <p>{camError ?? "Show me your creature!"}</p>
+                <p>{camError ?? "Starting the camera…"}</p>
               </div>
             )}
           </div>
-          {camOn ? (
+          {camArmed && (camOn ? (
             <button className="btn-primary big" onClick={capture}>📸 Snap!</button>
           ) : (
             <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
               📷 Retry
             </button>
-          )}
+          ))}
           <label className="btn-secondary">
             🖼️ Upload
             <input type="file" accept="image/*" onChange={onFile} hidden />

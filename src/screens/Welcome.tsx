@@ -23,7 +23,7 @@ export function Welcome({ onStart }: { onStart: () => void }) {
       <div className="welcome-left">
         <div className="welcome-hero">
           <img src="/veggie-creature-logo.png" className="welcome-logo" alt="Veggie Creature" />
-          <p className="welcome-strap">a Monggle Kids experience</p>
+          <p className="welcome-strap">a Monglekids experience</p>
           <p className="welcome-tag">Your veggie creation comes to life!</p>
         </div>
         <button className="btn-primary big" onClick={onStart}>Start ▶</button>

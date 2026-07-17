@@ -36,7 +36,7 @@ export async function sendKeepsakes(
           `<h2>🎉 ${escapeHtml(monsterName)} completed the quest!</h2>` +
           `<p>Your keepsakes are attached — the certificate, the clay artwork` +
           `${files.length > 2 ? ", and the little movie of it coming to life" : ""}. Enjoy!</p>` +
-          `<p style="color:#888">— Monggle Kids · Veggie Creature</p></div>`,
+          `<p style="color:#888">— Monglekids · Veggie Creature</p></div>`,
         attachments: files,
       }),
     });
