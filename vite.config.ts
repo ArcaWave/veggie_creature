@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { stylize, startAnimate, animateStatus } from "./api/_gemini";
+import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
 import { checkLimit, limitKey } from "./api/_ratelimit";
 
@@ -41,8 +42,14 @@ function devApiPlugin(): Plugin {
         });
 
       route("/api/stylize", "stylize", (b) => stylize(b.image, b.prompt));
-      route("/api/animate", "animate", (b) => startAnimate(b.image, b.prompt));
+      route("/api/animate", "animate", (b) => startAnimate(b.image, b.prompt, b.kind));
       route("/api/animate-status", "animate-status", (b) => animateStatus(b.operation));
+      route("/api/speak", "speak", (b) => speak(b.text, b.seed));
+      // setup helper: GET-style voice catalog (POST {} works too) to pick TYPECAST_VOICE_ID
+      server.middlewares.use("/api/voices", async (_req, res) => {
+        const { status, body } = await listVoices();
+        send(res, status, body);
+      });
       // dev analytics sink: append events to .data/events.jsonl
       route("/api/track", "track", async (b) => {
         try {
@@ -112,6 +119,9 @@ export default defineConfig(({ mode }) => {
   process.env.GEMINI_VIDEO_MODEL = env.GEMINI_VIDEO_MODEL || "";
   process.env.RESEND_API_KEY = env.RESEND_API_KEY || "";
   process.env.EMAIL_FROM = env.EMAIL_FROM || "";
+  process.env.TYPECAST_API_KEY = env.TYPECAST_API_KEY || "";
+  process.env.TYPECAST_VOICE_ID = env.TYPECAST_VOICE_ID || "";
+  process.env.TYPECAST_MODEL = env.TYPECAST_MODEL || "";
 
   return {
     plugins: [react(), devApiPlugin()],

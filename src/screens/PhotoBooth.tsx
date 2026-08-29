@@ -171,7 +171,7 @@ export function PhotoBooth({
   return (
     <div className="screen booth">
       <header className="topbar">
-        <h1>📸 Say cheese with {monster.name}!</h1>
+        <h1>📸 Say cheese with your creature!</h1>
       </header>
 
       {!shot ? (

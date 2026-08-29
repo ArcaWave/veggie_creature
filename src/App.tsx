@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import { Welcome } from "./screens/Welcome";
 import { Build } from "./screens/Build";
-import { Quest } from "./screens/Quest";
+import { Greet } from "./screens/Greet";
 import { PhotoBooth } from "./screens/PhotoBooth";
 import { Certificate } from "./screens/Certificate";
 import { Staff } from "./screens/Staff";
 import { TopBar } from "./components/TopBar";
 import { clearProfile, ensureProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
-import type { Monster } from "./types";
+import type { Monster, MonsterVideos } from "./types";
 
-type Stage = "welcome" | "build" | "quest" | "booth" | "certificate";
+type Stage = "welcome" | "build" | "greet" | "booth" | "certificate";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("welcome");
   const [monster, setMonster] = useState<Monster | null>(null);
-  const [video, setVideo] = useState<string | null>(null);
+  const [videos, setVideos] = useState<MonsterVideos>({ greet: null, smile: null });
   const [originalPhoto, setOriginalPhoto] = useState<string | null>(null);
   const [boothPhoto, setBoothPhoto] = useState<string | null>(null);
   const [stars, setStars] = useState(0);
@@ -29,7 +29,7 @@ export default function App() {
     track("session_reset", { reason });
     clearProfile(); // next family starts with a fresh profile
     setMonster(null);
-    setVideo(null);
+    setVideos({ greet: null, smile: null });
     setOriginalPhoto(null);
     setBoothPhoto(null);
     setStars(0);
@@ -56,19 +56,20 @@ export default function App() {
         <Build
           onDone={(m, v, original) => {
             setMonster(m);
-            setVideo(v);
+            setVideos(v);
             setOriginalPhoto(original || null);
-            setStage("quest");
+            setStage("greet");
           }}
         />
       )}
 
-      {stage === "quest" && monster && (
-        <Quest
+      {stage === "greet" && monster && (
+        <Greet
           monster={monster}
-          video={video}
-          onClear={(s) => {
-            setStars(s);
+          greetVideo={videos.greet}
+          smileVideo={videos.smile}
+          onDone={() => {
+            setStars(3);
             setStage("booth");
           }}
         />
@@ -87,7 +88,7 @@ export default function App() {
       {stage === "certificate" && monster && (
         <Certificate
           monster={monster}
-          video={video}
+          video={videos.smile ?? videos.greet}
           originalPhoto={originalPhoto}
           profilePhoto={boothPhoto}
           stars={stars}

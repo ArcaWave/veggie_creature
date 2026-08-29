@@ -28,6 +28,7 @@ export function Certificate({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  const [certTitle, setCertTitle] = useState("CREATIVITY"); // the word after "CERTIFICATE OF" — editable
   const [mail, setMail] = useState<"idle" | "form" | "sending" | "sent" | "unavailable" | "failed">("idle");
   const [mailAddr, setMailAddr] = useState("");
   const [mailChild, setMailChild] = useState("");
@@ -36,16 +37,20 @@ export function Certificate({
   const [agreeData, setAgreeData] = useState(false);
   const savedRef = useRef(false); // guards the saves against double-run effects
 
+  // (re)draw whenever the editable title changes
   useEffect(() => {
     let alive = true;
-    drawCertificate(canvasRef.current!, monster, stars, profilePhoto ?? monster.photo).then(() => {
+    drawCertificate(canvasRef.current!, monster, stars, profilePhoto ?? monster.photo, certTitle).then(() => {
       if (alive) setReady(true);
     });
-    if (savedRef.current) {
-      return () => {
-        alive = false;
-      };
-    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [certTitle]);
+
+  useEffect(() => {
+    if (savedRef.current) return;
     savedRef.current = true;
     track("cert_view");
     sparkle();
@@ -75,9 +80,6 @@ export function Certificate({
         },
       }),
     }).catch(() => {});
-    return () => {
-      alive = false;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -164,8 +166,20 @@ export function Certificate({
       <div className="cert-left">
         <div className="cert-celebrate">
           <MonsterFace monster={monster} video={video ?? undefined} size={130} />
-          <h2>🎉 Quest complete!</h2>
+          <h2>🎉 You did it!</h2>
         </div>
+
+        {/* editable award word — retypes straight onto the certificate */}
+        <label className="field cert-title-field">
+          <span>🏷️ Certificate of…</span>
+          <input
+            value={certTitle}
+            onChange={(e) => setCertTitle(e.target.value)}
+            placeholder="CREATIVITY"
+            maxLength={20}
+          />
+        </label>
+
         <button className="btn-primary big" disabled={!ready} onClick={saveOrShare}>
           🏅 Share certificate
         </button>
@@ -296,7 +310,7 @@ function badge(ctx: CanvasRenderingContext2D, cx: number, y: number, label: stri
   ctx.fillText(label, cx, y + 35);
 }
 
-async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, stars: number, photoSrc: string) {
+async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, stars: number, photoSrc: string, title: string) {
   const ctx = canvas.getContext("2d")!;
   const W = 800, H = 1130, cx = W / 2;
   try {
@@ -319,9 +333,16 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   ctx.fillStyle = "#6b7a5e";
   ctx.font = "700 30px 'Baloo 2', sans-serif";
   ctx.fillText("CERTIFICATE OF", cx, 150);
+  // the editable award word — shrink to fit inside the border when long
+  const word = (title.trim() || "CREATIVITY").toUpperCase();
   ctx.fillStyle = "#5ba12c";
-  ctx.font = "800 60px 'Baloo 2', sans-serif";
-  ctx.fillText("CREATIVITY", cx, 218);
+  let size = 60;
+  ctx.font = `800 ${size}px 'Baloo 2', sans-serif`;
+  while (size > 28 && ctx.measureText(word).width > 620) {
+    size -= 4;
+    ctx.font = `800 ${size}px 'Baloo 2', sans-serif`;
+  }
+  ctx.fillText(word, cx, 218);
 
   const r = 150, cyc = 410;
   ctx.save();
@@ -349,7 +370,7 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   ctx.fillStyle = "#3a4a2f";
   ctx.font = "800 34px 'Baloo 2', sans-serif";
   ctx.fillText("My veggie creature came to life", cx, 655);
-  ctx.fillText("and completed a quest!", cx, 700);
+  ctx.fillText("and said hello!", cx, 700);
 
   // traits line (from the character-creation questions)
   if (monster.traits.length) {
@@ -369,14 +390,19 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
   ctx.font = "600 24px 'Baloo 2', sans-serif";
   ctx.fillText(date, cx, 946);
 
-  // Monglekids logo footer
+  // Monglekids logo as a SEAL: tilted like an approval stamp, bottom-right
   try {
     const logo = await loadImage("/monggle-logo.png");
-    const lw = 300, lh = logo.height * (lw / logo.width);
-    ctx.drawImage(logo, cx - lw / 2, 982, lw, lh);
+    const lh = 130, lw = logo.width * (lh / logo.height);
+    ctx.save();
+    ctx.translate(W - 185, 985); // seal centre, inside the border
+    ctx.rotate(-0.16); // a gentle counter-clockwise stamp tilt
+    ctx.globalAlpha = 0.96;
+    ctx.drawImage(logo, -lw / 2, -lh / 2, lw, lh);
+    ctx.restore();
   } catch {
     ctx.fillStyle = "#5ba12c";
     ctx.font = "800 30px 'Baloo 2', sans-serif";
-    ctx.fillText("Monglekids", cx, 1020);
+    ctx.fillText("Monglekids", W - 185, 1000);
   }
 }

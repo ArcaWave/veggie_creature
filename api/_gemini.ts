@@ -21,6 +21,25 @@ export const ANIMATE_PROMPT =
   "completely still. Keep the exact same character: same shape, colors and clay texture. " +
   "Wholesome and charming for young children. No text, no watermark.";
 
+// Two dedicated loops for the greeting experience (generated together, one per clip).
+// GREET plays first, on repeat, while the child is invited to wave back at the tablet.
+export const GREET_PROMPT =
+  "Animate this clay monster warmly waving hello, looping-friendly. It raises one little clay " +
+  "arm and gives a friendly hello wave two or three times, with a big happy welcoming smile and " +
+  "bright cheerful eyes, gently bouncing, then returns to the exact same neutral starting pose so " +
+  "the clip can loop seamlessly. Gentle stop-motion motion, tiny squash and stretch, camera stays " +
+  "completely still. Keep the exact same character: same shape, colors and clay texture. " +
+  "Wholesome and charming for young children. No text, no watermark.";
+
+// SMILE plays after the child waves back — the monster beams and "talks" while captions/voice run.
+export const SMILE_PROMPT =
+  "Animate this clay monster smiling and happily talking, looping-friendly. It beams a big warm " +
+  "friendly smile with sparkling happy eyes and gently opens and closes its mouth as if cheerfully " +
+  "chatting and saying kind words, with tiny happy head bobs, then returns to the exact same " +
+  "neutral starting pose so the clip can loop seamlessly. Gentle stop-motion motion, tiny squash " +
+  "and stretch, camera stays completely still. Keep the exact same character: same shape, colors " +
+  "and clay texture. Wholesome and charming for young children. No text, no watermark.";
+
 const key = () => process.env.GEMINI_API_KEY || "";
 const imageModel = () => process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const videoModel = () => process.env.GEMINI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
@@ -65,10 +84,20 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
 // spend at fast. Non-429 errors are real failures and do NOT fall through.
 const VIDEO_FALLBACKS = ["veo-3.1-fast-generate-preview", "veo-3.1-generate-preview"];
 
-export async function startAnimate(image: string, prompt?: string): Promise<Result> {
+// Resolve which motion prompt to use. An explicit `prompt` always wins; otherwise
+// `kind` selects a named loop ("greet"/"smile"), falling back to the calm breathe loop.
+function resolvePrompt(prompt?: string, kind?: string): string {
+  if (prompt) return prompt;
+  if (kind === "greet") return GREET_PROMPT;
+  if (kind === "smile") return SMILE_PROMPT;
+  return ANIMATE_PROMPT;
+}
+
+export async function startAnimate(image: string, prompt?: string, kind?: string): Promise<Result> {
   if (!key()) return { status: 200, body: { operation: null, reason: "no_key" } };
   const img = parseDataUrl(image);
   if (!img) return { status: 400, body: { error: "bad_image" } };
+  const motion = resolvePrompt(prompt, kind);
   const chain = [...new Set([videoModel(), ...VIDEO_FALLBACKS])];
   try {
     let last: { status: number; detail: string } = { status: 0, detail: "" };
@@ -77,7 +106,7 @@ export async function startAnimate(image: string, prompt?: string): Promise<Resu
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
         body: JSON.stringify({
-          instances: [{ prompt: prompt || ANIMATE_PROMPT, image: { bytesBase64Encoded: img.data, mimeType: img.mimeType } }],
+          instances: [{ prompt: motion, image: { bytesBase64Encoded: img.data, mimeType: img.mimeType } }],
           parameters: { aspectRatio: "16:9" },
         }),
       });

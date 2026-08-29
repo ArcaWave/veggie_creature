@@ -1,29 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { MonsterFace } from "../components/MonsterFace";
 import { SparkleLoading } from "../components/SparkleLoading";
 import { DustGame } from "../components/DustGame";
 import { ClayGame } from "../components/ClayGame";
 import { stylizePhoto } from "../api/stylize";
-import { animateMonster } from "../api/animate";
+import { animateGreeting } from "../api/animate";
 import { pop, sparkle } from "../lib/sfx";
+import { magicDustBurst, sparkleBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
-import type { Monster } from "../types";
+import type { Monster, MonsterVideos } from "../types";
 
-type Step = "photo" | "style" | "wake" | "eyes" | "name";
+type Step = "photo" | "style" | "wake" | "eyes";
 
-export function Build({ onDone }: { onDone: (m: Monster, video: string | null, originalPhoto: string) => void }) {
+export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
   const [stylized, setStylized] = useState<string | null>(null);
-  const [wakeVideo, setWakeVideo] = useState<string | null>(null);
+  const [videos, setVideos] = useState<MonsterVideos>({ greet: null, smile: null });
   const [traits, setTraits] = useState<string[]>([]);
   const [eyes, setEyes] = useState([
     { x: 0.36, y: 0.4 },
     { x: 0.64, y: 0.4 },
   ]);
-  const [name, setName] = useState("");
-
   const active = stylized ?? photo;
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -93,11 +91,18 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null, o
     const v = videoRef.current;
     if (!v) return;
     pop();
-    const side = Math.min(v.videoWidth, v.videoHeight);
+    // WYSIWYG: crop what the (object-fit: cover) preview shows, so a wide
+    // landscape frame captures wide — not a surprise square from the middle.
+    const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
+    let cw = v.videoWidth, ch = v.videoHeight;
+    if (cw / ch > ratio) cw = Math.round(ch * ratio);
+    else ch = Math.round(cw / ratio);
+    const scale = Math.min(1, 960 / Math.max(cw, ch));
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 480;
+    canvas.width = Math.round(cw * scale);
+    canvas.height = Math.round(ch * scale);
     const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, 480, 480);
+    ctx.drawImage(v, (v.videoWidth - cw) / 2, (v.videoHeight - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
     const url = canvas.toDataURL("image/jpeg", 0.8);
     setPhoto(url);
     setStylized(null);
@@ -120,18 +125,15 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null, o
     reader.readAsDataURL(file);
   }
 
+  // no naming step — the creature simply comes to life and says hello
   function finish() {
-    const m: Monster = { name: name.trim() || "My Monster", photo: active, eyes, traits };
-    track("named", { name: m.name });
-    onDone(m, wakeVideo, photo); // photo = the original veggie snapshot
+    const m: Monster = { name: "My Monster", photo: active, eyes, traits };
+    track("build_done");
+    onDone(m, videos, photo); // photo = the original veggie snapshot
   }
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <h1>Make your monster</h1>
-      </header>
-
       <Steps step={step} />
 
       {step === "photo" && (
@@ -147,7 +149,7 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null, o
                   setCamArmed(true);
                 }}
               >
-                <span className="cover-emoji">🥕🥦🍅</span>
+                <img src="/camera-cover.jpg" alt="" className="cover-bg" />
                 <span className="cover-title">Make your own veggie creature!</span>
                 <span className="cover-hint">👉 Tap to open the camera</span>
               </button>
@@ -193,47 +195,24 @@ export function Build({ onDone }: { onDone: (m: Monster, video: string | null, o
       {step === "wake" && (
         <WakeStep
           image={active}
-          video={wakeVideo}
-          setVideo={setWakeVideo}
+          videos={videos}
+          setVideos={setVideos}
           traits={traits}
           setTraits={setTraits}
-          onDone={(hasVideo) => setStep(hasVideo ? "name" : "eyes")}
+          onDone={(hasVideo) => (hasVideo ? finish() : setStep("eyes"))}
         />
       )}
 
       {step === "eyes" && (
-        <EyesStep photo={active} eyes={eyes} setEyes={setEyes} onNext={() => setStep("name")} />
-      )}
-
-      {step === "name" && (
-        <div className="stack center">
-          <MonsterFace monster={{ photo: active, eyes }} video={wakeVideo ?? undefined} size={160} />
-          {traits.length > 0 && (
-            <div className="name-chips">
-              {traits.map((t) => (
-                <span key={t} className="chip">{t}</span>
-              ))}
-            </div>
-          )}
-          <p className="lead">Name it!</p>
-          <input
-            className="name-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Rocket Carrot"
-            maxLength={16}
-            autoFocus
-          />
-          <button className="btn-primary big" onClick={finish}>Quest! →</button>
-        </div>
+        <EyesStep photo={active} eyes={eyes} setEyes={setEyes} onNext={finish} />
       )}
     </div>
   );
 }
 
 function Steps({ step }: { step: Step }) {
-  const order: Step[] = ["photo", "style", "wake", "eyes", "name"];
-  const labels: Record<Step, string> = { photo: "Photo", style: "Clay", wake: "Wake", eyes: "Eyes", name: "Name" };
+  const order: Step[] = ["photo", "style", "wake", "eyes"];
+  const labels: Record<Step, string> = { photo: "Photo", style: "Clay", wake: "Wake", eyes: "Eyes" };
   const idx = order.indexOf(step);
   return (
     <div className="steps">
@@ -309,6 +288,7 @@ function StyleStep({
         setStatus("done");
         track("clay_success");
         sparkle();
+        sparkleBurst(); // little ta-da twinkle over the clay reveal
       }, 900);
       return () => clearTimeout(t);
     }
@@ -372,32 +352,35 @@ function StyleStep({
   );
 }
 
-// Wake step: one Veo clip, budgeted by "magic dust" (2 lives max).
-// The child GATHERS ingredients -> GRINDS them into magic dust -> SPRINKLES it to
-// give life. Even if the video finishes early, the reveal is HELD (loading) until
-// the dust is sprinkled — the sprinkle is what brings the monster to life.
+// Wake step: TWO Veo clips (wave-hello + smile-and-talk) generated together in
+// parallel, budgeted by "magic dust". The child GATHERS ingredients -> GRINDS them
+// into magic dust -> SPRINKLES it to give life. Even if the clips finish early, the
+// reveal is HELD (loading) until the dust is sprinkled — the sprinkle brings it to life.
 function WakeStep({
   image,
-  video,
-  setVideo,
+  videos,
+  setVideos,
   traits,
   setTraits,
   onDone,
 }: {
   image: string;
-  video: string | null;
-  setVideo: (v: string | null) => void;
+  videos: MonsterVideos;
+  setVideos: (v: MonsterVideos) => void;
   traits: string[];
   setTraits: (t: string[]) => void;
   onDone: (hasVideo: boolean) => void;
 }) {
   type S = "idle" | "working" | "done" | "nokey" | "error";
-  const [status, setStatus] = useState<S>(video ? "done" : "idle");
-  const [dust, setDust] = useState(video ? 50 : 100);
-  const [ready, setReady] = useState<string | null>(null); // video arrived, waiting for the sprinkle
+  const hasClip = !!(videos.greet || videos.smile);
+  const activeClip = videos.smile ?? videos.greet ?? null;
+  const [status, setStatus] = useState<S>(hasClip ? "done" : "idle");
+  const [dust, setDust] = useState(hasClip ? 50 : 100);
+  const [ready, setReady] = useState<MonsterVideos | null>(null); // clips arrived, waiting for the sprinkle
   const [sprinkled, setSprinkled] = useState(false); // dust has been thrown
   const [revealed, setRevealed] = useState(false); // both done -> show it
   const cancel = useRef({ cancelled: false });
+  const frameRef = useRef<HTMLDivElement>(null); // dust erupts from the reveal frame
   const hasDust = dust >= 50;
   const needGame = traits.length === 0; // only the first life includes the game
 
@@ -405,20 +388,22 @@ function WakeStep({
     cancel.current.cancelled = true;
   }, []);
 
-  // reveal only when BOTH the video is ready AND the dust has been sprinkled
+  // reveal only when BOTH the clips are ready AND the dust has been sprinkled
   useEffect(() => {
     const sprinkleDone = sprinkled || !needGame;
     if (ready && sprinkleDone && !revealed) {
       setRevealed(true);
-      setVideo(ready);
-      keepAsset("wake-video", ready); // the moving gallery asset!
+      setVideos(ready);
+      keepAsset("wake-video", ready.smile); // the talking clip = primary alive asset
+      keepAsset("greet-video", ready.greet); // the wave-hello clip too
       setReady(null);
       setDust((d) => Math.max(0, d - 50));
       setStatus("done");
       track("wake_success");
       sparkle();
+      magicDustBurst(frameRef.current); // ✨ it's ALIVE — dust erupts around the frame
     }
-  }, [ready, sprinkled, needGame, revealed, setVideo]);
+  }, [ready, sprinkled, needGame, revealed, setVideos]);
 
   async function run() {
     if (!hasDust) return;
@@ -428,9 +413,9 @@ function WakeStep({
     track("wake_start");
     pop();
     cancel.current = { cancelled: false };
-    const res = await animateMonster(image, () => {}, cancel.current);
-    if (res.video) {
-      setReady(res.video);
+    const res = await animateGreeting(image, cancel.current);
+    if (res.greet || res.smile) {
+      setReady({ greet: res.greet, smile: res.smile });
     } else if (res.reason === "no_key") setStatus("nokey");
     else if (res.reason === "cancelled") setStatus("idle");
     else {
@@ -443,13 +428,14 @@ function WakeStep({
   const gameOn = status === "working" && needGame && !sprinkled;
 
   const frame = (
-    <div className="wake-frame">
-      {video ? (
-        <video src={video} className="wake-media" autoPlay loop muted playsInline />
-      ) : image ? (
+    <div className={`wake-frame${revealed ? " reveal-pop" : ""}`} ref={frameRef}>
+      {activeClip ? (
+        <video src={activeClip} className="wake-media" autoPlay loop muted playsInline />
+      ) : status === "working" && image ? (
         <img src={image} className="wake-media" alt="" />
       ) : (
-        <div className="eyes-placeholder">🌱</div>
+        // idle / error: instructional placeholder — hands sprinkling life over a creature
+        <img src="/wake-cover.jpg" className="wake-media wake-cover" alt="" />
       )}
       {status === "working" && (sprinkled ? (
         <div className="dust-shower">
@@ -477,6 +463,8 @@ function WakeStep({
       <div className="stack center">
         <p className="lead">✨ Give it life!</p>
         <DustGame
+          photo={image}
+          canFinish={!!ready}
           onSprinkle={(t) => {
             setTraits(t);
             setSprinkled(true);
