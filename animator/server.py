@@ -28,6 +28,11 @@ from rig import RigError, build_character
 HERE = os.path.dirname(os.path.abspath(__file__))
 AD_DIR = os.environ.get("AD_DIR", os.path.join(HERE, "AnimatedDrawings"))
 PORT = int(os.environ.get("ANIMATOR_PORT", "8765"))
+# every creature that comes alive is archived here for the DISPLAY PC:
+# <id>.greet.gif / <id>.smile.gif / <id>.json — GET /creatures lists them,
+# /creatures/<file> serves them over the LAN.
+CREATURES_DIR = os.environ.get("CREATURES_DIR", os.path.join(HERE, "creatures"))
+os.makedirs(CREATURES_DIR, exist_ok=True)
 
 # motion clips: (bvh file, start frame, end frame) — trimmed for speed & size
 MOTIONS = {
@@ -118,6 +123,33 @@ def health():
     return {"ok": True}
 
 
+@app.get("/creatures")
+def creatures():
+    """Newest-first list of everything that has come alive (for the display PC)."""
+    import json as _json
+
+    out = []
+    for fn in sorted(os.listdir(CREATURES_DIR), reverse=True):
+        if fn.endswith(".json"):
+            try:
+                with open(os.path.join(CREATURES_DIR, fn)) as f:
+                    out.append(_json.load(f))
+            except Exception:  # noqa: BLE001 — a corrupt entry shouldn't break the wall
+                pass
+    return {"creatures": out[:200]}
+
+
+@app.get("/creatures/{name}")
+def creature_file(name: str):
+    from fastapi.responses import FileResponse
+
+    safe = re.sub(r"[^\w.\-]", "", name)
+    path = os.path.join(CREATURES_DIR, safe)
+    if not os.path.isfile(path):
+        return {"error": "not_found"}
+    return FileResponse(path, media_type="image/gif" if safe.endswith(".gif") else "application/json")
+
+
 @app.post("/animate")
 def animate(req: AnimateReq):
     try:
@@ -144,11 +176,27 @@ def animate(req: AnimateReq):
                 print(f"[animate] {kind} FAILED after {time.time() - t0:.1f}s: {str(e)[:400]}", flush=True)
                 return {"error": "render_failed", "kind": kind, "detail": str(e)[:300]}
             clips[kind] = "data:image/gif;base64," + base64.b64encode(data).decode()
-        # stray glfw/AD logs dir cleanup is handled by TemporaryDirectory
+
+        # archive for the display PC (the "Digital World" wall)
+        try:
+            import json as _json
+
+            cid = time.strftime("%Y%m%d-%H%M%S")
+            for kind in ("greet", "smile"):
+                raw = base64.b64decode(clips[kind].split(",", 1)[1])
+                with open(os.path.join(CREATURES_DIR, f"{cid}.{kind}.gif"), "wb") as f:
+                    f.write(raw)
+            with open(os.path.join(CREATURES_DIR, f"{cid}.json"), "w") as f:
+                _json.dump({"id": cid, "greet": f"{cid}.greet.gif", "smile": f"{cid}.smile.gif", "at": time.time()}, f)
+            print(f"[animate] archived creature {cid}", flush=True)
+        except Exception as e:  # noqa: BLE001 — archiving must never break the scan flow
+            print(f"[animate] archive failed: {e}", flush=True)
         return clips
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=PORT)
+    # two-PC setup: run with ANIMATOR_HOST=0.0.0.0 so the display PC can reach
+    # /creatures over the LAN (keep the default local-only when single-machine)
+    uvicorn.run(app, host=os.environ.get("ANIMATOR_HOST", "127.0.0.1"), port=PORT)

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Welcome } from "./screens/Welcome";
 import { Build } from "./screens/Build";
-import { Greet } from "./screens/Greet";
 import { PhotoBooth } from "./screens/PhotoBooth";
 import { Certificate } from "./screens/Certificate";
 import { Staff } from "./screens/Staff";
@@ -10,7 +9,7 @@ import { clearProfile, ensureProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
 import type { Monster, MonsterVideos } from "./types";
 
-type Stage = "welcome" | "build" | "greet" | "booth" | "certificate";
+type Stage = "welcome" | "build" | "booth" | "certificate";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("welcome");
@@ -58,19 +57,8 @@ export default function App() {
             setMonster(m);
             setVideos(v);
             setOriginalPhoto(original || null);
-            setStage("greet");
-          }}
-        />
-      )}
-
-      {stage === "greet" && monster && (
-        <Greet
-          monster={monster}
-          greetVideo={videos.greet}
-          smileVideo={videos.smile}
-          onDone={() => {
             setStars(3);
-            setStage("booth");
+            setStage("booth"); // scan station: alive -> straight to the keepsake booth
           }}
         />
       )}
