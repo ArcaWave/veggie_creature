@@ -85,8 +85,17 @@ def _render(char_dir: str, motion_cfg_fn: str, out_gif: str) -> None:
         raise RuntimeError((r.stderr or r.stdout or "render subprocess failed")[-300:])
 
 
+def _transparent_frame(rgb: np.ndarray) -> Image.Image:
+    """RGBA frame with the near-white background knocked out (Pillow turns RGBA
+    into palette+transparency on GIF save), so creatures float free on the
+    display wall instead of living in a white box."""
+    near_white = (rgb > 240).all(axis=2)
+    rgba = np.dstack([rgb, np.where(near_white, 0, 255).astype(np.uint8)])
+    return Image.fromarray(rgba, "RGBA")
+
+
 def _shrink_gif(src: str) -> bytes:
-    """Frame-skip + downscale the raw render into a web-friendly looping gif."""
+    """Frame-skip + downscale + background knockout into a web-friendly gif."""
     cap = cv2.VideoCapture(src)
     frames = []
     i = 0
@@ -96,14 +105,14 @@ def _shrink_gif(src: str) -> bytes:
             break
         if i % FRAME_SKIP == 0:
             f = cv2.resize(f, (OUT_PX, OUT_PX), interpolation=cv2.INTER_AREA)
-            frames.append(Image.fromarray(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)))
+            frames.append(_transparent_frame(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)))
         i += 1
     cap.release()
     if not frames:
         raise RuntimeError("rendered gif had no frames")
     buf = io.BytesIO()
     frames[0].save(buf, format="GIF", save_all=True, append_images=frames[1:],
-                   duration=FRAME_MS, loop=0)
+                   duration=FRAME_MS, loop=0, disposal=2)
     return buf.getvalue()
 
 

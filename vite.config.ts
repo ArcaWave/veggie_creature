@@ -6,7 +6,10 @@ import path from "node:path";
 import { stylize, startAnimate, animateStatus } from "./api/_gemini";
 import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
+import { listCreatures, uploadCreatureClip } from "./api/_creaturestore";
 import { checkLimit, limitKey } from "./api/_ratelimit";
+
+const ANIMATOR = () => process.env.ANIMATOR_URL || "http://127.0.0.1:8765";
 
 const readBody = (req: IncomingMessage) =>
   new Promise<string>((resolve) => {
@@ -49,7 +52,7 @@ function devApiPlugin(): Plugin {
       // so the client can fall back instead of blowing up.
       route("/api/animate-drawings", "animate", async (b) => {
         try {
-          const r = await fetch(`${process.env.ANIMATOR_URL || "http://127.0.0.1:8765"}/animate`, {
+          const r = await fetch(`${ANIMATOR()}/animate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ image: b.image }),
@@ -58,6 +61,48 @@ function devApiPlugin(): Plugin {
         } catch (e: any) {
           return { status: 200, body: { error: "no_server", detail: String(e?.message || e) } };
         }
+      });
+      // creature cloud relay (scan PC -> Blob -> display PC). In dev without a
+      // Blob token, GET falls back to the local animator archive so world.html
+      // can be demoed on one machine.
+      server.middlewares.use("/api/creature-file", async (req, res) => {
+        const name = (req.url || "/").slice(1).replace(/[^\w.\-]/g, "");
+        try {
+          const r = await fetch(`${ANIMATOR()}/creatures/${name}`);
+          res.setHeader("Content-Type", "image/gif");
+          res.end(Buffer.from(await r.arrayBuffer()));
+        } catch {
+          res.statusCode = 404;
+          res.end();
+        }
+      });
+      server.middlewares.use("/api/creatures", async (req, res) => {
+        if (req.method === "POST") {
+          const key = limitKey(req.headers["x-mk-profile"], req.headers["x-forwarded-for"], req.socket?.remoteAddress);
+          if (!checkLimit("save", key)) return send(res, 429, { error: "rate_limited" });
+          try {
+            const b = JSON.parse((await readBody(req)) || "{}");
+            const uploaded = await uploadCreatureClip(String(b.id ?? ""), b.kind, b.clip);
+            return send(res, 200, { uploaded });
+          } catch (e: any) {
+            return send(res, 500, { error: "server_error", detail: String(e?.message || e) });
+          }
+        }
+        let creatures: any[] = await listCreatures();
+        if (!creatures.length) {
+          try {
+            const j = (await (await fetch(`${ANIMATOR()}/creatures`)).json()) as any;
+            creatures = (j.creatures ?? []).map((c: any) => ({
+              id: c.id,
+              at: (c.at ?? 0) * 1000,
+              greet: `/api/creature-file/${c.greet}`,
+              smile: `/api/creature-file/${c.smile}`,
+            }));
+          } catch {
+            /* no local animator either */
+          }
+        }
+        send(res, 200, { creatures });
       });
       route("/api/speak", "speak", (b) => speak(b.text, b.seed));
       // setup helper: GET-style voice catalog (POST {} works too) to pick TYPECAST_VOICE_ID

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Veggie Creature — Digital World</title>
+<style>
+  :root { --sky1: #bfe7ff; --sky2: #e8fbe0; --grass: #a4de7c; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Baloo 2", system-ui, sans-serif; cursor: none;
+    background: linear-gradient(#8fd3ff, var(--sky1) 45%, var(--sky2) 75%, var(--grass) 76%);
+  }
+  /* soft drifting clouds */
+  .cloud { position: absolute; background: rgba(255,255,255,0.9); border-radius: 999px; filter: blur(2px); animation: drift linear infinite; }
+  @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
+  .sun { position: absolute; top: 6vh; right: 8vw; width: 11vmin; height: 11vmin; border-radius: 50%; background: #ffd97a; box-shadow: 0 0 60px 24px rgba(255, 217, 122, 0.55); }
+  header { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 5; text-align: center; }
+  header h1 { font-size: 5.2vmin; color: #2e5d12; text-shadow: 0 2px 0 rgba(255,255,255,0.7); }
+  header p { font-size: 2.4vmin; color: #4a7a2a; font-weight: 700; }
+  .creature { position: absolute; width: var(--size); transition: left 14s ease-in-out, top 14s ease-in-out; will-change: left, top; }
+  .creature img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(60, 90, 30, 0.25)); }
+  .creature.enter { animation: arrive 1.6s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+  @keyframes arrive { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+  .creature .burst { position: absolute; inset: -30%; pointer-events: none; }
+  .burst span { position: absolute; left: 50%; top: 50%; font-size: 3.2vmin; animation: spark 1.5s ease-out forwards; }
+  @keyframes spark { to { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; } }
+  .empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 3.4vmin; font-weight: 800; color: #4a7a2a; text-align: center; }
+</style>
+</head>
+<body>
+<div class="sun"></div>
+<header>
+  <h1>🌏 The Digital World</h1>
+  <p>Your veggie creatures live here now!</p>
+</header>
+<div id="stage"></div>
+<div class="empty" id="empty">Waiting for the first creature… ✨</div>
+
+<script>
+// The display wall (PC #2). Polls /api/creatures (Vercel Blob relay in
+// production, the local animator archive in dev) and lets every creature
+// wander the meadow; a brand-new arrival pops in with a sparkle burst.
+const stage = document.getElementById("stage");
+const emptyMsg = document.getElementById("empty");
+const onStage = new Map(); // id -> {el, img, entry}
+const MAX_ON_STAGE = 12;
+const POLL_MS = 8000;
+
+// clouds
+for (let i = 0; i < 5; i++) {
+  const c = document.createElement("div");
+  c.className = "cloud";
+  const w = 12 + Math.random() * 14;
+  c.style.cssText = `width:${w}vmin;height:${w * 0.4}vmin;top:${3 + Math.random() * 26}vh;animation-duration:${60 + Math.random() * 80}s;animation-delay:-${Math.random() * 60}s`;
+  document.body.appendChild(c);
+}
+
+function wanderSpot() {
+  return { left: 4 + Math.random() * 78 + "vw", top: 34 + Math.random() * 48 + "vh" };
+}
+
+function addCreature(entry, isNew) {
+  const el = document.createElement("div");
+  el.className = "creature" + (isNew ? " enter" : "");
+  el.style.setProperty("--size", 16 + Math.random() * 10 + "vmin");
+  const spot = wanderSpot();
+  el.style.left = spot.left;
+  el.style.top = spot.top;
+  const img = document.createElement("img");
+  img.src = entry.greet || entry.smile;
+  el.appendChild(img);
+  if (isNew) {
+    const burst = document.createElement("div");
+    burst.className = "burst";
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement("span");
+      s.textContent = i % 3 ? "✨" : "⭐";
+      const a = (Math.PI * 2 * i) / 12;
+      s.style.setProperty("--dx", Math.cos(a) * 14 + "vmin");
+      s.style.setProperty("--dy", Math.sin(a) * 14 + "vmin");
+      burst.appendChild(s);
+    }
+    el.appendChild(burst);
+    setTimeout(() => burst.remove(), 1700);
+  }
+  stage.appendChild(el);
+  onStage.set(entry.id, { el, img, entry });
+  // alternate between the two clips now and then, and wander forever
+  setInterval(() => {
+    if (entry.smile && entry.greet) img.src = Math.random() < 0.5 ? entry.greet : entry.smile;
+  }, 20000 + Math.random() * 15000);
+  setInterval(() => {
+    const s = wanderSpot();
+    el.style.left = s.left;
+    el.style.top = s.top;
+  }, 12000 + Math.random() * 8000);
+}
+
+async function poll(first) {
+  try {
+    const r = await fetch("/api/creatures", { cache: "no-store" });
+    const j = await r.json();
+    const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
+    if (latest.length) emptyMsg.style.display = "none";
+    for (const entry of [...latest].reverse()) {
+      if (!onStage.has(entry.id)) addCreature(entry, !first);
+    }
+    // retire the oldest when the meadow gets crowded
+    while (onStage.size > MAX_ON_STAGE) {
+      const oldestId = [...onStage.keys()][0];
+      onStage.get(oldestId).el.remove();
+      onStage.delete(oldestId);
+    }
+  } catch (e) {
+    /* offline blip — try again next poll */
+  }
+}
+
+poll(true);
+setInterval(() => poll(false), POLL_MS);
+</script>
+</body>
+</html>

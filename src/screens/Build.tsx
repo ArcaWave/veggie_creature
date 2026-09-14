@@ -234,6 +234,18 @@ function MagicStep({
         setClips({ greet: anim.greet, smile: anim.smile });
         keepAsset("greet-video", anim.greet);
         track("wake_success");
+        // send it off to the Digital World (the display PC's wall, via cloud)
+        const cid = `c${Date.now().toString(36)}`;
+        (["greet", "smile"] as const).forEach((k) => {
+          const clip = anim[k];
+          if (clip) {
+            fetch("/api/creatures", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: cid, kind: k, clip }),
+            }).catch(() => {});
+          }
+        });
       } else {
         track("wake_fail", { error: anim.error ?? anim.reason });
       }
