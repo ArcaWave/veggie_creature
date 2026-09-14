@@ -2,7 +2,7 @@
 // (rendered by <img>), Veo clips as mp4 data URLs (rendered by <video>) —
 // this picks the right element so every screen can stay engine-agnostic.
 export function Clip({ src, className }: { src: string; className?: string }) {
-  if (src.startsWith("data:image")) {
+  if (src.startsWith("data:image") || /\.(gif|png|webp)$/i.test(src)) {
     return <img src={src} className={className} alt="" />;
   }
   return <video src={src} className={className} autoPlay loop muted playsInline />;

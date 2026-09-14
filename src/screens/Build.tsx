@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SparkleLoading } from "../components/SparkleLoading";
 import { Clip } from "../components/Clip";
-import { stylizePhoto } from "../api/stylize";
-import { animateGreeting } from "../api/animate";
 import { pop, sparkle } from "../lib/sfx";
-import { magicDustBurst, sparkleBurst } from "../lib/dust";
+import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import type { Monster, MonsterVideos } from "../types";
@@ -185,10 +183,10 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
   );
 }
 
-// -------- the automated magic: photo -> clay -> dust -> ALIVE ---------------
-// Runs entirely by itself. The clay ta-da appears as soon as Gemini returns,
-// dust starts falling while AnimatedDrawings renders the two clips, and when
-// they land the burst fires and we move straight on to the greeting.
+// -------- the automated magic: photo -> match -> dust -> ALIVE --------------
+// No runtime generation at all: the scan photo is matched (one cheap vision
+// call, ~2s) against the PRE-MADE variant library in public/variants, magic
+// dust falls for a moment of theatre, and the matching creature bursts to life.
 function MagicStep({
   photo,
   onRetake,
@@ -198,75 +196,68 @@ function MagicStep({
   onRetake: () => void;
   onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void;
 }) {
-  type Phase = "clay" | "dust" | "alive";
-  const [phase, setPhase] = useState<Phase>("clay");
-  const [stylized, setStylized] = useState<string | null>(null);
+  type Phase = "match" | "dust" | "alive";
+  const [phase, setPhase] = useState<Phase>("match");
   const [clips, setClips] = useState<MonsterVideos>({ greet: null, smile: null });
   const frameRef = useRef<HTMLDivElement>(null);
 
-  // no run-once ref: StrictMode's dev double-mount would strand the live run
-  // (the guard let only the aborted first run start). `alive` keeps whichever
-  // effect run is current; in production the effect runs once anyway.
+  // no run-once ref: StrictMode's dev double-mount would strand the live run.
   useEffect(() => {
     let alive = true;
 
     (async () => {
-      // 1) clay transformation
-      const res = await stylizePhoto(photo);
-      if (!alive) return;
-      const clay = res.stylized ?? photo; // no key / failure -> keep the photo
-      if (res.stylized) {
-        setStylized(res.stylized);
-        keepAsset("clay", res.stylized);
-        track("clay_success");
-        sparkleBurst(frameRef.current);
-        sparkle();
-      } else if (res.reason !== "no_key") {
-        track("clay_fail", { error: res.error ?? res.reason });
-      }
-      setPhase("dust");
-
-      // 2) bring it to life (AnimatedDrawings server)
-      track("wake_start");
-      const anim = await animateGreeting(clay);
-      if (!alive) return;
-      if (anim.greet || anim.smile) {
-        setClips({ greet: anim.greet, smile: anim.smile });
-        keepAsset("greet-video", anim.greet);
-        track("wake_success");
-        // send it off to the Digital World (the display PC's wall, via cloud)
-        const cid = `c${Date.now().toString(36)}`;
-        (["greet", "smile"] as const).forEach((k) => {
-          const clip = anim[k];
-          if (clip) {
-            fetch("/api/creatures", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: cid, kind: k, clip }),
-            }).catch(() => {});
-          }
+      // 1) which pre-made creature does this creation resemble?
+      track("match_start");
+      let variant = "carrot";
+      try {
+        const r = await fetch("/api/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: photo }),
         });
-      } else {
-        track("wake_fail", { error: anim.error ?? anim.reason });
+        const j = await r.json();
+        if (typeof j.variant === "string") variant = j.variant;
+        track("match_done", { variant, matched: j.matched ?? false });
+      } catch {
+        track("match_fail");
       }
-      setPhase("alive");
-      magicDustBurst(frameRef.current);
-      sparkle();
+      if (!alive) return;
 
-      // 3) a short beat to take it in, then on to the greeting
+      const videos: MonsterVideos = {
+        greet: `/variants/${variant}.greet.gif`,
+        smile: `/variants/${variant}.smile.gif`,
+      };
+
+      // 2) a short shower of magic dust — the moment of transformation
+      setPhase("dust");
       window.setTimeout(() => {
         if (!alive) return;
-        const m: Monster = {
-          name: "My Monster",
-          photo: clay,
-          eyes: [
-            { x: 0.36, y: 0.4 },
-            { x: 0.64, y: 0.4 },
-          ],
-          traits: [],
-        };
-        track("build_done");
-        onDone(m, anim.greet || anim.smile ? { greet: anim.greet, smile: anim.smile } : { greet: null, smile: null }, photo);
+        setClips(videos);
+        setPhase("alive");
+        magicDustBurst(frameRef.current);
+        sparkle();
+        // announce the arrival to the Digital World (display PC)
+        fetch("/api/creatures", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant }),
+        }).catch(() => {});
+
+        // 3) a beat to take it in, then onwards
+        window.setTimeout(() => {
+          if (!alive) return;
+          const m: Monster = {
+            name: "My Monster",
+            photo: `/variants/${variant}.png`,
+            eyes: [
+              { x: 0.36, y: 0.4 },
+              { x: 0.64, y: 0.4 },
+            ],
+            traits: [],
+          };
+          track("build_done", { variant });
+          onDone(m, videos, photo);
+        }, 3000);
       }, 2600);
     })();
 
@@ -280,7 +271,7 @@ function MagicStep({
   return (
     <div className="screen center-screen" style={{ alignItems: "center" }}>
       <p className="lead">
-        {phase === "clay" ? "✨ Clay magic…" : phase === "dust" ? "✨ Sprinkling magic dust…" : "🎉 It's ALIVE!"}
+        {phase === "match" ? "✨ Reading the magic…" : phase === "dust" ? "✨ Sprinkling magic dust…" : "🎉 It's ALIVE!"}
       </p>
 
       <div className={`wake-frame${phase === "alive" && shown ? " reveal-pop" : ""}`} ref={frameRef}>
@@ -288,13 +279,13 @@ function MagicStep({
           <Clip src={shown} className="wake-media" />
         ) : (
           <img
-            src={stylized ?? photo}
+            src={photo}
             className="wake-media"
             alt=""
-            style={phase === "clay" ? { filter: "saturate(1.4) blur(1.2px)" } : undefined}
+            style={phase === "match" ? { filter: "saturate(1.4) blur(1.2px)" } : undefined}
           />
         )}
-        {phase === "clay" && <SparkleLoading messages={["The clay is setting…", "Squish squish…"]} />}
+        {phase === "match" && <SparkleLoading messages={["Who are you in there…?", "Feeling the magic…"]} />}
         {phase === "dust" && (
           <div className="dust-shower">
             {Array.from({ length: 14 }).map((_, k) => (

@@ -68,8 +68,12 @@ function addCreature(entry, isNew) {
   const spot = wanderSpot();
   el.style.left = spot.left;
   el.style.top = spot.top;
+  // clips are pre-made static files shipped with the site — only the variant
+  // id travels through the cloud
+  const greet = `/variants/${entry.variant}.greet.gif`;
+  const smile = `/variants/${entry.variant}.smile.gif`;
   const img = document.createElement("img");
-  img.src = entry.greet || entry.smile;
+  img.src = greet;
   el.appendChild(img);
   if (isNew) {
     const burst = document.createElement("div");
@@ -89,7 +93,7 @@ function addCreature(entry, isNew) {
   onStage.set(entry.id, { el, img, entry });
   // alternate between the two clips now and then, and wander forever
   setInterval(() => {
-    if (entry.smile && entry.greet) img.src = Math.random() < 0.5 ? entry.greet : entry.smile;
+    img.src = Math.random() < 0.5 ? greet : smile;
   }, 20000 + Math.random() * 15000);
   setInterval(() => {
     const s = wanderSpot();

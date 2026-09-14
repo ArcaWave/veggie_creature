@@ -49,6 +49,12 @@ export const SMILE_PROMPT =
 const key = () => process.env.GEMINI_API_KEY || "";
 const imageModel = () => process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const videoModel = () => process.env.GEMINI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
+const matchModel = () => process.env.GEMINI_MATCH_MODEL || "gemini-2.5-flash-lite";
+
+// The pre-generated creature library (tools/pregen_variants.py + public/variants).
+export const VARIANT_IDS = [
+  "carrot", "broccoli", "tomato", "potato", "cucumber", "eggplant", "corn", "cauliflower",
+] as const;
 
 export type Result = { status: number; body: Record<string, unknown> };
 
@@ -79,6 +85,43 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
     return { status: 200, body: { stylized: `data:${inline.mimeType || inline.mime_type || "image/png"};base64,${inline.data}` } };
   } catch (e: any) {
     return { status: 500, body: { error: "server_error", detail: String(e?.message || e) } };
+  }
+}
+
+// Photo of the child's real veggie creation -> which pre-made variant character
+// resembles it most. Cheap text-model vision call (~2s); on any failure the
+// caller falls back to a random variant so the show always goes on.
+export async function matchVariant(image: string): Promise<Result> {
+  const fallback = VARIANT_IDS[Math.floor(Math.random() * VARIANT_IDS.length)];
+  if (!key()) return { status: 200, body: { variant: fallback, reason: "no_key" } };
+  const img = parseDataUrl(image);
+  if (!img) return { status: 400, body: { error: "bad_image" } };
+  try {
+    const r = await fetch(`${GEMINI}/models/${matchModel()}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text:
+                "A child built a little creature out of real vegetables (photo attached). " +
+                "Judging mainly by the dominant vegetable and its colors, which ONE of these " +
+                "clay character types does it resemble most? Answer with exactly one word from " +
+                `this list and nothing else: ${VARIANT_IDS.join(", ")}.`,
+            },
+            { inline_data: { mime_type: img.mimeType, data: img.data } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) return { status: 200, body: { variant: fallback, reason: "gemini_error" } };
+    const j = (await r.json()) as any;
+    const text: string = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const hit = VARIANT_IDS.find((v) => text.toLowerCase().includes(v));
+    return { status: 200, body: { variant: hit ?? fallback, matched: !!hit } };
+  } catch (e: any) {
+    return { status: 200, body: { variant: fallback, reason: "server_error", detail: String(e?.message || e) } };
   }
 }
 
