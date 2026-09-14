@@ -522,3 +522,10 @@ body {
 @keyframes countPulse { 0% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.4; } 30% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(0.96); opacity: 0.9; } }
 .camera.placeholder { position: relative; }
 .camera.placeholder > span, .camera.placeholder > p { position: relative; }
+
+/* ---------- the creature stomps off the right edge into the Digital World ---------- */
+.walk-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
+.walker { position: absolute; bottom: 9vh; left: 38%; width: min(38vmin, 340px); animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
+.walker img { width: 100%; display: block; animation: waddleStep 0.48s ease-in-out infinite; filter: drop-shadow(0 12px 14px rgba(60, 90, 30, 0.25)); }
+@keyframes walkAcross { to { left: 112%; } }
+@keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }

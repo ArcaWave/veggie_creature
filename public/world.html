@@ -16,37 +16,26 @@
   .cloud { position: absolute; background: rgba(255,255,255,0.9); border-radius: 999px; filter: blur(2px); animation: drift linear infinite; }
   @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
   .sun { position: absolute; top: 6vh; right: 8vw; width: 11vmin; height: 11vmin; border-radius: 50%; background: #ffd97a; box-shadow: 0 0 60px 24px rgba(255, 217, 122, 0.55); }
-  header { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 5; text-align: center; }
-  header h1 { font-size: 5.2vmin; color: #2e5d12; text-shadow: 0 2px 0 rgba(255,255,255,0.7); }
-  header p { font-size: 2.4vmin; color: #4a7a2a; font-weight: 700; }
   .creature { position: absolute; width: var(--size); transition: left 14s ease-in-out, top 14s ease-in-out; will-change: left, top; }
+  /* a brand-new arrival walks in from the left edge */
+  .creature.walk-in { transition: left 4.5s linear, top 4.5s ease-in-out; }
+  .creature.walk-in img { animation: waddle 0.5s ease-in-out infinite; }
+  @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
   .creature img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(60, 90, 30, 0.25)); }
-  .creature.enter { animation: arrive 1.6s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-  @keyframes arrive { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
-  .creature .burst { position: absolute; inset: -30%; pointer-events: none; }
-  .burst span { position: absolute; left: 50%; top: 50%; font-size: 3.2vmin; animation: spark 1.5s ease-out forwards; }
-  @keyframes spark { to { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; } }
-  .empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 3.4vmin; font-weight: 800; color: #4a7a2a; text-align: center; }
 </style>
 </head>
 <body>
 <div class="sun"></div>
-<header>
-  <h1>🌏 The Digital World</h1>
-  <p>Your veggie creatures live here now!</p>
-</header>
 <div id="stage"></div>
-<div class="empty" id="empty">Waiting for the first creature… ✨</div>
 
 <script>
 // The display wall (PC #2). Polls /api/creatures (Vercel Blob relay in
 // production, the local animator archive in dev) and lets every creature
 // wander the meadow; a brand-new arrival pops in with a sparkle burst.
 const stage = document.getElementById("stage");
-const emptyMsg = document.getElementById("empty");
 const onStage = new Map(); // id -> {el, img, entry}
 const MAX_ON_STAGE = 12;
-const POLL_MS = 8000;
+const POLL_MS = 4000;
 
 // clouds
 for (let i = 0; i < 5; i++) {
@@ -63,11 +52,22 @@ function wanderSpot() {
 
 function addCreature(entry, isNew) {
   const el = document.createElement("div");
-  el.className = "creature" + (isNew ? " enter" : "");
+  el.className = "creature" + (isNew ? " walk-in" : "");
   el.style.setProperty("--size", 16 + Math.random() * 10 + "vmin");
   const spot = wanderSpot();
-  el.style.left = spot.left;
-  el.style.top = spot.top;
+  if (isNew) {
+    // continue the scan station's exit: stomp in from the left edge
+    el.style.left = "-26vw";
+    el.style.top = 52 + Math.random() * 24 + "vh";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.left = spot.left;
+      el.style.top = spot.top;
+    }));
+    setTimeout(() => el.classList.remove("walk-in"), 4700);
+  } else {
+    el.style.left = spot.left;
+    el.style.top = spot.top;
+  }
   // clips are pre-made static files shipped with the site — only the variant
   // id travels through the cloud
   const greet = `/variants/${entry.variant}.greet.gif`;
@@ -75,20 +75,6 @@ function addCreature(entry, isNew) {
   const img = document.createElement("img");
   img.src = greet;
   el.appendChild(img);
-  if (isNew) {
-    const burst = document.createElement("div");
-    burst.className = "burst";
-    for (let i = 0; i < 12; i++) {
-      const s = document.createElement("span");
-      s.textContent = i % 3 ? "✨" : "⭐";
-      const a = (Math.PI * 2 * i) / 12;
-      s.style.setProperty("--dx", Math.cos(a) * 14 + "vmin");
-      s.style.setProperty("--dy", Math.sin(a) * 14 + "vmin");
-      burst.appendChild(s);
-    }
-    el.appendChild(burst);
-    setTimeout(() => burst.remove(), 1700);
-  }
   stage.appendChild(el);
   onStage.set(entry.id, { el, img, entry });
   // alternate between the two clips now and then, and wander forever
@@ -107,7 +93,6 @@ async function poll(first) {
     const r = await fetch("/api/creatures", { cache: "no-store" });
     const j = await r.json();
     const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
-    if (latest.length) emptyMsg.style.display = "none";
     for (const entry of [...latest].reverse()) {
       if (!onStage.has(entry.id)) addCreature(entry, !first);
     }

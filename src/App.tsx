@@ -1,23 +1,18 @@
 import { useEffect, useState } from "react";
 import { Welcome } from "./screens/Welcome";
 import { Build } from "./screens/Build";
-import { PhotoBooth } from "./screens/PhotoBooth";
-import { Certificate } from "./screens/Certificate";
 import { Staff } from "./screens/Staff";
 import { TopBar } from "./components/TopBar";
 import { clearProfile, ensureProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
-import type { Monster, MonsterVideos } from "./types";
 
-type Stage = "welcome" | "build" | "booth" | "certificate";
+// Scan station: welcome -> scan -> the matched creature comes alive, walks off
+// the right edge of the screen (into the Digital World / the display PC), and
+// the station resets for the next child.
+type Stage = "welcome" | "build";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("welcome");
-  const [monster, setMonster] = useState<Monster | null>(null);
-  const [videos, setVideos] = useState<MonsterVideos>({ greet: null, smile: null });
-  const [originalPhoto, setOriginalPhoto] = useState<string | null>(null);
-  const [boothPhoto, setBoothPhoto] = useState<string | null>(null);
-  const [stars, setStars] = useState(0);
   const [staffOpen, setStaffOpen] = useState(false);
 
   useEffect(() => {
@@ -27,11 +22,6 @@ export default function App() {
   function reset(reason: string) {
     track("session_reset", { reason });
     clearProfile(); // next family starts with a fresh profile
-    setMonster(null);
-    setVideos({ greet: null, smile: null });
-    setOriginalPhoto(null);
-    setBoothPhoto(null);
-    setStars(0);
     setStaffOpen(false);
     setStage("welcome");
   }
@@ -44,45 +34,14 @@ export default function App() {
       {stage === "welcome" && (
         <Welcome
           onStart={() => {
-            ensureProfile(); // silent session profile; details arrive at "Email me!"
+            ensureProfile(); // silent session profile keys rate limits & saves
             track("build_start");
             setStage("build");
           }}
         />
       )}
 
-      {stage === "build" && (
-        <Build
-          onDone={(m, v, original) => {
-            setMonster(m);
-            setVideos(v);
-            setOriginalPhoto(original || null);
-            setStars(3);
-            setStage("booth"); // scan station: alive -> straight to the keepsake booth
-          }}
-        />
-      )}
-
-      {stage === "booth" && monster && (
-        <PhotoBooth
-          monster={monster}
-          onDone={(photo) => {
-            setBoothPhoto(photo);
-            setStage("certificate");
-          }}
-        />
-      )}
-
-      {stage === "certificate" && monster && (
-        <Certificate
-          monster={monster}
-          video={videos.smile ?? videos.greet}
-          originalPhoto={originalPhoto}
-          profilePhoto={boothPhoto}
-          stars={stars}
-          onRestart={() => reset("done")}
-        />
-      )}
+      {stage === "build" && <Build onDone={() => reset("done")} />}
     </div>
   );
 }

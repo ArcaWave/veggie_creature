@@ -72,12 +72,20 @@ SMILE_PROMPT = (
 )
 
 
-def post(url, body):
+def post(url, body, retries=6):
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "x-goog-api-key": KEY})
-    with urllib.request.urlopen(req, timeout=300) as r:
-        return json.load(r)
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                print(f"    (quota 429 — waiting 70s, attempt {attempt + 1})", flush=True)
+                time.sleep(70)
+                continue
+            raise
 
 
 def get(url):

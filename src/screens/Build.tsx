@@ -5,17 +5,17 @@ import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
-import type { Monster, MonsterVideos } from "../types";
 
 // "Show it to the camera and it comes alive."
-// No taps, no mini-games: the camera counts down and snaps by itself, then one
-// automated magic sequence runs — clay ta-da, dust falling, and the reveal —
-// and we hand straight over to the greeting. (Small Retake escape hatch only.)
+// No taps, no mini-games: the camera counts down and snaps by itself, the scan
+// is matched to a pre-made creature, and the creature stomps off the RIGHT edge
+// of the screen — walking into the Digital World (it then appears on the
+// display PC's world.html). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
 const COUNTDOWN_S = 5; // time to hold the creature up before the auto-snap
 
-export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void }) {
+export function Build({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
 
@@ -183,10 +183,11 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
   );
 }
 
-// -------- the automated magic: photo -> match -> dust -> ALIVE --------------
-// No runtime generation at all: the scan photo is matched (one cheap vision
-// call, ~2s) against the PRE-MADE variant library in public/variants, magic
-// dust falls for a moment of theatre, and the matching creature bursts to life.
+// -------- the automated magic: photo -> match -> dust -> ALIVE -> walk off ---
+// No runtime generation: the scan photo is matched (one cheap vision call, ~2s)
+// against the PRE-MADE variant library, dust falls for a moment of theatre, the
+// creature bursts alive, waves for a beat — then stomps off the RIGHT edge of
+// the screen into the Digital World, and the station resets.
 function MagicStep({
   photo,
   onRetake,
@@ -194,21 +195,22 @@ function MagicStep({
 }: {
   photo: string;
   onRetake: () => void;
-  onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void;
+  onDone: () => void;
 }) {
-  type Phase = "match" | "dust" | "alive";
+  type Phase = "match" | "dust" | "alive" | "walk";
   const [phase, setPhase] = useState<Phase>("match");
-  const [clips, setClips] = useState<MonsterVideos>({ greet: null, smile: null });
+  const [variant, setVariant] = useState<string | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
 
   // no run-once ref: StrictMode's dev double-mount would strand the live run.
   useEffect(() => {
     let alive = true;
+    const timers: number[] = [];
 
     (async () => {
       // 1) which pre-made creature does this creation resemble?
       track("match_start");
-      let variant = "carrot";
+      let v = "carrot";
       try {
         const r = await fetch("/api/match", {
           method: "POST",
@@ -216,67 +218,69 @@ function MagicStep({
           body: JSON.stringify({ image: photo }),
         });
         const j = await r.json();
-        if (typeof j.variant === "string") variant = j.variant;
-        track("match_done", { variant, matched: j.matched ?? false });
+        if (typeof j.variant === "string") v = j.variant;
+        track("match_done", { variant: v, matched: j.matched ?? false });
       } catch {
         track("match_fail");
       }
       if (!alive) return;
+      setVariant(v);
 
-      const videos: MonsterVideos = {
-        greet: `/variants/${variant}.greet.gif`,
-        smile: `/variants/${variant}.smile.gif`,
-      };
-
-      // 2) a short shower of magic dust — the moment of transformation
+      // 2) magic dust -> 3) ALIVE (waves for a beat) -> 4) walks off right
       setPhase("dust");
-      window.setTimeout(() => {
+      timers.push(window.setTimeout(() => {
         if (!alive) return;
-        setClips(videos);
         setPhase("alive");
         magicDustBurst(frameRef.current);
         sparkle();
-        // announce the arrival to the Digital World (display PC)
-        fetch("/api/creatures", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ variant }),
-        }).catch(() => {});
-
-        // 3) a beat to take it in, then onwards
-        window.setTimeout(() => {
+        timers.push(window.setTimeout(() => {
           if (!alive) return;
-          const m: Monster = {
-            name: "My Monster",
-            photo: `/variants/${variant}.png`,
-            eyes: [
-              { x: 0.36, y: 0.4 },
-              { x: 0.64, y: 0.4 },
-            ],
-            traits: [],
-          };
-          track("build_done", { variant });
-          onDone(m, videos, photo);
-        }, 3000);
-      }, 2600);
+          setPhase("walk");
+          track("walk_off", { variant: v });
+          // the creature leaves this screen — announce it to the Digital World
+          fetch("/api/creatures", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ variant: v }),
+          }).catch(() => {});
+          timers.push(window.setTimeout(() => {
+            if (!alive) return;
+            track("build_done", { variant: v });
+            onDone();
+          }, 5200)); // walk duration + a breath
+        }, 3200));
+      }, 2600));
     })();
 
     return () => {
       alive = false;
+      timers.forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const shown = clips.greet ?? clips.smile ?? null;
+  if (phase === "walk" && variant) {
+    return (
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🌏 Off to the Digital World!</p>
+        <div className="walk-stage">
+          <div className="walker">
+            <img src={`/variants/${variant}.smile.gif`} alt="" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="screen center-screen" style={{ alignItems: "center" }}>
       <p className="lead">
         {phase === "match" ? "✨ Reading the magic…" : phase === "dust" ? "✨ Sprinkling magic dust…" : "🎉 It's ALIVE!"}
       </p>
 
-      <div className={`wake-frame${phase === "alive" && shown ? " reveal-pop" : ""}`} ref={frameRef}>
-        {phase === "alive" && shown ? (
-          <Clip src={shown} className="wake-media" />
+      <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
+        {phase === "alive" && variant ? (
+          <Clip src={`/variants/${variant}.greet.gif`} className="wake-media" />
         ) : (
           <img
             src={photo}
