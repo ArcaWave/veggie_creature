@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MonsterFace } from "../components/MonsterFace";
+import { Clip } from "../components/Clip";
 import { useWaveDetector } from "../lib/motion";
 import { prefetchLines, speakLine, stopSpeaking } from "../lib/voice";
 import { sparkle, pop } from "../lib/sfx";
@@ -104,7 +105,7 @@ export function Greet({
       <div className={`greet-hero ${phase === "bye" ? "leaving" : ""}`}>
         {heroClip ? (
           <div className="greet-frame">
-            <video key={heroClip} src={heroClip} className="greet-media" autoPlay loop muted playsInline />
+            <Clip key={heroClip} src={heroClip} className="greet-media" />
           </div>
         ) : (
           <MonsterFace monster={monster} size={220} interactive={false} />

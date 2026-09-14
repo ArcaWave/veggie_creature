@@ -136,15 +136,16 @@ export function Certificate({
     // email + child name + the consents are recorded here (end of the journey)
     completeProfile({ email, childName: mailChild.trim() || undefined, newsletter: mailNews });
     const n = slug(monster.name);
+    const vidExt = video?.startsWith("data:image/gif") ? "gif" : "mp4";
     const attachments: { filename: string; dataUrl: string }[] = [];
     if (originalPhoto) attachments.push({ filename: `${n}-original.jpg`, dataUrl: originalPhoto });
     attachments.push({ filename: `${n}-clay.png`, dataUrl: monster.photo });
-    if (video) attachments.push({ filename: `${n}-alive.mp4`, dataUrl: video });
+    if (video) attachments.push({ filename: `${n}-alive.${vidExt}`, dataUrl: video });
     if (profilePhoto) attachments.push({ filename: `${n}-together.jpg`, dataUrl: profilePhoto });
     attachments.push({ filename: `${n}-certificate.png`, dataUrl: canvas.toDataURL("image/png") });
-    // stay under the request limit — drop the (big) video first if needed
+    // stay under the request limit — drop the (big) clip first if needed
     if (attachments.reduce((t, a) => t + a.dataUrl.length, 0) > 3_700_000 && video) {
-      const i = attachments.findIndex((a) => a.filename.endsWith(".mp4"));
+      const i = attachments.findIndex((a) => a.filename.startsWith(`${n}-alive.`));
       if (i >= 0) attachments.splice(i, 1);
     }
     try {
@@ -200,7 +201,8 @@ export function Certificate({
               className="btn-secondary"
               onClick={() => {
                 track("keepsake_video");
-                shareOrDownload(video, `${slug(monster.name)}-alive.mp4`, `${monster.name} is alive!`);
+                const ext = video.startsWith("data:image/gif") ? "gif" : "mp4";
+                shareOrDownload(video, `${slug(monster.name)}-alive.${ext}`, `${monster.name} is alive!`);
               }}
             >
               🎬 Live clip

@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const type = String(a.type ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 24) || "asset";
       if (!data.startsWith("data:")) return res.status(400).json({ error: "bad_data" });
       if (data.length > 4_200_000) return res.status(413).json({ error: "asset_too_large" });
-      const ext = data.startsWith("data:video") ? "mp4" : data.startsWith("data:image/jpeg") ? "jpg" : "png";
+      const ext = data.startsWith("data:video") ? "mp4" : data.startsWith("data:image/gif") ? "gif" : data.startsWith("data:image/jpeg") ? "jpg" : "png";
       const url = await saveDataUrl(`gallery/${a.profileId ?? "anon"}-${type}-${Date.now()}.${ext}`, data);
       return res.status(200).json({ saved: !!url });
     }

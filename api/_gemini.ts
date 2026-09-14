@@ -3,15 +3,21 @@
 // environment only — it is never sent to the browser.
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
 
+// Full-body version: the pose/background constraints double as rig-friendly
+// normalisation for the AnimatedDrawings engine (arms out, legs visible, clean
+// white background — see animator/rig.py).
 export const CLAY_PROMPT =
-  "Turn this photo into an adorable, kid-friendly claymation character — like a lovable creature " +
-  "from a children's stop-motion cartoon. Keep the same overall shape, pose, and main colors of " +
-  "the subject so it is clearly the same monster, but make it cuter, rounder and chubbier: " +
-  "squishy chunky plasticine forms, big soft rounded body, smooth clay surface with tiny gentle " +
-  "fingerprint dents, bright cheerful candy-pastel colors, a warm happy friendly expression and a " +
-  "tiny smile. Soft even lighting, gentle soft shadows, a simple clean solid pastel background. " +
-  "Wholesome, charming, bouncy and toy-like, designed to delight young children aged 5 to 9. " +
-  "No scary, creepy or photorealistic details, no extra props, no text, no watermark.";
+  "Turn this photo into an adorable, kid-friendly claymation character for a children's " +
+  "stop-motion cartoon, drawn as a FULL BODY standing character. Keep the same overall shape and " +
+  "main colors of the subject as the character's head and torso so it is clearly the same " +
+  "creature, but give it a complete body: two visible chubby clay ARMS held slightly out to the " +
+  "sides away from the body, and two visible short clay LEGS with feet, standing upright facing " +
+  "the camera in a neutral A-pose. The whole character must be fully inside the frame with margin " +
+  "around it, limbs clearly separated from the body (no arms touching the torso), squishy chunky " +
+  "plasticine forms, smooth clay surface, bright cheerful candy-pastel colors, a warm happy " +
+  "friendly expression with a tiny smile. CRITICAL: plain solid WHITE background, no floor shadow, " +
+  "no props, no text, no watermark. Soft even lighting. Wholesome, charming and toy-like, designed " +
+  "to delight young children aged 5 to 9. No scary, creepy or photorealistic details.";
 
 export const ANIMATE_PROMPT =
   "Animate this clay monster with very subtle, gentle stop-motion motion, looping-friendly. " +

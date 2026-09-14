@@ -44,6 +44,21 @@ function devApiPlugin(): Plugin {
       route("/api/stylize", "stylize", (b) => stylize(b.image, b.prompt));
       route("/api/animate", "animate", (b) => startAnimate(b.image, b.prompt, b.kind));
       route("/api/animate-status", "animate-status", (b) => animateStatus(b.operation));
+      // main engine: the local AnimatedDrawings render server (zero-cost clips).
+      // Reuses the "animate" rate-limit bucket; unreachable server -> soft error
+      // so the client can fall back instead of blowing up.
+      route("/api/animate-drawings", "animate", async (b) => {
+        try {
+          const r = await fetch(`${process.env.ANIMATOR_URL || "http://127.0.0.1:8765"}/animate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: b.image }),
+          });
+          return { status: r.status, body: await r.json() };
+        } catch (e: any) {
+          return { status: 200, body: { error: "no_server", detail: String(e?.message || e) } };
+        }
+      });
       route("/api/speak", "speak", (b) => speak(b.text, b.seed));
       // setup helper: GET-style voice catalog (POST {} works too) to pick TYPECAST_VOICE_ID
       server.middlewares.use("/api/voices", async (_req, res) => {

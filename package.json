@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "animator": "bash animator/run.sh",
+    "animator:setup": "bash animator/setup.sh"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

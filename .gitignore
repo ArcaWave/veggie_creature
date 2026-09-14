@@ -5,3 +5,8 @@ dist
 .DS_Store
 .vercel
 .data
+animator/venv
+animator/AnimatedDrawings
+animator/logs
+logs
+animator/server.log

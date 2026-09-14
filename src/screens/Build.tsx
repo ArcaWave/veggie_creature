@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SparkleLoading } from "../components/SparkleLoading";
-import { DustGame } from "../components/DustGame";
-import { ClayGame } from "../components/ClayGame";
+import { Clip } from "../components/Clip";
 import { stylizePhoto } from "../api/stylize";
 import { animateGreeting } from "../api/animate";
 import { pop, sparkle } from "../lib/sfx";
@@ -10,30 +9,28 @@ import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import type { Monster, MonsterVideos } from "../types";
 
-type Step = "photo" | "style" | "wake" | "eyes";
+// "Show it to the camera and it comes alive."
+// No taps, no mini-games: the camera counts down and snaps by itself, then one
+// automated magic sequence runs — clay ta-da, dust falling, and the reveal —
+// and we hand straight over to the greeting. (Small Retake escape hatch only.)
+type Step = "photo" | "magic";
+
+const COUNTDOWN_S = 5; // time to hold the creature up before the auto-snap
 
 export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
-  const [stylized, setStylized] = useState<string | null>(null);
-  const [videos, setVideos] = useState<MonsterVideos>({ greet: null, smile: null });
-  const [traits, setTraits] = useState<string[]>([]);
-  const [eyes, setEyes] = useState([
-    { x: 0.36, y: 0.4 },
-    { x: 0.64, y: 0.4 },
-  ]);
-  const active = stylized ?? photo;
 
+  // -------- camera with auto countdown snap --------
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [camOn, setCamOn] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
-  // the camera does NOT auto-start: a cover invites the child to tap first
-  const [camArmed, setCamArmed] = useState(false);
+  const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
-    if (step !== "photo" || !camArmed) {
+    if (step !== "photo") {
       stopCam();
       return;
     }
@@ -70,7 +67,7 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
       stopCam();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, camTry, camArmed]);
+  }, [step, camTry]);
 
   // bind the stream after the <video> renders (prevents a black screen)
   useEffect(() => {
@@ -81,6 +78,29 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
     }
   }, [camOn]);
 
+  // the countdown starts as soon as the camera is live, then snaps by itself
+  useEffect(() => {
+    if (!camOn || step !== "photo") {
+      setCount(null);
+      return;
+    }
+    setCount(COUNTDOWN_S);
+    const id = setInterval(() => {
+      setCount((c) => {
+        if (c === null) return null;
+        if (c <= 1) {
+          clearInterval(id);
+          capture();
+          return 0;
+        }
+        pop();
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camOn, step, camTry]);
+
   function stopCam() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -89,10 +109,9 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
 
   function capture() {
     const v = videoRef.current;
-    if (!v) return;
-    pop();
-    // WYSIWYG: crop what the (object-fit: cover) preview shows, so a wide
-    // landscape frame captures wide — not a surprise square from the middle.
+    if (!v || v.readyState < 2) return;
+    sparkle();
+    // WYSIWYG: crop what the (object-fit: cover) preview shows
     const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
     let cw = v.videoWidth, ch = v.videoHeight;
     if (cw / ch > ratio) cw = Math.round(ch * ratio);
@@ -105,10 +124,9 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
     ctx.drawImage(v, (v.videoWidth - cw) / 2, (v.videoHeight - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
     const url = canvas.toDataURL("image/jpeg", 0.8);
     setPhoto(url);
-    setStylized(null);
     track("photo_captured");
-    keepAsset("original", url); // gallery raw material
-    setStep("style");
+    keepAsset("original", url);
+    setStep("magic");
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -117,458 +135,167 @@ export function Build({ onDone }: { onDone: (m: Monster, videos: MonsterVideos, 
     const reader = new FileReader();
     reader.onload = () => {
       setPhoto(String(reader.result));
-      setStylized(null);
       track("photo_uploaded");
-      keepAsset("original", String(reader.result)); // gallery raw material
-      setStep("style");
+      keepAsset("original", String(reader.result));
+      setStep("magic");
     };
     reader.readAsDataURL(file);
   }
 
-  // no naming step — the creature simply comes to life and says hello
-  function finish() {
-    const m: Monster = { name: "My Monster", photo: active, eyes, traits };
-    track("build_done");
-    onDone(m, videos, photo); // photo = the original veggie snapshot
+  function retake() {
+    track("photo_retake");
+    setPhoto("");
+    setStep("photo");
+    setCamTry((t) => t + 1);
+  }
+
+  if (step === "magic") {
+    return <MagicStep photo={photo} onRetake={retake} onDone={onDone} />;
   }
 
   return (
     <div className="screen">
-      <Steps step={step} />
-
-      {step === "photo" && (
-        <div className="stack center">
-          <div className="camera-box">
-            {!camArmed ? (
-              // cover: the camera only turns on when the child taps this
-              <button
-                className="camera-cover"
-                onClick={() => {
-                  pop();
-                  track("camera_armed");
-                  setCamArmed(true);
-                }}
-              >
-                <img src="/camera-cover.jpg" alt="" className="cover-bg" />
-                <span className="cover-title">Make your own veggie creature!</span>
-                <span className="cover-hint">👉 Tap to open the camera</span>
-              </button>
-            ) : camOn ? (
+      <div className="stack center">
+        <p className="lead">📸 Show your veggie creature to the camera!</p>
+        <div className="camera-box">
+          {camOn ? (
+            <>
               <video ref={videoRef} autoPlay playsInline muted className="camera" />
-            ) : (
-              <div className="camera placeholder">
-                <span>📷</span>
-                <p>{camError ?? "Starting the camera…"}</p>
-              </div>
-            )}
-          </div>
-          {camArmed && (camOn ? (
-            <button className="btn-primary big" onClick={capture}>📸 Snap!</button>
+              {count !== null && count > 0 && <span className="count-badge">{count}</span>}
+            </>
           ) : (
-            <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
-              📷 Retry
-            </button>
-          ))}
-          <label className="btn-secondary">
-            🖼️ Upload
-            <input type="file" accept="image/*" onChange={onFile} hidden />
-          </label>
+            <div className="camera placeholder">
+              <img src="/camera-cover.jpg" alt="" className="cover-bg" />
+              <span>📷</span>
+              <p>{camError ?? "Starting the camera…"}</p>
+            </div>
+          )}
         </div>
-      )}
-
-      {step === "style" && (
-        <StyleStep
-          photo={photo}
-          stylized={stylized}
-          setStylized={setStylized}
-          onNext={() => setStep("wake")}
-          onRetake={() => {
-            // back to the camera for a brand-new photo (clay result is discarded)
-            setPhoto("");
-            setStylized(null);
-            track("photo_retake");
-            setStep("photo");
-          }}
-        />
-      )}
-
-      {step === "wake" && (
-        <WakeStep
-          image={active}
-          videos={videos}
-          setVideos={setVideos}
-          traits={traits}
-          setTraits={setTraits}
-          onDone={(hasVideo) => (hasVideo ? finish() : setStep("eyes"))}
-        />
-      )}
-
-      {step === "eyes" && (
-        <EyesStep photo={active} eyes={eyes} setEyes={setEyes} onNext={finish} />
-      )}
+        {!camOn && camError && (
+          <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
+            📷 Retry
+          </button>
+        )}
+        <label className="btn-ghost">
+          🖼️ Upload instead
+          <input type="file" accept="image/*" onChange={onFile} hidden />
+        </label>
+      </div>
     </div>
   );
 }
 
-function Steps({ step }: { step: Step }) {
-  const order: Step[] = ["photo", "style", "wake", "eyes"];
-  const labels: Record<Step, string> = { photo: "Photo", style: "Clay", wake: "Wake", eyes: "Eyes" };
-  const idx = order.indexOf(step);
-  return (
-    <div className="steps">
-      {order.map((s, i) => (
-        <span key={s} className={`step ${i <= idx ? "done" : ""}`}>{labels[s]}</span>
-      ))}
-    </div>
-  );
-}
-
-// Photo -> clay image. The AI runs in the background while the child kneads the
-// photo (ClayGame). The reveal is HELD until BOTH the kneading is finished and
-// the AI result is ready — then a short beat, then ta-da. Redo skips the game.
-function StyleStep({
+// -------- the automated magic: photo -> clay -> dust -> ALIVE ---------------
+// Runs entirely by itself. The clay ta-da appears as soon as Gemini returns,
+// dust starts falling while AnimatedDrawings renders the two clips, and when
+// they land the burst fires and we move straight on to the greeting.
+function MagicStep({
   photo,
-  stylized,
-  setStylized,
-  onNext,
   onRetake,
+  onDone,
 }: {
   photo: string;
-  stylized: string | null;
-  setStylized: (s: string | null) => void;
-  onNext: () => void;
   onRetake: () => void;
+  onDone: (m: Monster, videos: MonsterVideos, originalPhoto: string) => void;
 }) {
-  type Status = "working" | "done" | "nokey" | "error";
-  const [status, setStatus] = useState<Status>(stylized ? "done" : "working");
-  const [ready, setReady] = useState<string | null>(null); // AI result waiting for the game
-  const [gameDone, setGameDone] = useState(!!stylized);
-  const [revealed, setRevealed] = useState(!!stylized);
-  const [progress, setProgress] = useState(0); // top loading bar (eases to 90, jumps on ready)
-  const started = useRef(false);
+  type Phase = "clay" | "dust" | "alive";
+  const [phase, setPhase] = useState<Phase>("clay");
+  const [stylized, setStylized] = useState<string | null>(null);
+  const [clips, setClips] = useState<MonsterVideos>({ greet: null, smile: null });
+  const frameRef = useRef<HTMLDivElement>(null);
 
+  // no run-once ref: StrictMode's dev double-mount would strand the live run
+  // (the guard let only the aborted first run start). `alive` keeps whichever
+  // effect run is current; in production the effect runs once anyway.
   useEffect(() => {
-    if (status !== "working") return;
-    const id = setInterval(() => setProgress((p) => (p > 90 ? p : Math.min(90, p + Math.max(0.4, (90 - p) * 0.04)))), 250);
-    return () => clearInterval(id);
-  }, [status]);
+    let alive = true;
 
-  async function run(withGame: boolean) {
-    setStatus("working");
-    setProgress(0);
-    setReady(null);
-    setRevealed(false);
-    setGameDone(!withGame);
-    const res = await stylizePhoto(photo);
-    if (res.stylized) {
-      setReady(res.stylized);
-      setProgress(100);
-    } else if (res.reason === "no_key") {
-      setStatus("nokey");
-    } else {
-      setStatus("error");
-      track("clay_fail", { error: res.error ?? res.reason });
-    }
-  }
+    (async () => {
+      // 1) clay transformation
+      const res = await stylizePhoto(photo);
+      if (!alive) return;
+      const clay = res.stylized ?? photo; // no key / failure -> keep the photo
+      if (res.stylized) {
+        setStylized(res.stylized);
+        keepAsset("clay", res.stylized);
+        track("clay_success");
+        sparkleBurst(frameRef.current);
+        sparkle();
+      } else if (res.reason !== "no_key") {
+        track("clay_fail", { error: res.error ?? res.reason });
+      }
+      setPhase("dust");
 
-  useEffect(() => {
-    if (started.current || stylized) return;
-    started.current = true;
-    run(true);
+      // 2) bring it to life (AnimatedDrawings server)
+      track("wake_start");
+      const anim = await animateGreeting(clay);
+      if (!alive) return;
+      if (anim.greet || anim.smile) {
+        setClips({ greet: anim.greet, smile: anim.smile });
+        keepAsset("greet-video", anim.greet);
+        track("wake_success");
+      } else {
+        track("wake_fail", { error: anim.error ?? anim.reason });
+      }
+      setPhase("alive");
+      magicDustBurst(frameRef.current);
+      sparkle();
+
+      // 3) a short beat to take it in, then on to the greeting
+      window.setTimeout(() => {
+        if (!alive) return;
+        const m: Monster = {
+          name: "My Monster",
+          photo: clay,
+          eyes: [
+            { x: 0.36, y: 0.4 },
+            { x: 0.64, y: 0.4 },
+          ],
+          traits: [],
+        };
+        track("build_done");
+        onDone(m, anim.greet || anim.smile ? { greet: anim.greet, smile: anim.smile } : { greet: null, smile: null }, photo);
+      }, 2600);
+    })();
+
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // reveal when BOTH the AI is ready and the kneading is done (+ a short beat)
-  useEffect(() => {
-    if (ready && gameDone && !revealed) {
-      const t = setTimeout(() => {
-        setStylized(ready);
-        setReady(null);
-        setRevealed(true);
-        setStatus("done");
-        track("clay_success");
-        sparkle();
-        sparkleBurst(); // little ta-da twinkle over the clay reveal
-      }, 900);
-      return () => clearTimeout(t);
-    }
-  }, [ready, gameDone, revealed, setStylized]);
-
-  // kneading in progress (first run)
-  if (status === "working" && !gameDone) {
-    return (
-      <div className="stack center">
-        <ClayGame photo={photo} progress={progress} onDone={() => { setGameDone(true); track("clay_game_done"); }} />
-      </div>
-    );
-  }
-
-  // kneading finished but the AI is still cooking (or a redo is running)
-  if (status === "working") {
-    return (
-      <div className="stack center">
-        <div className="clay-bar">
-          <div className="clay-bar-fill" style={{ width: `${progress}%` }} />
-          <span>✨ Clay magic…</span>
-        </div>
-        <div className="wake-frame">
-          <img src={photo} className="wake-media" alt="" style={{ filter: "saturate(1.5) blur(1.4px)" }} />
-          <SparkleLoading messages={["The clay is setting…", "Almost there…"]} />
-        </div>
-      </div>
-    );
-  }
-
+  const shown = clips.greet ?? clips.smile ?? null;
   return (
-    <div className="stack center">
-      <p className="lead">✨ Ta-da!</p>
-      <div className="style-row">
-        <div className="style-card">
-          <div className="style-frame">
-            {photo ? <img src={photo} alt="original" /> : <div className="eyes-placeholder">🌱</div>}
-          </div>
-          <span className="style-label">Photo</span>
-        </div>
-        <span className="style-arrow">→</span>
-        <div className="style-card">
-          <div className="style-frame">
-            {stylized ? <img src={stylized} alt="clay" /> : <div className="eyes-placeholder">🪄</div>}
-          </div>
-          <span className="style-label">Clay</span>
-        </div>
-      </div>
+    <div className="screen center-screen" style={{ alignItems: "center" }}>
+      <p className="lead">
+        {phase === "clay" ? "✨ Clay magic…" : phase === "dust" ? "✨ Sprinkling magic dust…" : "🎉 It's ALIVE!"}
+      </p>
 
-      {status === "nokey" && <div className="style-note">🔑 AI key needed — keeping your photo.</div>}
-      {status === "error" && <div className="style-note">Oops! Try again or keep the photo.</div>}
-
-      <div className="row">
-        <button className="btn-secondary" onClick={onRetake}>📷 Retake</button>
-        {(status === "done" || status === "error") && (
-          <button className="btn-secondary" onClick={() => run(false)}>🔄 Redo</button>
+      <div className={`wake-frame${phase === "alive" && shown ? " reveal-pop" : ""}`} ref={frameRef}>
+        {phase === "alive" && shown ? (
+          <Clip src={shown} className="wake-media" />
+        ) : (
+          <img
+            src={stylized ?? photo}
+            className="wake-media"
+            alt=""
+            style={phase === "clay" ? { filter: "saturate(1.4) blur(1.2px)" } : undefined}
+          />
         )}
-        <button className="btn-primary" onClick={onNext}>Next →</button>
-      </div>
-    </div>
-  );
-}
-
-// Wake step: TWO Veo clips (wave-hello + smile-and-talk) generated together in
-// parallel, budgeted by "magic dust". The child GATHERS ingredients -> GRINDS them
-// into magic dust -> SPRINKLES it to give life. Even if the clips finish early, the
-// reveal is HELD (loading) until the dust is sprinkled — the sprinkle brings it to life.
-function WakeStep({
-  image,
-  videos,
-  setVideos,
-  traits,
-  setTraits,
-  onDone,
-}: {
-  image: string;
-  videos: MonsterVideos;
-  setVideos: (v: MonsterVideos) => void;
-  traits: string[];
-  setTraits: (t: string[]) => void;
-  onDone: (hasVideo: boolean) => void;
-}) {
-  type S = "idle" | "working" | "done" | "nokey" | "error";
-  const hasClip = !!(videos.greet || videos.smile);
-  const activeClip = videos.smile ?? videos.greet ?? null;
-  const [status, setStatus] = useState<S>(hasClip ? "done" : "idle");
-  const [dust, setDust] = useState(hasClip ? 50 : 100);
-  const [ready, setReady] = useState<MonsterVideos | null>(null); // clips arrived, waiting for the sprinkle
-  const [sprinkled, setSprinkled] = useState(false); // dust has been thrown
-  const [revealed, setRevealed] = useState(false); // both done -> show it
-  const cancel = useRef({ cancelled: false });
-  const frameRef = useRef<HTMLDivElement>(null); // dust erupts from the reveal frame
-  const hasDust = dust >= 50;
-  const needGame = traits.length === 0; // only the first life includes the game
-
-  useEffect(() => () => {
-    cancel.current.cancelled = true;
-  }, []);
-
-  // reveal only when BOTH the clips are ready AND the dust has been sprinkled
-  useEffect(() => {
-    const sprinkleDone = sprinkled || !needGame;
-    if (ready && sprinkleDone && !revealed) {
-      setRevealed(true);
-      setVideos(ready);
-      keepAsset("wake-video", ready.smile); // the talking clip = primary alive asset
-      keepAsset("greet-video", ready.greet); // the wave-hello clip too
-      setReady(null);
-      setDust((d) => Math.max(0, d - 50));
-      setStatus("done");
-      track("wake_success");
-      sparkle();
-      magicDustBurst(frameRef.current); // ✨ it's ALIVE — dust erupts around the frame
-    }
-  }, [ready, sprinkled, needGame, revealed, setVideos]);
-
-  async function run() {
-    if (!hasDust) return;
-    setStatus("working");
-    setSprinkled(false);
-    setRevealed(false);
-    track("wake_start");
-    pop();
-    cancel.current = { cancelled: false };
-    const res = await animateGreeting(image, cancel.current);
-    if (res.greet || res.smile) {
-      setReady({ greet: res.greet, smile: res.smile });
-    } else if (res.reason === "no_key") setStatus("nokey");
-    else if (res.reason === "cancelled") setStatus("idle");
-    else {
-      setStatus("error");
-      track("wake_fail", { error: res.error ?? res.reason });
-    }
-  }
-
-  const waitingAfterSprinkle = status === "working" && sprinkled && !revealed;
-  const gameOn = status === "working" && needGame && !sprinkled;
-
-  const frame = (
-    <div className={`wake-frame${revealed ? " reveal-pop" : ""}`} ref={frameRef}>
-      {activeClip ? (
-        <video src={activeClip} className="wake-media" autoPlay loop muted playsInline />
-      ) : status === "working" && image ? (
-        <img src={image} className="wake-media" alt="" />
-      ) : (
-        // idle / error: instructional placeholder — hands sprinkling life over a creature
-        <img src="/wake-cover.jpg" className="wake-media wake-cover" alt="" />
-      )}
-      {status === "working" && (sprinkled ? (
-        <div className="dust-shower">
-          {Array.from({ length: 14 }).map((_, k) => (
-            <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
-          ))}
-          <span className="sparkle-msg">Sprinkling magic dust…</span>
-        </div>
-      ) : (
-        <SparkleLoading messages={["Cooking up the magic…", "Almost ready…"]} />
-      ))}
-    </div>
-  );
-
-  const meter = (
-    <div className="dust">
-      <span className="dust-label">✨ Magic dust</span>
-      <div className="dust-bar"><div className="dust-fill" style={{ width: `${dust}%` }} /></div>
-    </div>
-  );
-
-  // game running: the monster hides backstage — the child dives into the powder game
-  if (gameOn) {
-    return (
-      <div className="stack center">
-        <p className="lead">✨ Give it life!</p>
-        <DustGame
-          photo={image}
-          canFinish={!!ready}
-          onSprinkle={(t) => {
-            setTraits(t);
-            setSprinkled(true);
-            track("dust_sprinkle", { traits: t });
-          }}
-        />
-        <p className="hint-small">Your creature is getting ready backstage… 🎬</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack center">
-      <p className="lead">✨ Give it life!</p>
-      {frame}
-      {meter}
-
-      {status === "idle" && (
-        <>
-          <button className="btn-primary big" onClick={run} disabled={!hasDust}>
-            ✨ Make the magic dust!
-          </button>
-          <button className="btn-ghost" onClick={() => { track("wake_skip"); onDone(false); }}>Skip →</button>
-        </>
-      )}
-      {status === "working" && (
-        <p className="hint-small">{waitingAfterSprinkle ? "The magic is working… ✨" : "Almost alive… ✨"}</p>
-      )}
-      {status === "done" && (
-        <div className="row">
-          {hasDust && <button className="btn-secondary" onClick={run}>🔄 Again</button>}
-          <button className="btn-primary" onClick={() => onDone(true)}>Next →</button>
-        </div>
-      )}
-      {status === "nokey" && (
-        <>
-          <div className="style-note">🔑 AI key needed — let's add eyes instead.</div>
-          <button className="btn-primary" onClick={() => onDone(false)}>Eyes →</button>
-        </>
-      )}
-      {status === "error" && (
-        <>
-          <div className="style-note">Oops! Try again or skip.</div>
-          <div className="row">
-            {hasDust && <button className="btn-secondary" onClick={run}>🔄 Retry</button>}
-            <button className="btn-primary" onClick={() => onDone(false)}>Skip →</button>
+        {phase === "clay" && <SparkleLoading messages={["The clay is setting…", "Squish squish…"]} />}
+        {phase === "dust" && (
+          <div className="dust-shower">
+            {Array.from({ length: 14 }).map((_, k) => (
+              <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
+            ))}
+            <span className="sparkle-msg">Magic dust is falling…</span>
           </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function EyesStep({
-  photo,
-  eyes,
-  setEyes,
-  onNext,
-}: {
-  photo: string;
-  eyes: { x: number; y: number }[];
-  setEyes: (e: { x: number; y: number }[]) => void;
-  onNext: () => void;
-}) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<number | null>(null);
-
-  function onPointerDown(i: number) {
-    dragging.current = i;
-  }
-  function onPointerMove(e: React.PointerEvent) {
-    if (dragging.current === null || !boxRef.current) return;
-    const r = boxRef.current.getBoundingClientRect();
-    const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    setEyes(eyes.map((p, idx) => (idx === dragging.current ? { x, y } : p)));
-  }
-  function onPointerUp() {
-    dragging.current = null;
-  }
-
-  return (
-    <div className="stack center">
-      <p className="lead">👀 Drag the eyes!</p>
-      <div
-        ref={boxRef}
-        className="eyes-stage"
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        {photo ? <img src={photo} alt="" className="eyes-photo" /> : <div className="eyes-placeholder">🌱</div>}
-        {eyes.map((e, i) => (
-          <span
-            key={i}
-            className="eye draggable"
-            style={{ left: `${e.x * 100}%`, top: `${e.y * 100}%` }}
-            onPointerDown={() => onPointerDown(i)}
-          >
-            <span className="pupil" />
-          </span>
-        ))}
+        )}
       </div>
-      <button className="btn-primary big" onClick={onNext}>Next →</button>
+
+      {phase !== "alive" && (
+        <button className="btn-ghost" onClick={onRetake}>📷 Retake</button>
+      )}
     </div>
   );
 }

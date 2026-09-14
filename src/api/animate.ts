@@ -33,16 +33,33 @@ export async function animateMonster(
 }
 
 export type GreetingClips = {
-  greet: string | null; // wave-hello loop
-  smile: string | null; // smile-and-talk loop
+  greet: string | null; // wave-hello loop (gif or mp4 data URL)
+  smile: string | null; // smile/celebrate loop
   reason?: "no_key" | "cancelled" | "timeout";
   error?: string;
 };
 
+// Which animation engine makes the clips.
+//  "drawings": self-hosted AnimatedDrawings server (animator/) — free, ~25s.
+//  "veo":      Google Veo via Gemini API — paid, ~60-90s. Kept as a flip-back.
+const ENGINE: "drawings" | "veo" = "drawings";
+
+export async function animateGreeting(image: string, cancel?: { cancelled: boolean }): Promise<GreetingClips> {
+  if (ENGINE === "drawings") {
+    const j = await postJson("/api/animate-drawings", { image });
+    if (cancel?.cancelled) return { greet: null, smile: null, reason: "cancelled" };
+    if (j.greet || j.smile) {
+      return { greet: j.greet ?? j.smile, smile: j.smile ?? j.greet };
+    }
+    return { greet: null, smile: null, error: String(j.error ?? "no_server") };
+  }
+  return animateGreetingVeo(image, cancel);
+}
+
 // Generate BOTH greeting loops from the same clay image, in parallel, so the
 // child waits once (~90s) instead of twice. If one clip fails but the other
 // succeeds, the survivor is reused for both phases so the experience still works.
-export async function animateGreeting(
+async function animateGreetingVeo(
   image: string,
   cancel?: { cancelled: boolean }
 ): Promise<GreetingClips> {

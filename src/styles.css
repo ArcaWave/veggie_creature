@@ -515,3 +515,10 @@ body {
 /* certificate title editor (Certificate of …) */
 .cert-title-field { width: 100%; max-width: 340px; }
 .cert-title-field input { text-transform: uppercase; font-weight: 800; letter-spacing: 0.04em; }
+
+/* auto-snap countdown */
+.camera-box { position: relative; }
+.count-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(255, 255, 255, 0.85); color: var(--green-dark); font-size: 74px; font-weight: 800; animation: countPulse 1s ease infinite; pointer-events: none; }
+@keyframes countPulse { 0% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.4; } 30% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(0.96); opacity: 0.9; } }
+.camera.placeholder { position: relative; }
+.camera.placeholder > span, .camera.placeholder > p { position: relative; }

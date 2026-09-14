@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Clip } from "./Clip";
 import type { Monster } from "../types";
 
 // Monster face.
@@ -26,7 +27,7 @@ export function MonsterFace({
     >
       <div className="face" style={{ width: size, height: size }}>
         {video ? (
-          <video src={video} className="face-photo" autoPlay loop muted playsInline />
+          <Clip src={video} className="face-photo" />
         ) : monster.photo ? (
           <img src={monster.photo} alt="" className="face-photo" />
         ) : (
