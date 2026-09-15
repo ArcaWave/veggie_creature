@@ -35,6 +35,8 @@ export default function App() {
         <Welcome
           onStart={() => {
             ensureProfile(); // silent session profile keys rate limits & saves
+            // kiosk nicety: the start tap doubles as the fullscreen gesture
+            document.documentElement.requestFullscreen?.().catch(() => {});
             track("build_start");
             setStage("build");
           }}
