@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -16,12 +16,18 @@
   .cloud { position: absolute; background: rgba(255,255,255,0.9); border-radius: 999px; filter: blur(2px); animation: drift linear infinite; }
   @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
   .sun { position: absolute; top: 6vh; right: 8vw; width: 11vmin; height: 11vmin; border-radius: 50%; background: #ffd97a; box-shadow: 0 0 60px 24px rgba(255, 217, 122, 0.55); }
-  .creature { position: absolute; width: var(--size); transition: left 14s ease-in-out, top 14s ease-in-out; will-change: left, top; }
-  /* a brand-new arrival walks in from the left edge */
-  .creature.walk-in { transition: left 4.5s linear, top 4.5s ease-in-out; }
-  .creature.walk-in img { animation: waddle 0.5s ease-in-out infinite; }
-  @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
+
+  .creature { position: absolute; width: var(--size); will-change: left, top; }
+  .creature .flip { transform: scaleX(var(--flip, 1)); }
   .creature img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(60, 90, 30, 0.25)); }
+
+  /* movement styles per behaviour — the transition is swapped by JS */
+  .creature.walking { transition: left var(--walk-t, 4.5s) linear, top var(--walk-t, 4.5s) ease-in-out; }
+  .creature.walking img { animation: waddle 0.5s ease-in-out infinite; }
+  .creature.strolling { transition: left 10s ease-in-out, top 10s ease-in-out; }
+  .creature.hopping img { animation: hop 0.6s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+  @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-4vmin) scale(0.98, 1.04); } 60% { transform: translateY(0) scale(1.05, 0.95); } }
 </style>
 </head>
 <body>
@@ -29,13 +35,19 @@
 <div id="stage"></div>
 
 <script>
-// The display wall (PC #2). Polls /api/creatures (Vercel Blob relay in
-// production, the local animator archive in dev) and lets every creature
-// wander the meadow; a brand-new arrival pops in with a sparkle burst.
+// The display wall (PC #2). The meadow is a WAYPOINT on the creatures' journey:
+// each one walks in from the left (continuing the scan station's exit), plays
+// around for a while with its own randomized behaviour, then waves goodbye and
+// walks off the right edge to continue travelling. Poll: /api/creatures.
+// Add ?demo to the URL to shorten stays for rehearsal.
 const stage = document.getElementById("stage");
-const onStage = new Map(); // id -> {el, img, entry}
+const onStage = new Map(); // id -> creature controller
+const departed = new Set(); // ids that finished their visit (don't re-add)
 const MAX_ON_STAGE = 12;
 const POLL_MS = 4000;
+const DEMO = new URLSearchParams(location.search).has("demo");
+// how long a creature stays before continuing its journey
+const STAY_MS = () => (DEMO ? 12000 + Math.random() * 6000 : 90000 + Math.random() * 60000);
 
 // clouds
 for (let i = 0; i < 5; i++) {
@@ -46,46 +58,90 @@ for (let i = 0; i < 5; i++) {
   document.body.appendChild(c);
 }
 
-function wanderSpot() {
-  return { left: 4 + Math.random() * 78 + "vw", top: 34 + Math.random() * 48 + "vh" };
-}
+const rnd = (a, b) => a + Math.random() * (b - a);
+const wanderSpot = () => ({ left: rnd(4, 82) + "vw", top: rnd(36, 80) + "vh" });
 
 function addCreature(entry, isNew) {
+  if (departed.has(entry.id)) return;
   const el = document.createElement("div");
-  el.className = "creature" + (isNew ? " walk-in" : "");
-  el.style.setProperty("--size", 16 + Math.random() * 10 + "vmin");
+  el.className = "creature";
+  el.style.setProperty("--size", rnd(16, 27) + "vmin");
+  // clips ship with the site; the ?d= query desyncs gif playback between
+  // creatures (same-src <img> animations run in lockstep otherwise)
+  const greet = `/variants/${entry.variant}.greet.gif?d=${encodeURIComponent(entry.id)}`;
+  const smile = `/variants/${entry.variant}.smile.gif?d=${encodeURIComponent(entry.id)}`;
+  const flip = document.createElement("div");
+  flip.className = "flip";
+  const img = document.createElement("img");
+  img.src = Math.random() < 0.5 ? greet : smile; // varied starting pose
+  flip.appendChild(img);
+  el.appendChild(flip);
+  stage.appendChild(el);
+
+  const c = { el, img, entry, greet, smile, timers: [], leaving: false };
+  onStage.set(entry.id, c);
+  const later = (fn, ms) => c.timers.push(setTimeout(fn, ms));
+
+  function face(dir) { el.style.setProperty("--flip", dir); } // 1 right, -1 left
+  function setMode(mode) { el.className = "creature" + (mode ? " " + mode : ""); }
+
+  // ---- arrival: walk in from the left edge ----
   const spot = wanderSpot();
   if (isNew) {
-    // continue the scan station's exit: stomp in from the left edge
     el.style.left = "-26vw";
-    el.style.top = 52 + Math.random() * 24 + "vh";
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      el.style.left = spot.left;
-      el.style.top = spot.top;
-    }));
-    setTimeout(() => el.classList.remove("walk-in"), 4700);
+    el.style.top = spot.top;
+    setMode("walking");
+    el.style.setProperty("--walk-t", "4.5s");
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.left = spot.left; }));
+    later(() => behave(), 4700);
   } else {
     el.style.left = spot.left;
     el.style.top = spot.top;
+    later(() => behave(), rnd(0, 2000));
   }
-  // clips are pre-made static files shipped with the site — only the variant
-  // id travels through the cloud
-  const greet = `/variants/${entry.variant}.greet.gif`;
-  const smile = `/variants/${entry.variant}.smile.gif`;
-  const img = document.createElement("img");
-  img.src = greet;
-  el.appendChild(img);
-  stage.appendChild(el);
-  onStage.set(entry.id, { el, img, entry });
-  // alternate between the two clips now and then, and wander forever
-  setInterval(() => {
-    img.src = Math.random() < 0.5 ? greet : smile;
-  }, 20000 + Math.random() * 15000);
-  setInterval(() => {
-    const s = wanderSpot();
-    el.style.left = s.left;
-    el.style.top = s.top;
-  }, 12000 + Math.random() * 8000);
+
+  // ---- life on the meadow: roll a new behaviour every few seconds ----
+  function behave() {
+    if (c.leaving) return;
+    const roll = Math.random();
+    if (roll < 0.4) {
+      // just play in place (sometimes swapping the clip)
+      setMode("");
+      if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? c.greet : c.smile;
+    } else if (roll < 0.75) {
+      // stroll to a nearby spot
+      const s = wanderSpot();
+      face(parseFloat(s.left) > parseFloat(el.style.left) ? 1 : -1);
+      setMode("strolling");
+      el.style.left = s.left;
+      el.style.top = s.top;
+    } else {
+      // happy hopping on the spot
+      setMode("hopping");
+      img.src = c.smile;
+    }
+    later(behave, rnd(6000, 13000));
+  }
+
+  // ---- departure: wave goodbye, then walk off the right edge ----
+  later(() => {
+    c.leaving = true;
+    setMode("");
+    face(1);
+    img.src = c.greet; // the wave clip doubles as "bye-bye!"
+    later(() => {
+      setMode("walking");
+      el.style.setProperty("--walk-t", "6s");
+      img.src = c.smile;
+      el.style.left = "115vw";
+      later(() => {
+        c.timers.forEach(clearTimeout);
+        el.remove();
+        onStage.delete(entry.id);
+        departed.add(entry.id);
+      }, 6300);
+    }, 2600);
+  }, STAY_MS());
 }
 
 async function poll(first) {
@@ -94,13 +150,15 @@ async function poll(first) {
     const j = await r.json();
     const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
     for (const entry of [...latest].reverse()) {
-      if (!onStage.has(entry.id)) addCreature(entry, !first);
+      if (!onStage.has(entry.id) && !departed.has(entry.id)) addCreature(entry, !first);
     }
-    // retire the oldest when the meadow gets crowded
+    // safety cap: if the meadow somehow overflows, the oldest leaves first
     while (onStage.size > MAX_ON_STAGE) {
-      const oldestId = [...onStage.keys()][0];
-      onStage.get(oldestId).el.remove();
-      onStage.delete(oldestId);
+      const oldest = onStage.get([...onStage.keys()][0]);
+      oldest.timers.forEach(clearTimeout);
+      oldest.el.remove();
+      onStage.delete(oldest.entry.id);
+      departed.add(oldest.entry.id);
     }
   } catch (e) {
     /* offline blip — try again next poll */
