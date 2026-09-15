@@ -280,7 +280,9 @@ function MagicStep({
 
       <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
         {phase === "alive" && variant ? (
-          <Clip src={`/variants/${variant}.greet.gif`} className="wake-media" />
+          // fit (not cover): the square clip must show the WHOLE creature —
+          // sprout hat to feet — inside the wide reveal frame
+          <Clip src={`/variants/${variant}.greet.gif`} className="wake-media fit" />
         ) : (
           <img
             src={photo}

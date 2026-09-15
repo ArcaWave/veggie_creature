@@ -529,3 +529,5 @@ body {
 .walker img { width: 100%; display: block; animation: waddleStep 0.48s ease-in-out infinite; filter: drop-shadow(0 12px 14px rgba(60, 90, 30, 0.25)); }
 @keyframes walkAcross { to { left: 112%; } }
 @keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }
+/* square variant clips in the wide reveal frame: show the whole creature */
+.wake-media.fit { object-fit: contain; }
