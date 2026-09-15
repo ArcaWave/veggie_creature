@@ -156,7 +156,7 @@ body {
 .welcome-logo { width: 100%; max-width: 400px; height: auto; animation: idle 4.2s ease-in-out infinite; }
 .welcome h1 { font-size: 48px; font-weight: 800; margin: 4px 0 0; color: var(--green-dark); }
 .welcome-strap { margin: 8px 0 0; font-size: 18px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
-.welcome-tag { font-size: 23px; font-weight: 700; color: var(--ink); max-width: 380px; line-height: 1.5; margin: 0; }
+.welcome-tag { font-size: 36px; font-weight: 800; color: var(--ink); max-width: 440px; line-height: 1.4; margin: 6px 0 0; word-break: keep-all; }
 .welcome-left .btn-primary { width: 100%; }
 /* scattered polaroid collage (right side) */
 .collage { position: relative; width: 560px; height: 640px; flex: none; }
@@ -176,16 +176,16 @@ body {
 .s4 { top: 350px; left: 310px; width: 235px; --rot: 4deg; z-index: 1; }
 /* handwritten doodle caption + pig-tail squiggle, outside the frame.
    The arrow art points up-right; .ul/.dr/.dl mirror it so every tip aims at its photo. */
-.doodle { position: absolute; z-index: 6; display: flex; align-items: center; gap: 5px; font-family: "Gochi Hand", "Baloo 2", cursive; font-weight: 400; font-size: 29px; color: #55793f; white-space: nowrap; }
+.doodle { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; font-family: inherit; font-weight: 800; font-size: 27px; color: #55793f; white-space: nowrap; }
 .pigtail { width: 52px; height: 34px; flex: none; }
 .pigtail.ul { transform: scaleX(-1); }
 .pigtail.dr { transform: scaleY(-1); }
 .pigtail.dl { transform: scale(-1, -1); }
-.s1 .doodle { top: -50px; left: 8px; transform: rotate(-3deg); }
-.s2 .doodle { bottom: -50px; left: -6px; transform: rotate(-4deg); }
-.s3 .doodle { bottom: -52px; left: 12px; transform: rotate(3deg); }
-.s4 .doodle { bottom: -50px; right: 2px; transform: rotate(-5deg); }
-.collage-tagline { position: absolute; bottom: -18px; right: 0; margin: 0; font-family: "Gochi Hand", cursive; font-weight: 400; font-size: 26px; color: var(--ink); opacity: 0; animation: dropIn 0.7s ease 2.4s forwards; --rot: -2deg; }
+.s1 .doodle { top: -46px; left: 26px; transform: rotate(-3deg); }
+.s2 .doodle { bottom: -46px; left: 14px; transform: rotate(-4deg); }
+.s3 .doodle { bottom: -46px; left: 24px; transform: rotate(3deg); }
+.s4 .doodle { bottom: -46px; right: 14px; transform: rotate(-5deg); }
+.collage-tagline { position: absolute; bottom: -18px; right: 0; margin: 0; font-family: inherit; font-weight: 800; font-size: 24px; color: var(--ink); opacity: 0; animation: dropIn 0.7s ease 2.4s forwards; --rot: -2deg; }
 
 /* ---- top bar ---- */
 .topbar { display: flex; align-items: center; justify-content: center; gap: 12px; }
