@@ -106,9 +106,12 @@ export async function matchVariant(image: string): Promise<Result> {
             {
               text:
                 "A child built a little creature out of real vegetables (photo attached). " +
-                "Judging mainly by the dominant vegetable and its colors, which ONE of these " +
-                "clay character types does it resemble most? Answer with exactly one word from " +
-                `this list and nothing else: ${VARIANT_IDS.join(", ")}.`,
+                "The creature is assembled as: a hat/head piece, a MAIN BODY vegetable (the " +
+                "torso — the biggest central piece), and small arms/legs. Judge ONLY by the " +
+                "MAIN BODY vegetable — its kind and color. Ignore hats, googly eyes, toothpicks, " +
+                "arms, legs and other small decorations. Which ONE of these clay character types " +
+                "matches that main body best? Answer with exactly one word from this list and " +
+                `nothing else: ${VARIANT_IDS.join(", ")}.`,
             },
             { inline_data: { mime_type: img.mimeType, data: img.data } },
           ],
