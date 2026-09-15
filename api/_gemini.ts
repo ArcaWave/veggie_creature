@@ -49,7 +49,7 @@ export const SMILE_PROMPT =
 const key = () => process.env.GEMINI_API_KEY || "";
 const imageModel = () => process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const videoModel = () => process.env.GEMINI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
-const matchModel = () => process.env.GEMINI_MATCH_MODEL || "gemini-2.5-flash-lite";
+const matchModel = () => process.env.GEMINI_MATCH_MODEL || "gemini-2.5-flash";
 
 // The pre-generated creature library (tools/pregen_variants.py + public/variants).
 export const VARIANT_IDS = [
@@ -89,40 +89,65 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
 }
 
 // Photo of the child's real veggie creation -> which pre-made variant character
-// resembles it most. Cheap text-model vision call (~2s); on any failure the
+// resembles it most. Accuracy setup: gemini-2.5-flash vision, a reason-first
+// JSON answer whose `variant` field is ENUM-constrained to the library, and
+// THREE parallel judgements combined by majority vote. On any failure the
 // caller falls back to a random variant so the show always goes on.
+const MATCH_PROMPT =
+  "A child built a little creature out of real vegetables (photo attached). " +
+  "The creature is assembled as: a hat/head piece, a MAIN BODY vegetable (the torso — the " +
+  "biggest central piece), and small arms/legs. Identify the MAIN BODY vegetable only — its " +
+  "kind and color. Ignore hats, googly eyes, toothpicks, arms, legs, hands holding it, the " +
+  "table and other decorations. First describe the main body briefly in `reason`, then pick " +
+  "the closest matching character type in `variant`.";
+
+async function matchOnce(img: { mimeType: string; data: string }): Promise<string | null> {
+  const r = await fetch(`${GEMINI}/models/${matchModel()}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: MATCH_PROMPT },
+          { inline_data: { mime_type: img.mimeType, data: img.data } },
+        ],
+      }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            reason: { type: "STRING" },
+            variant: { type: "STRING", enum: [...VARIANT_IDS] },
+          },
+          required: ["reason", "variant"],
+        },
+      },
+    }),
+  });
+  if (!r.ok) return null;
+  const j = (await r.json()) as any;
+  try {
+    const parsed = JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+    return VARIANT_IDS.includes(parsed.variant) ? parsed.variant : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function matchVariant(image: string): Promise<Result> {
   const fallback = VARIANT_IDS[Math.floor(Math.random() * VARIANT_IDS.length)];
   if (!key()) return { status: 200, body: { variant: fallback, reason: "no_key" } };
   const img = parseDataUrl(image);
   if (!img) return { status: 400, body: { error: "bad_image" } };
   try {
-    const r = await fetch(`${GEMINI}/models/${matchModel()}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            {
-              text:
-                "A child built a little creature out of real vegetables (photo attached). " +
-                "The creature is assembled as: a hat/head piece, a MAIN BODY vegetable (the " +
-                "torso — the biggest central piece), and small arms/legs. Judge ONLY by the " +
-                "MAIN BODY vegetable — its kind and color. Ignore hats, googly eyes, toothpicks, " +
-                "arms, legs and other small decorations. Which ONE of these clay character types " +
-                "matches that main body best? Answer with exactly one word from this list and " +
-                `nothing else: ${VARIANT_IDS.join(", ")}.`,
-            },
-            { inline_data: { mime_type: img.mimeType, data: img.data } },
-          ],
-        }],
-      }),
-    });
-    if (!r.ok) return { status: 200, body: { variant: fallback, reason: "gemini_error" } };
-    const j = (await r.json()) as any;
-    const text: string = j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    const hit = VARIANT_IDS.find((v) => text.toLowerCase().includes(v));
-    return { status: 200, body: { variant: hit ?? fallback, matched: !!hit } };
+    const votes = (await Promise.all([matchOnce(img), matchOnce(img), matchOnce(img)]))
+      .filter((v): v is string => !!v);
+    if (!votes.length) return { status: 200, body: { variant: fallback, reason: "no_votes" } };
+    const tally = new Map<string, number>();
+    for (const v of votes) tally.set(v, (tally.get(v) ?? 0) + 1);
+    const [winner] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+    return { status: 200, body: { variant: winner, matched: true, votes } };
   } catch (e: any) {
     return { status: 200, body: { variant: fallback, reason: "server_error", detail: String(e?.message || e) } };
   }
