@@ -51,7 +51,10 @@ def mp4_to_gif(src: str, dst: str) -> None:
     print(f"  {os.path.basename(dst)}: {len(frames)} frames, {os.path.getsize(dst)//1024}KB")
 
 
+KINDS = ["greet", "smile", "bow", "spin", "dance"]  # greet+smile required, rest optional
+
 variants = []
+kinds_by_variant = {}
 for png in sorted(glob.glob(os.path.join(SRC, "*.png"))):
     vid = os.path.splitext(os.path.basename(png))[0]
     if vid == "grid":
@@ -61,17 +64,22 @@ for png in sorted(glob.glob(os.path.join(SRC, "*.png"))):
     im = cv2.imread(png)
     im = cv2.resize(im, (512, 512), interpolation=cv2.INTER_AREA)
     transparent(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)).save(os.path.join(DST, f"{vid}.png"))
-    done = True
-    for kind in ("greet", "smile"):
+    have = []
+    for kind in KINDS:
         mp4 = os.path.join(SRC, f"{vid}.{kind}.mp4")
+        gif = os.path.join(DST, f"{vid}.{kind}.gif")
         if os.path.exists(mp4):
-            mp4_to_gif(mp4, os.path.join(DST, f"{vid}.{kind}.gif"))
-        else:
-            done = False
+            if not os.path.exists(gif) or os.path.getmtime(gif) < os.path.getmtime(mp4):
+                mp4_to_gif(mp4, gif)
+            else:
+                print(f"  {os.path.basename(gif)}: up to date")
+            have.append(kind)
+        elif kind in ("greet", "smile"):
             print(f"  (missing {vid}.{kind}.mp4 — run pregen first)")
-    if done:
+    if "greet" in have and "smile" in have:
         variants.append(vid)
+        kinds_by_variant[vid] = have
 
 with open(os.path.join(DST, "variants.json"), "w") as f:
-    json.dump({"variants": variants}, f)
-print("ready:", variants)
+    json.dump({"variants": variants, "kinds": kinds_by_variant}, f)
+print("ready:", {v: kinds_by_variant[v] for v in variants})

@@ -56,6 +56,29 @@ IMG_PROMPT = (
     "Soft even lighting. Wholesome, charming and toy-like for children aged 5 to 9."
 )
 
+# extra motions for the world's hotspots (hanok courtyard scene)
+BOW_PROMPT = (
+    "Animate this clay creature doing one polite, deep Korean-style bow: it bends forward from "
+    "the waist respectfully with its little arms together in front, holds the bow for a beat, then "
+    "straightens back up to the exact same neutral standing pose so the clip can loop seamlessly. "
+    "Gentle stop-motion motion, camera completely still. Keep the exact same character and the "
+    "plain solid WHITE background — nothing else appears. No text, no watermark."
+)
+SPIN_PROMPT = (
+    "Animate this clay creature spinning in place like a happy spinning top: two full joyful "
+    "rotations with arms held slightly out, a little wobble at the end, then it returns to the "
+    "exact same neutral front-facing standing pose so the clip can loop seamlessly. Gentle "
+    "stop-motion motion, camera completely still. Keep the exact same character and the plain "
+    "solid WHITE background — nothing else appears. No text, no watermark."
+)
+DANCE_PROMPT = (
+    "Animate this clay creature doing a joyful Korean festival shoulder dance: its shoulders and "
+    "arms bounce up and down alternately in a happy rhythmic sway, feet shuffling lightly, then "
+    "it returns to the exact same neutral standing pose so the clip can loop seamlessly. Gentle "
+    "stop-motion motion, camera completely still. Keep the exact same character and the plain "
+    "solid WHITE background — nothing else appears. No text, no watermark."
+)
+
 GREET_PROMPT = (
     "Animate this clay creature warmly waving hello, looping-friendly. It raises one little clay arm "
     "and gives a friendly hello wave two or three times, with a big happy welcoming smile and gentle "
@@ -141,17 +164,27 @@ def gen_video(vid, kind, prompt):
     print(f"[veo] {vid}.{kind}: TIMEOUT")
 
 
+MOTIONS = {
+    "greet": GREET_PROMPT,
+    "smile": SMILE_PROMPT,
+    "bow": BOW_PROMPT,
+    "spin": SPIN_PROMPT,
+    "dance": DANCE_PROMPT,
+}
+
 if __name__ == "__main__":
+    # usage: pregen_variants.py images|videos [only-this-variant-id]
     step = sys.argv[1] if len(sys.argv) > 1 else "images"
+    only = sys.argv[2] if len(sys.argv) > 2 else None
     if not KEY:
         sys.exit("GEMINI_API_KEY not found")
+    targets = [(v, d) for v, d in VARIANTS if not only or v == only]
     if step == "images":
-        for vid, desc in VARIANTS:
+        for vid, desc in targets:
             gen_image(vid, desc)
     elif step == "videos":
-        for vid, _ in VARIANTS:
-            gen_video(vid, "greet", GREET_PROMPT)
-            time.sleep(3)
-            gen_video(vid, "smile", SMILE_PROMPT)
-            time.sleep(3)
+        for vid, _ in targets:
+            for kind, prompt in MOTIONS.items():
+                gen_video(vid, kind, prompt)
+                time.sleep(3)
     print("done")

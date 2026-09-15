@@ -15,7 +15,7 @@
      any mouse movement brings it back (see script) */
   body.hide-cursor, body.hide-cursor * { cursor: none !important; }
 
-  .creature { position: absolute; width: var(--size); will-change: left, top; }
+  .creature { position: absolute; will-change: left, top; }
   .creature .flip { transform: scaleX(var(--flip, 1)); }
   .creature img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(60, 90, 30, 0.25)); }
 
@@ -36,34 +36,82 @@
 <button id="fs" title="전체화면" aria-label="전체화면">⛶</button>
 
 <script>
-// The display wall (PC #2). The meadow is a WAYPOINT on the creatures' journey:
-// each one walks in from the left (continuing the scan station's exit), plays
-// around for a while with its own randomized behaviour, then waves goodbye and
-// walks off the right edge to continue travelling. Poll: /api/creatures.
-// Add ?demo to the URL to shorten stays for rehearsal.
+// The display wall (PC #2). The hanok courtyard is a WAYPOINT on the creatures'
+// journey: each one walks in from the left, bows to the maru, plays the folk
+// games at the art's hotspots, then walks off the right edge. /api/creatures
+// is polled for new arrivals. Add ?demo to the URL for short rehearsal stays.
+//
+// EVERY position is anchored to the BACKGROUND IMAGE (fractions of the art),
+// not to the viewport — so hotspots stay glued to the toy mats and the maru on
+// any screen: a 16:10 MacBook, a 16:9 55"/60" TV, whatever `cover` crops.
 const stage = document.getElementById("stage");
 const onStage = new Map(); // id -> creature controller
 const departed = new Set(); // ids that finished their visit (don't re-add)
 const MAX_ON_STAGE = 12;
 const POLL_MS = 4000;
 const DEMO = new URLSearchParams(location.search).has("demo");
-// how long a creature stays before continuing its journey
-const STAY_MS = () => (DEMO ? 12000 + Math.random() * 6000 : 90000 + Math.random() * 60000);
+const STAY_MS = () => (DEMO ? 14000 + Math.random() * 6000 : 90000 + Math.random() * 60000);
 
 const rnd = (a, b) => a + Math.random() * (b - a);
-// keep the creatures on the playground ground of the illustration
-// (the top ~45% is sky/treetops)
-const wanderSpot = () => ({ left: rnd(4, 80) + "vw", top: rnd(46, 78) + "vh" });
+
+// ---- background-image coordinate system (matches CSS `cover`) --------------
+const bg = { w: 1676, h: 944, scale: 1, ox: 0, oy: 0 };
+const bgProbe = new Image();
+bgProbe.onload = () => { bg.w = bgProbe.naturalWidth; bg.h = bgProbe.naturalHeight; layout(); };
+bgProbe.src = "/world-bg.jpg";
+
+function layout() {
+  bg.scale = Math.max(innerWidth / bg.w, innerHeight / bg.h);
+  bg.ox = (innerWidth - bg.w * bg.scale) / 2;
+  bg.oy = (innerHeight - bg.h * bg.scale) / 2;
+  for (const c of onStage.values()) applyPos(c, true);
+}
+addEventListener("resize", layout);
+
+const toPx = (fx, fy) => ({ x: bg.ox + fx * bg.w * bg.scale, y: bg.oy + fy * bg.h * bg.scale });
+
+function applyPos(c, instant) {
+  const p = toPx(c.fx, c.fy);
+  const size = c.sizeFrac * bg.h * bg.scale; // proportional to the art, on every screen
+  if (instant) {
+    const mode = c.el.className;
+    c.el.className = "creature"; // don't animate a window resize
+    c.el.style.width = size + "px";
+    c.el.style.left = p.x - size / 2 + "px";
+    c.el.style.top = p.y - size + "px"; // (fx,fy) is where the FEET stand
+    void c.el.offsetWidth;
+    c.el.className = mode;
+  } else {
+    c.el.style.width = size + "px";
+    c.el.style.left = p.x - size / 2 + "px";
+    c.el.style.top = p.y - size + "px";
+  }
+}
+
+// courtyard ground area + hotspots, as fractions of the artwork
+const GROUND = { x: [0.06, 0.84], y: [0.5, 0.82] };
+const wanderSpot = () => ({ fx: rnd(...GROUND.x), fy: rnd(...GROUND.y) });
+const HOTSPOTS = [
+  { kind: "spin", label: "팽이 멍석", spot: () => ({ fx: rnd(0.72, 0.82), fy: rnd(0.74, 0.84) }) },
+  { kind: "dance", label: "윷판 멍석", spot: () => ({ fx: rnd(0.4, 0.55), fy: rnd(0.66, 0.74) }) },
+  { kind: "smile", label: "복주머니", spot: () => ({ fx: rnd(0.86, 0.9), fy: rnd(0.54, 0.6) }) },
+  { kind: "bow", label: "마루 세배", spot: () => ({ fx: rnd(0.1, 0.17), fy: rnd(0.54, 0.62) }), face: -1 },
+];
+
+// which extra motion clips each variant has (bow/spin/dance) — from the build
+let KINDMAP = {};
+fetch("/variants/variants.json").then((r) => r.json()).then((j) => { KINDMAP = j.kinds || {}; }).catch(() => {});
+const hasKind = (variant, kind) => kind === "greet" || kind === "smile" || (KINDMAP[variant] || []).includes(kind);
 
 function addCreature(entry, isNew) {
   if (departed.has(entry.id)) return;
   const el = document.createElement("div");
   el.className = "creature";
-  el.style.setProperty("--size", rnd(16, 27) + "vmin");
-  // clips ship with the site; the ?d= query desyncs gif playback between
-  // creatures (same-src <img> animations run in lockstep otherwise)
-  const greet = `/variants/${entry.variant}.greet.gif?d=${encodeURIComponent(entry.id)}`;
-  const smile = `/variants/${entry.variant}.smile.gif?d=${encodeURIComponent(entry.id)}`;
+  // the ?d= query desyncs gif playback between creatures (same-src <img>
+  // animations run in lockstep otherwise)
+  const clip = (kind) => `/variants/${entry.variant}.${kind}.gif?d=${encodeURIComponent(entry.id)}`;
+  const greet = clip("greet");
+  const smile = clip("smile");
   const flip = document.createElement("div");
   flip.className = "flip";
   const img = document.createElement("img");
@@ -72,49 +120,75 @@ function addCreature(entry, isNew) {
   el.appendChild(flip);
   stage.appendChild(el);
 
-  const c = { el, img, entry, greet, smile, timers: [], leaving: false };
+  const c = { el, img, entry, fx: 0, fy: 0, sizeFrac: rnd(0.17, 0.27), timers: [], leaving: false };
   onStage.set(entry.id, c);
   const later = (fn, ms) => c.timers.push(setTimeout(fn, ms));
 
   function face(dir) { el.style.setProperty("--flip", dir); } // 1 right, -1 left
   function setMode(mode) { el.className = "creature" + (mode ? " " + mode : ""); }
+  function moveTo(spot) { c.fx = spot.fx; c.fy = spot.fy; applyPos(c); }
 
-  // ---- arrival: walk in from the left edge ----
+  // ---- arrival: walk in from the left edge, then bow to the maru ----
   const spot = wanderSpot();
   if (isNew) {
-    el.style.left = "-26vw";
-    el.style.top = spot.top;
+    c.fx = -0.25; c.fy = spot.fy;
+    applyPos(c, true);
     setMode("walking");
     el.style.setProperty("--walk-t", "4.5s");
-    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.left = spot.left; }));
-    later(() => behave(), 4700);
+    requestAnimationFrame(() => requestAnimationFrame(() => moveTo(spot)));
+    later(() => {
+      if (hasKind(entry.variant, "bow")) {
+        setMode("");
+        face(-1); // the maru sits on the left
+        img.src = clip("bow");
+        later(() => { face(1); img.src = greet; behave(); }, 4500);
+      } else {
+        behave();
+      }
+    }, 4700);
   } else {
-    el.style.left = spot.left;
-    el.style.top = spot.top;
+    c.fx = spot.fx; c.fy = spot.fy;
+    applyPos(c, true);
     later(() => behave(), rnd(0, 2000));
   }
 
-  // ---- life on the meadow: roll a new behaviour every few seconds ----
+  // ---- life in the courtyard: roll a new behaviour every few seconds ----
   function behave() {
     if (c.leaving) return;
     const roll = Math.random();
-    if (roll < 0.4) {
+    if (roll < 0.3) {
       // just play in place (sometimes swapping the clip)
       setMode("");
-      if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? c.greet : c.smile;
-    } else if (roll < 0.75) {
+      if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? greet : smile;
+      later(behave, rnd(6000, 11000));
+    } else if (roll < 0.55) {
       // stroll to a nearby spot
       const s = wanderSpot();
-      face(parseFloat(s.left) > parseFloat(el.style.left) ? 1 : -1);
+      face(s.fx > c.fx ? 1 : -1);
       setMode("strolling");
-      el.style.left = s.left;
-      el.style.top = s.top;
-    } else {
+      moveTo(s);
+      later(behave, rnd(9000, 13000));
+    } else if (roll < 0.7) {
       // happy hopping on the spot
       setMode("hopping");
-      img.src = c.smile;
+      img.src = smile;
+      later(behave, rnd(5000, 8000));
+    } else {
+      // visit a hotspot: stroll there, then play the matching motion
+      const options = HOTSPOTS.filter((h) => hasKind(entry.variant, h.kind));
+      const h = options[Math.floor(Math.random() * options.length)];
+      const s = h.spot();
+      face(s.fx > c.fx ? 1 : -1);
+      setMode("strolling");
+      moveTo(s);
+      later(() => {
+        if (c.leaving) return;
+        setMode("");
+        face(h.face ?? 1);
+        img.src = clip(h.kind);
+        later(() => { face(1); img.src = greet; behave(); }, rnd(7000, 9500));
+      }, 10200);
     }
-    later(behave, rnd(6000, 13000));
   }
 
   // ---- departure: wave goodbye, then walk off the right edge ----
@@ -122,12 +196,12 @@ function addCreature(entry, isNew) {
     c.leaving = true;
     setMode("");
     face(1);
-    img.src = c.greet; // the wave clip doubles as "bye-bye!"
+    img.src = greet; // the wave clip doubles as "bye-bye!"
     later(() => {
       setMode("walking");
       el.style.setProperty("--walk-t", "6s");
-      img.src = c.smile;
-      el.style.left = "115vw";
+      img.src = smile;
+      moveTo({ fx: 1.25, fy: c.fy });
       later(() => {
         c.timers.forEach(clearTimeout);
         el.remove();
@@ -146,7 +220,7 @@ async function poll(first) {
     for (const entry of [...latest].reverse()) {
       if (!onStage.has(entry.id) && !departed.has(entry.id)) addCreature(entry, !first);
     }
-    // safety cap: if the meadow somehow overflows, the oldest leaves first
+    // safety cap: if the courtyard somehow overflows, the oldest leaves first
     while (onStage.size > MAX_ON_STAGE) {
       const oldest = onStage.get([...onStage.keys()][0]);
       oldest.timers.forEach(clearTimeout);
