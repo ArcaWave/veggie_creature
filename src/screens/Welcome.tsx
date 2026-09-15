@@ -6,15 +6,16 @@ import { useState } from "react";
 // handwritten doodle whose pig-tail arrow points AT its photo.
 type Dir = "ur" | "ul" | "dr" | "dl"; // arrow tip direction: up/down + right/left
 
+// Every arrow STARTS at its photo and its head lands on the caption text.
 const STEPS: { img: string; emoji: string; caption: string; dir: Dir; svgFirst: boolean }[] = [
-  // s1: caption above the photo → arrow points down-right into it
-  { img: "/welcome/step1.jpg", emoji: "📷", caption: "찰칵!", dir: "dr", svgFirst: false },
-  // s2: caption below the photo, arrow on the left end → points up-right into it
-  { img: "/welcome/step2.jpg", emoji: "✨", caption: "살아난다!", dir: "ur", svgFirst: true },
-  // s3: caption below the photo → up-right into it
-  { img: "/welcome/step3.jpg", emoji: "🚶", caption: "뚜벅뚜벅!", dir: "ur", svgFirst: true },
-  // s4: caption below the photo, arrow on the right end → points up-left into it
-  { img: "/welcome/step4.jpg", emoji: "🌏", caption: "디지털 세계로!", dir: "ul", svgFirst: false },
+  // s1: caption above the photo — tail touches the photo below, head points up-left to the text
+  { img: "/welcome/step1.jpg", emoji: "📷", caption: "찰칵!", dir: "ul", svgFirst: false },
+  // s2: caption below the photo, arrow first — tail on the photo above, head down-right to the text
+  { img: "/welcome/step2.jpg", emoji: "✨", caption: "살아난다!", dir: "dr", svgFirst: true },
+  // s3: same as s2
+  { img: "/welcome/step3.jpg", emoji: "🚶", caption: "뚜벅뚜벅!", dir: "dr", svgFirst: true },
+  // s4: caption below the photo, arrow last — tail on the photo above, head down-left to the text
+  { img: "/welcome/step4.jpg", emoji: "🌏", caption: "디지털 세계로!", dir: "dl", svgFirst: false },
 ];
 
 export function Welcome({ onStart }: { onStart: () => void }) {
