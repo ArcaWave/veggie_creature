@@ -5,20 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Veggie Creature — Digital World</title>
 <style>
-  :root { --sky1: #bfe7ff; --sky2: #e8fbe0; --grass: #a4de7c; }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; overflow: hidden; }
   body {
     font-family: "Baloo 2", system-ui, sans-serif;
-    background: linear-gradient(#8fd3ff, var(--sky1) 45%, var(--sky2) 75%, var(--grass) 76%);
+    background: #f6efe2 url("/world-bg.jpg") center / cover no-repeat;
   }
   /* the cursor hides after a moment of stillness so it never sits on the wall;
      any mouse movement brings it back (see script) */
   body.hide-cursor, body.hide-cursor * { cursor: none !important; }
-  /* soft drifting clouds */
-  .cloud { position: absolute; background: rgba(255,255,255,0.9); border-radius: 999px; filter: blur(2px); animation: drift linear infinite; }
-  @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
-  .sun { position: absolute; top: 6vh; right: 8vw; width: 11vmin; height: 11vmin; border-radius: 50%; background: #ffd97a; box-shadow: 0 0 60px 24px rgba(255, 217, 122, 0.55); }
 
   .creature { position: absolute; width: var(--size); will-change: left, top; }
   .creature .flip { transform: scaleX(var(--flip, 1)); }
@@ -37,7 +32,6 @@
 </style>
 </head>
 <body>
-<div class="sun"></div>
 <div id="stage"></div>
 <button id="fs" title="전체화면" aria-label="전체화면">⛶</button>
 
@@ -56,17 +50,10 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 // how long a creature stays before continuing its journey
 const STAY_MS = () => (DEMO ? 12000 + Math.random() * 6000 : 90000 + Math.random() * 60000);
 
-// clouds
-for (let i = 0; i < 5; i++) {
-  const c = document.createElement("div");
-  c.className = "cloud";
-  const w = 12 + Math.random() * 14;
-  c.style.cssText = `width:${w}vmin;height:${w * 0.4}vmin;top:${3 + Math.random() * 26}vh;animation-duration:${60 + Math.random() * 80}s;animation-delay:-${Math.random() * 60}s`;
-  document.body.appendChild(c);
-}
-
 const rnd = (a, b) => a + Math.random() * (b - a);
-const wanderSpot = () => ({ left: rnd(4, 82) + "vw", top: rnd(36, 80) + "vh" });
+// keep the creatures on the playground ground of the illustration
+// (the top ~45% is sky/treetops)
+const wanderSpot = () => ({ left: rnd(4, 80) + "vw", top: rnd(46, 78) + "vh" });
 
 function addCreature(entry, isNew) {
   if (departed.has(entry.id)) return;
