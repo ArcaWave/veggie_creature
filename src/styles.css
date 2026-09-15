@@ -532,3 +532,6 @@ body {
 @keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }
 /* square variant clips in the wide reveal frame: show the whole creature */
 .wake-media.fit { object-fit: contain; }
+
+/* fullscreen button (hidden while fullscreen; exit with ESC) */
+.fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }

@@ -28,11 +28,15 @@
   .creature.hopping img { animation: hop 0.6s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
   @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
   @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-4vmin) scale(0.98, 1.04); } 60% { transform: translateY(0) scale(1.05, 0.95); } }
+
+  /* fullscreen button — hidden once fullscreen (exit with ESC) */
+  #fs { position: absolute; top: 14px; right: 14px; z-index: 10; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(60, 90, 30, 0.2); font-size: 22px; cursor: pointer; color: #2e5d12; }
 </style>
 </head>
 <body>
 <div class="sun"></div>
 <div id="stage"></div>
+<button id="fs" title="전체화면" aria-label="전체화면">⛶</button>
 
 <script>
 // The display wall (PC #2). The meadow is a WAYPOINT on the creatures' journey:
@@ -167,6 +171,13 @@ async function poll(first) {
 
 poll(true);
 setInterval(() => poll(false), POLL_MS);
+
+// fullscreen button: click to fill the screen, hides itself while fullscreen
+const fsBtn = document.getElementById("fs");
+fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen?.().catch(() => {}));
+document.addEventListener("fullscreenchange", () => {
+  fsBtn.style.display = document.fullscreenElement ? "none" : "";
+});
 </script>
 </body>
 </html>
