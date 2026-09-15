@@ -27,6 +27,18 @@
   @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
   @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-4vmin) scale(0.98, 1.04); } 60% { transform: translateY(0) scale(1.05, 0.95); } }
 
+  /* falling autumn leaves — a breath of wind over the still artwork */
+  .leaf { position: absolute; top: -8vh; pointer-events: none; will-change: transform; animation: leafFall var(--fall) linear forwards; }
+  .leaf svg { display: block; width: 100%; height: 100%; animation: leafSway var(--sway) ease-in-out infinite alternate; }
+  @keyframes leafFall { to { transform: translateY(120vh); } }
+  @keyframes leafSway {
+    from { transform: translateX(calc(var(--amp) * -1)) rotate(-40deg); }
+    to { transform: translateX(var(--amp)) rotate(50deg); }
+  }
+  /* a gust now and then makes every leaf sway wider and drift faster */
+  body.gust .leaf svg { animation-duration: calc(var(--sway) * 0.45); }
+  body.gust .leaf { animation-duration: calc(var(--fall) * 0.7); }
+
   /* fullscreen button — hidden once fullscreen (exit with ESC) */
   #fs { position: absolute; top: 14px; right: 14px; z-index: 10; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(60, 90, 30, 0.2); font-size: 22px; cursor: pointer; color: #2e5d12; }
 </style>
@@ -73,6 +85,7 @@ const toPx = (fx, fy) => ({ x: bg.ox + fx * bg.w * bg.scale, y: bg.oy + fy * bg.
 function applyPos(c, instant) {
   const p = toPx(c.fx, c.fy);
   const size = c.sizeFrac * bg.h * bg.scale; // proportional to the art, on every screen
+  c.el.style.zIndex = 2 + Math.round(c.fy * 20); // lower on screen = in front
   if (instant) {
     const mode = c.el.className;
     c.el.className = "creature"; // don't animate a window resize
@@ -89,8 +102,21 @@ function applyPos(c, instant) {
 }
 
 // courtyard ground area + hotspots, as fractions of the artwork
-const GROUND = { x: [0.06, 0.84], y: [0.5, 0.82] };
+// (y starts below the stone wall so nobody stands on top of it)
+const GROUND = { x: [0.06, 0.84], y: [0.58, 0.84] };
 const wanderSpot = () => ({ fx: rnd(...GROUND.x), fy: rnd(...GROUND.y) });
+
+// pick a spot that keeps a polite distance from everyone else's target
+function freeSpot(gen, self) {
+  for (let i = 0; i < 10; i++) {
+    const s = gen();
+    const crowded = [...onStage.values()].some(
+      (o) => o !== self && Math.hypot(o.fx - s.fx, (o.fy - s.fy) * 1.6) < 0.11
+    );
+    if (!crowded) return s;
+  }
+  return gen(); // packed courtyard — allow it rather than freeze
+}
 const HOTSPOTS = [
   { kind: "spin", label: "팽이 멍석", spot: () => ({ fx: rnd(0.72, 0.82), fy: rnd(0.74, 0.84) }) },
   { kind: "dance", label: "윷판 멍석", spot: () => ({ fx: rnd(0.4, 0.55), fy: rnd(0.66, 0.74) }) },
@@ -129,7 +155,7 @@ function addCreature(entry, isNew) {
   function moveTo(spot) { c.fx = spot.fx; c.fy = spot.fy; applyPos(c); }
 
   // ---- arrival: walk in from the left edge, then bow to the maru ----
-  const spot = wanderSpot();
+  const spot = freeSpot(wanderSpot, c);
   if (isNew) {
     c.fx = -0.25; c.fy = spot.fy;
     applyPos(c, true);
@@ -162,8 +188,8 @@ function addCreature(entry, isNew) {
       if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? greet : smile;
       later(behave, rnd(6000, 11000));
     } else if (roll < 0.55) {
-      // stroll to a nearby spot
-      const s = wanderSpot();
+      // stroll to a nearby spot, keeping distance from the others
+      const s = freeSpot(wanderSpot, c);
       face(s.fx > c.fx ? 1 : -1);
       setMode("strolling");
       moveTo(s);
@@ -174,10 +200,17 @@ function addCreature(entry, isNew) {
       img.src = smile;
       later(behave, rnd(5000, 8000));
     } else {
-      // visit a hotspot: stroll there, then play the matching motion
-      const options = HOTSPOTS.filter((h) => hasKind(entry.variant, h.kind));
+      // visit a hotspot: stroll there, then play the matching motion.
+      // a hotspot someone else is at (or heading to) is considered taken.
+      const probe = (h) => h.spot();
+      const options = HOTSPOTS.filter((h) => {
+        if (!hasKind(entry.variant, h.kind)) return false;
+        const s0 = probe(h);
+        return ![...onStage.values()].some((o) => o !== c && Math.hypot(o.fx - s0.fx, (o.fy - s0.fy) * 1.6) < 0.13);
+      });
+      if (!options.length) { setMode(""); later(behave, rnd(3000, 6000)); return; }
       const h = options[Math.floor(Math.random() * options.length)];
-      const s = h.spot();
+      const s = freeSpot(h.spot, c);
       face(s.fx > c.fx ? 1 : -1);
       setMode("strolling");
       moveTo(s);
@@ -242,6 +275,42 @@ fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen
 document.addEventListener("fullscreenchange", () => {
   fsBtn.style.display = document.fullscreenElement ? "none" : "";
 });
+
+// ---- ambient wind: autumn leaves drifting across the courtyard -------------
+// small leaves in the art's palette; some fall BEHIND the creatures and some
+// in front, for depth. every so often a gust makes everything flutter harder.
+const LEAF_COLORS = ["#e8862e", "#d8433b", "#e6b93f", "#c96a2d", "#a8552b"];
+const MAX_LEAVES = 14;
+let leafCount = 0;
+
+function spawnLeaf() {
+  if (leafCount >= MAX_LEAVES) return;
+  leafCount++;
+  const leaf = document.createElement("div");
+  leaf.className = "leaf";
+  const size = rnd(1.6, 3.2); // vmin
+  leaf.style.width = size + "vmin";
+  leaf.style.height = size + "vmin";
+  leaf.style.left = rnd(-5, 100) + "vw";
+  leaf.style.setProperty("--fall", rnd(9, 17) + "s");
+  leaf.style.setProperty("--sway", rnd(1.6, 3) + "s");
+  leaf.style.setProperty("--amp", rnd(2.5, 6) + "vw");
+  leaf.style.zIndex = Math.random() < 0.5 ? 1 : 30; // behind or in front of creatures
+  const color = LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
+  leaf.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2 C
+    18 6, 20 12, 12 22 C 4 12, 6 6, 12 2 Z" fill="${color}" opacity="0.9"/>
+    <path d="M12 5 L 12 19" stroke="${color === "#e6b93f" ? "#c96a2d" : "#7a3416"}" stroke-width="0.8" opacity="0.5"/></svg>`;
+  document.body.appendChild(leaf);
+  leaf.addEventListener("animationend", () => { leaf.remove(); leafCount--; });
+}
+setInterval(spawnLeaf, 1400);
+for (let i = 0; i < 5; i++) setTimeout(spawnLeaf, i * 500);
+
+// occasional gust of wind
+setInterval(() => {
+  document.body.classList.add("gust");
+  setTimeout(() => document.body.classList.remove("gust"), 3500);
+}, 14000 + Math.random() * 8000);
 
 // auto-hiding cursor: visible while moving, gone after 2.5s of stillness
 let cursorTimer;
