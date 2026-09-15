@@ -9,9 +9,12 @@
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; overflow: hidden; }
   body {
-    font-family: "Baloo 2", system-ui, sans-serif; cursor: none;
+    font-family: "Baloo 2", system-ui, sans-serif;
     background: linear-gradient(#8fd3ff, var(--sky1) 45%, var(--sky2) 75%, var(--grass) 76%);
   }
+  /* the cursor hides after a moment of stillness so it never sits on the wall;
+     any mouse movement brings it back (see script) */
+  body.hide-cursor, body.hide-cursor * { cursor: none !important; }
   /* soft drifting clouds */
   .cloud { position: absolute; background: rgba(255,255,255,0.9); border-radius: 999px; filter: blur(2px); animation: drift linear infinite; }
   @keyframes drift { from { transform: translateX(-30vw); } to { transform: translateX(130vw); } }
@@ -178,6 +181,16 @@ fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen
 document.addEventListener("fullscreenchange", () => {
   fsBtn.style.display = document.fullscreenElement ? "none" : "";
 });
+
+// auto-hiding cursor: visible while moving, gone after 2.5s of stillness
+let cursorTimer;
+function wakeCursor() {
+  document.body.classList.remove("hide-cursor");
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.add("hide-cursor"), 2500);
+}
+document.addEventListener("mousemove", wakeCursor);
+wakeCursor();
 </script>
 </body>
 </html>
