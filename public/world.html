@@ -74,6 +74,21 @@
     80% { transform: translateY(32%); }
     88%, 100% { transform: translateY(112%); }
   }
+  /* ---- autumn-field theme: a sparrow peeking out of the bottom bush ---- */
+  /* the svg paints its own bush mound (same green as the art) OVER the bird,
+     so the bird really disappears behind the leaves */
+  .sparrow { position: absolute; pointer-events: none; z-index: 1; }
+  .sparrow svg { display: block; width: 100%; height: 100%; }
+  .sparrow .birdg { animation: sparrowPeek 11s ease-in-out infinite; }
+  @keyframes sparrowPeek {
+    0%, 55% { transform: translateY(46px); }
+    61% { transform: translateY(7px); }
+    66% { transform: translateY(10px) translateX(-2px); }
+    72% { transform: translateY(7px) translateX(2px); }
+    79% { transform: translateY(9px); }
+    86%, 100% { transform: translateY(46px); }
+  }
+
   /* a shooting star streaking across the night sky */
   .shootstar { position: absolute; pointer-events: none; z-index: 1; width: 11vw; height: 3px; border-radius: 3px; background: linear-gradient(90deg, rgba(255, 251, 230, 0), #fffbe8 92%, #fff); transform: rotate(28deg); opacity: 0; animation: shoot var(--shoot, 1.3s) ease-out forwards; }
   @keyframes shoot {
@@ -121,9 +136,11 @@ const gone = (entry) => Date.now() > entry.at + stayFor(entry);
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-// ---- day / night themes -----------------------------------------------------
-// the wall follows the clock: the hanok courtyard by day, the moon-rabbit
-// village at night. Force one with ?bg=day or ?bg=night for rehearsals.
+// ---- rotating scenery -------------------------------------------------------
+// the wall cycles through the scenes: hanok courtyard → autumn field →
+// moon-rabbit village, switching every ROTATE_MS. The slot index comes from
+// the wall clock, so refreshes (and both PCs) always agree on the scene.
+// Force one with ?bg=day|field|night; change the pace with ?rotate=<minutes>.
 const THEMES = {
   day: {
     src: "/world-bg.jpg",
@@ -134,6 +151,19 @@ const THEMES = {
       { kind: "dance", label: "윷판 멍석", spot: () => ({ fx: rnd(0.4, 0.55), fy: rnd(0.66, 0.74) }) },
       { kind: "smile", label: "복주머니", spot: () => ({ fx: rnd(0.86, 0.9), fy: rnd(0.54, 0.6) }) },
       { kind: "bow", label: "마루 세배", spot: () => ({ fx: rnd(0.1, 0.17), fy: rnd(0.54, 0.62) }), face: -1 },
+    ],
+  },
+  field: {
+    src: "/world-bg-field.jpg",
+    body: "#f7ecd6",
+    // open harvest field — the songpyeon table / scarecrow (left) and the
+    // sheaf, arrow jar and bushes (right) stay clear
+    ground: { x: [0.26, 0.78], y: [0.66, 0.92] },
+    hotspots: [
+      { kind: "spin", label: "팽이", spot: () => ({ fx: rnd(0.66, 0.72), fy: rnd(0.83, 0.9) }) },
+      { kind: "dance", label: "들판 마당", spot: () => ({ fx: rnd(0.45, 0.6), fy: rnd(0.7, 0.8) }) },
+      { kind: "smile", label: "투호 항아리", spot: () => ({ fx: rnd(0.75, 0.79), fy: rnd(0.68, 0.74) }) },
+      { kind: "bow", label: "허수아비 인사", spot: () => ({ fx: rnd(0.27, 0.32), fy: rnd(0.68, 0.74) }), face: -1 },
     ],
   },
   night: {
@@ -150,8 +180,11 @@ const THEMES = {
     ],
   },
 };
-const FORCED_BG = new URLSearchParams(location.search).get("bg");
-const themeNow = () => { const h = new Date().getHours(); return h >= 18 || h < 6 ? "night" : "day"; };
+const ROTATION = ["day", "field", "night"];
+const _params = new URLSearchParams(location.search);
+const FORCED_BG = ROTATION.includes(_params.get("bg")) ? _params.get("bg") : null;
+const ROTATE_MS = Math.max(0.5, Number(_params.get("rotate")) || 10) * 60000;
+const themeNow = () => ROTATION[Math.floor(Date.now() / ROTATE_MS) % ROTATION.length];
 let THEME = null; // set by applyTheme() below, once ambient builders exist
 
 // ---- background-image coordinate system (matches CSS `cover`) --------------
@@ -397,13 +430,13 @@ function addAmbient(el, pos) {
   ambient.push({ el, ...pos });
 }
 
-// DAY: drifting clouds + swaying pampas grass (+ falling leaves, below)
-function buildDayAmbient() {
+// soft flat-white cloud clusters drifting across the sky band
+function buildClouds(driftMin, driftMax) {
   for (let i = 0; i < 3; i++) {
     const el = document.createElement("div");
     el.className = "cloud2";
-    el.style.setProperty("--drift", rnd(90, 150) + "s");
-    el.style.animationDelay = -rnd(0, 120) + "s";
+    el.style.setProperty("--drift", rnd(driftMin, driftMax) + "s");
+    el.style.animationDelay = -rnd(0, driftMax) + "s";
     el.innerHTML = `<svg viewBox="0 0 120 44">
       <ellipse cx="38" cy="30" rx="34" ry="13" fill="#fffdf7"/>
       <ellipse cx="70" cy="22" rx="26" ry="14" fill="#fffdf7"/>
@@ -411,6 +444,11 @@ function buildDayAmbient() {
     </svg>`;
     addAmbient(el, { fx: 0, fy: rnd(0.05, 0.2), wFrac: rnd(0.14, 0.22), hFrac: rnd(0.05, 0.08) });
   }
+}
+
+// DAY: drifting clouds + swaying pampas grass (+ falling leaves, below)
+function buildDayAmbient() {
+  buildClouds(90, 150);
   const GRASS_SPOTS = [
     ...Array.from({ length: 7 }, () => ({ fx: rnd(0.01, 0.14), fy: rnd(0.86, 0.99) })),
     ...Array.from({ length: 4 }, () => ({ fx: rnd(0.9, 0.99), fy: rnd(0.9, 1.0) })),
@@ -431,6 +469,35 @@ function buildDayAmbient() {
     const h = rnd(0.09, 0.16);
     addAmbient(el, { fx: g.fx, fy: g.fy - h, wFrac: h * 0.25, hFrac: h });
   }
+}
+
+// FIELD: slow clouds + a sparrow peeking out of the bottom-right bush
+// (falling leaves come from the shared leaf spawner below)
+function buildFieldAmbient() {
+  buildClouds(130, 200);
+  const sp = document.createElement("div");
+  sp.className = "sparrow";
+  sp.innerHTML = `<svg viewBox="0 0 100 80">
+    <g class="birdg">
+      <ellipse cx="50" cy="38" rx="15" ry="13" fill="#a9765a"/>
+      <ellipse cx="50" cy="44" rx="10" ry="8" fill="#f0e0c8"/>
+      <circle cx="50" cy="22" r="10" fill="#a9765a"/>
+      <path d="M40 22 l-7 3 7 3 z" fill="#3b3129"/>
+      <circle cx="46" cy="20" r="2.4" fill="#2f2a26"/>
+      <circle cx="46.8" cy="19.3" r="0.8" fill="#fff"/>
+      <path d="M58 34 q 9 2 8 12 q -8 0 -11 -7" fill="#8a5d44"/>
+      <path d="M45 13 q 4 -5 8 0" stroke="#8a5d44" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+    <path d="M0 80 L0 62 Q 14 48 30 56 Q 50 40 72 54 Q 90 50 100 60 L100 80 Z" fill="#4b8048"/>
+    <circle cx="30" cy="66" r="2.2" fill="#3d6b3b"/>
+    <circle cx="58" cy="62" r="2.2" fill="#3d6b3b"/>
+    <circle cx="80" cy="68" r="2.2" fill="#3d6b3b"/>
+  </svg>`;
+  sp.firstElementChild.querySelector(".birdg").style.animationDelay = -rnd(0, 11) + "s";
+  // sits over the art's green bush mounds, bottom-right — the drawn mound
+  // crest rides just above the painted one so the bird truly hides behind
+  // it (kept left of the berry twig)
+  addAmbient(sp, { fx: 0.81, fy: 0.74, wFrac: 0.22, hFrac: 0.194 });
 }
 
 // NIGHT: the moon-rabbit really pounds its mallet (the mallet was cut out of
@@ -483,30 +550,45 @@ setInterval(() => { if (Math.random() < 0.55) spawnStar(); }, 7000);
 setTimeout(spawnStar, 2500);
 
 // ---- theme switching --------------------------------------------------------
+const AMBIENT_BUILDERS = { day: buildDayAmbient, field: buildFieldAmbient, night: buildNightAmbient };
+
+// gentle 1.2s crossfade into the next scene (skipped on the very first paint)
+function fadeToBackground(css) {
+  const veil = document.createElement("div");
+  veil.style.cssText = `position:fixed;inset:0;z-index:0;pointer-events:none;background:${css};opacity:0;transition:opacity 1.2s ease;`;
+  document.body.prepend(veil);
+  requestAnimationFrame(() => requestAnimationFrame(() => { veil.style.opacity = "1"; }));
+  setTimeout(() => { document.body.style.background = css; veil.remove(); }, 1400);
+}
+
 function applyTheme(name) {
   if (name === THEME) return;
+  const first = THEME === null;
   THEME = name;
   const t = THEMES[name];
-  document.body.style.background = `${t.body} url("${t.src}") center / cover no-repeat`;
+  const css = `${t.body} url("${t.src}") center / cover no-repeat`;
+  if (first) document.body.style.background = css;
+  else fadeToBackground(css);
   GROUND = t.ground;
   HOTSPOTS = t.hotspots;
   bgProbe.src = t.src; // onload refreshes bg dims + full layout
   clearAmbient();
-  (name === "night" ? buildNightAmbient : buildDayAmbient)();
+  AMBIENT_BUILDERS[name]();
   placeAmbient();
 }
-applyTheme(FORCED_BG === "night" || FORCED_BG === "day" ? FORCED_BG : themeNow());
-setInterval(() => { if (!FORCED_BG) applyTheme(themeNow()); }, 60000);
+applyTheme(FORCED_BG || themeNow());
+setInterval(() => { if (!FORCED_BG) applyTheme(themeNow()); }, 10000);
 
-// ---- ambient wind: autumn leaves drifting across the courtyard (day only) ---
-// small leaves in the art's palette; some fall BEHIND the creatures and some
-// in front, for depth. every so often a gust makes everything flutter harder.
+// ---- ambient wind: autumn leaves drifting across the scene -----------------
+// day + field scenes only (no leaves on the moon). small leaves in the art's
+// palette; some fall BEHIND the creatures and some in front, for depth.
+// every so often a gust makes everything flutter harder.
 const LEAF_COLORS = ["#e8862e", "#d8433b", "#e6b93f", "#c96a2d", "#a8552b"];
 const MAX_LEAVES = 14;
 let leafCount = 0;
 
 function spawnLeaf() {
-  if (THEME !== "day") return;
+  if (THEME !== "day" && THEME !== "field") return;
   if (leafCount >= MAX_LEAVES) return;
   leafCount++;
   const leaf = document.createElement("div");
