@@ -8,13 +8,13 @@ type Dir = "ur" | "ul" | "dr" | "dl"; // arrow tip direction: up/down + right/le
 
 const STEPS: { img: string; emoji: string; caption: string; dir: Dir; svgFirst: boolean }[] = [
   // s1: caption above the photo → arrow points down-right into it
-  { img: "/welcome/step1.jpg", emoji: "📷", caption: "Snap it!", dir: "dr", svgFirst: false },
+  { img: "/welcome/step1.jpg", emoji: "📷", caption: "찰칵!", dir: "dr", svgFirst: false },
   // s2: caption below the photo, arrow on the left end → points up-right into it
-  { img: "/welcome/step2.jpg", emoji: "✨", caption: "Wake it up!", dir: "ur", svgFirst: true },
+  { img: "/welcome/step2.jpg", emoji: "✨", caption: "살아난다!", dir: "ur", svgFirst: true },
   // s3: caption below the photo → up-right into it
-  { img: "/welcome/step3.jpg", emoji: "🧩", caption: "Quest together!", dir: "ur", svgFirst: true },
+  { img: "/welcome/step3.jpg", emoji: "🚶", caption: "뚜벅뚜벅!", dir: "ur", svgFirst: true },
   // s4: caption below the photo, arrow on the right end → points up-left into it
-  { img: "/welcome/step4.jpg", emoji: "🏅", caption: "Win your badge!", dir: "ul", svgFirst: false },
+  { img: "/welcome/step4.jpg", emoji: "🌏", caption: "디지털 세계로!", dir: "ul", svgFirst: false },
 ];
 
 export function Welcome({ onStart }: { onStart: () => void }) {
@@ -23,10 +23,10 @@ export function Welcome({ onStart }: { onStart: () => void }) {
       <div className="welcome-left">
         <div className="welcome-hero">
           <img src="/veggie-creature-logo.png" className="welcome-logo" alt="Veggie Creature" />
-          <p className="welcome-strap">a Monglekids experience</p>
-          <p className="welcome-tag">Your veggie creation comes to life!</p>
+          <p className="welcome-strap">몽글키즈 마법 체험</p>
+          <p className="welcome-tag">내가 만든 채소 친구가 살아나요!</p>
         </div>
-        <button className="btn-primary big" onClick={onStart}>Start ▶</button>
+        <button className="btn-primary big" onClick={onStart}>시작 ▶</button>
       </div>
 
       <div className="collage">
@@ -42,7 +42,7 @@ export function Welcome({ onStart }: { onStart: () => void }) {
             </div>
           </div>
         ))}
-        <p className="collage-tagline">Snap, Wake, Quest &amp; Win!</p>
+        <p className="collage-tagline">찍으면, 살아나서, 떠나요!</p>
       </div>
     </div>
   );

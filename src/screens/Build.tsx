@@ -37,7 +37,7 @@ export function Build({ onDone }: { onDone: () => void }) {
 
     const md = navigator.mediaDevices;
     if (!md?.getUserMedia) {
-      setCamError(window.isSecureContext ? "No camera here — upload a photo!" : "Open the https link for the camera.");
+      setCamError(window.isSecureContext ? "카메라가 없어요 — 사진을 업로드해 주세요!" : "카메라는 https 주소에서 열 수 있어요.");
       return;
     }
 
@@ -52,11 +52,11 @@ export function Build({ onDone }: { onDone: () => void }) {
       })
       .catch((err: DOMException) => {
         const byName: Record<string, string> = {
-          NotAllowedError: "Camera blocked — allow it, then retry.",
-          NotFoundError: "No camera — upload a photo!",
-          NotReadableError: "Another app has the camera.",
+          NotAllowedError: "카메라가 막혀 있어요 — 허용 후 다시 시도!",
+          NotFoundError: "카메라가 없어요 — 사진을 업로드해 주세요!",
+          NotReadableError: "다른 앱이 카메라를 쓰고 있어요.",
         };
-        setCamError(byName[err?.name] || "Camera hiccup — retry.");
+        setCamError(byName[err?.name] || "카메라가 잠깐 말썽이에요 — 다시 시도!");
         setCamOn(false);
       });
 
@@ -154,7 +154,7 @@ export function Build({ onDone }: { onDone: () => void }) {
   return (
     <div className="screen">
       <div className="stack center">
-        <p className="lead">📸 Show your veggie creature to the camera!</p>
+        <p className="lead">📸 내가 만든 채소 친구를 카메라에 보여주세요!</p>
         <div className="camera-box">
           {camOn ? (
             <>
@@ -165,17 +165,17 @@ export function Build({ onDone }: { onDone: () => void }) {
             <div className="camera placeholder">
               <img src="/camera-cover.jpg" alt="" className="cover-bg" />
               <span>📷</span>
-              <p>{camError ?? "Starting the camera…"}</p>
+              <p>{camError ?? "카메라 켜는 중…"}</p>
             </div>
           )}
         </div>
         {!camOn && camError && (
           <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
-            📷 Retry
+            📷 다시 시도
           </button>
         )}
         <label className="btn-ghost">
-          🖼️ Upload instead
+          🖼️ 사진으로 올리기
           <input type="file" accept="image/*" onChange={onFile} hidden />
         </label>
       </div>
@@ -262,7 +262,7 @@ function MagicStep({
   if (phase === "walk" && variant) {
     return (
       <div className="screen center-screen" style={{ alignItems: "center" }}>
-        <p className="lead">🌏 Off to the Digital World!</p>
+        <p className="lead">🌏 디지털 세계로 출발!</p>
         <div className="walk-stage">
           <div className="walker">
             <img src={`/variants/${variant}.smile.gif`} alt="" />
@@ -275,7 +275,7 @@ function MagicStep({
   return (
     <div className="screen center-screen" style={{ alignItems: "center" }}>
       <p className="lead">
-        {phase === "match" ? "✨ Reading the magic…" : phase === "dust" ? "✨ Sprinkling magic dust…" : "🎉 It's ALIVE!"}
+        {phase === "match" ? "✨ 마법을 읽는 중…" : phase === "dust" ? "✨ 마법가루를 뿌리는 중…" : "🎉 살아났다!"}
       </p>
 
       <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
@@ -291,19 +291,19 @@ function MagicStep({
             style={phase === "match" ? { filter: "saturate(1.4) blur(1.2px)" } : undefined}
           />
         )}
-        {phase === "match" && <SparkleLoading messages={["Who are you in there…?", "Feeling the magic…"]} />}
+        {phase === "match" && <SparkleLoading messages={["넌 누구니…?", "마법을 느끼는 중…"]} />}
         {phase === "dust" && (
           <div className="dust-shower">
             {Array.from({ length: 14 }).map((_, k) => (
               <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
             ))}
-            <span className="sparkle-msg">Magic dust is falling…</span>
+            <span className="sparkle-msg">마법가루가 내려와요…</span>
           </div>
         )}
       </div>
 
       {phase !== "alive" && (
-        <button className="btn-ghost" onClick={onRetake}>📷 Retake</button>
+        <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
       )}
     </div>
   );
