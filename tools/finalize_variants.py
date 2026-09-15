@@ -24,7 +24,25 @@ FRAME_MS = 110  # ≈ real time for 24fps sources with every 3rd frame kept
 
 def transparent(rgb: np.ndarray) -> Image.Image:
     near_white = (rgb > 238).all(axis=2)
-    rgba = np.dstack([rgb, np.where(near_white, 0, 255).astype(np.uint8)])
+    # Veo leaves a soft grey floor shadow around the feet, and it is the exact
+    # colour of pale clay (cauliflower's cream body) — no colour threshold can
+    # separate them. Geometry can: the shadow always lies BELOW the character.
+    # Per column, find the lowest clearly-body pixel (colourful or dark); grey
+    # bright pixels below that line (bottom 35% of the frame only) are floor.
+    mx = rgb.max(axis=2).astype(int)
+    mn = rgb.min(axis=2).astype(int)
+    sat = mx - mn
+    h = rgb.shape[0]
+    body = (sat >= 35) | (mx < 170)
+    foot = np.where(body.any(axis=0), h - 1 - np.argmax(body[::-1], axis=0), -1)
+    rows = np.arange(h)[:, None]
+    # strictly below the anchor: floor by definition, cut regardless of colour;
+    # beside the feet (a foot-height band above): cut only grey-bright pixels.
+    below = rows > foot[None, :]
+    beside = (rows > (foot[None, :] - h // 16)) & (sat < 26) & (mx > 175)
+    shadowish = (below | beside) & (rows > int(h * 0.65))
+    cut = near_white | shadowish
+    rgba = np.dstack([rgb, np.where(cut, 0, 255).astype(np.uint8)])
     return Image.fromarray(rgba, "RGBA")
 
 
