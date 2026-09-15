@@ -27,6 +27,17 @@
   @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
   @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-4vmin) scale(0.98, 1.04); } 60% { transform: translateY(0) scale(1.05, 0.95); } }
 
+  /* drifting clouds in the artwork's flat style (sky layer, behind creatures) */
+  .cloud2 { position: absolute; pointer-events: none; z-index: 1; opacity: 0.9; animation: cloudDrift var(--drift) linear infinite; }
+  .cloud2 svg { display: block; width: 100%; height: 100%; }
+  @keyframes cloudDrift { from { transform: translateX(-35vw); } to { transform: translateX(135vw); } }
+
+  /* pampas-grass stalks planted over the painted clumps, swaying at the base */
+  .stalk { position: absolute; pointer-events: none; transform-origin: 50% 100%; animation: stalkSway var(--sway) ease-in-out infinite alternate; }
+  .stalk svg { display: block; width: 100%; height: 100%; }
+  @keyframes stalkSway { from { transform: rotate(-5deg); } to { transform: rotate(6deg); } }
+  body.gust .stalk { animation-duration: calc(var(--sway) * 0.45); }
+
   /* falling autumn leaves — a breath of wind over the still artwork */
   .leaf { position: absolute; top: -8vh; pointer-events: none; will-change: transform; animation: leafFall var(--fall) linear forwards; }
   .leaf svg { display: block; width: 100%; height: 100%; animation: leafSway var(--sway) ease-in-out infinite alternate; }
@@ -153,6 +164,33 @@ function addCreature(entry, isNew) {
   function face(dir) { el.style.setProperty("--flip", dir); } // 1 right, -1 left
   function setMode(mode) { el.className = "creature" + (mode ? " " + mode : ""); }
   function moveTo(spot) { c.fx = spot.fx; c.fy = spot.fy; applyPos(c); }
+  // always WALK (waddle) between spots, at a constant pace — no gliding.
+  // returns the walk duration in ms so the caller can chain the next action.
+  function walkTo(spot) {
+    const dist = Math.hypot((spot.fx - c.fx) * (bg.w / bg.h), spot.fy - c.fy);
+    const dur = Math.min(8, Math.max(1.6, dist / 0.16));
+    face(spot.fx > c.fx ? 1 : -1);
+    setMode("walking");
+    el.style.setProperty("--walk-t", dur + "s");
+    moveTo(spot);
+    return dur * 1000;
+  }
+  // a small step nearby (kept inside the courtyard) — everyday wandering
+  function nearSpot() {
+    for (let i = 0; i < 8; i++) {
+      const r = rnd(0.07, 0.16);
+      const a2 = rnd(0, Math.PI * 2);
+      const s = {
+        fx: Math.min(GROUND.x[1], Math.max(GROUND.x[0], c.fx + Math.cos(a2) * r)),
+        fy: Math.min(GROUND.y[1], Math.max(GROUND.y[0], c.fy + Math.sin(a2) * r * 0.6)),
+      };
+      const crowded = [...onStage.values()].some(
+        (o) => o !== c && Math.hypot(o.fx - s.fx, (o.fy - s.fy) * 1.6) < 0.1
+      );
+      if (!crowded) return s;
+    }
+    return { fx: c.fx, fy: c.fy };
+  }
 
   // ---- arrival: walk in from the left edge, then bow to the maru ----
   const spot = freeSpot(wanderSpot, c);
@@ -188,12 +226,9 @@ function addCreature(entry, isNew) {
       if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? greet : smile;
       later(behave, rnd(6000, 11000));
     } else if (roll < 0.55) {
-      // stroll to a nearby spot, keeping distance from the others
-      const s = freeSpot(wanderSpot, c);
-      face(s.fx > c.fx ? 1 : -1);
-      setMode("strolling");
-      moveTo(s);
-      later(behave, rnd(9000, 13000));
+      // a few waddling steps to somewhere nearby
+      const dur = walkTo(nearSpot());
+      later(() => { setMode(""); later(behave, rnd(1500, 4000)); }, dur + 100);
     } else if (roll < 0.7) {
       // happy hopping on the spot
       setMode("hopping");
@@ -210,17 +245,14 @@ function addCreature(entry, isNew) {
       });
       if (!options.length) { setMode(""); later(behave, rnd(3000, 6000)); return; }
       const h = options[Math.floor(Math.random() * options.length)];
-      const s = freeSpot(h.spot, c);
-      face(s.fx > c.fx ? 1 : -1);
-      setMode("strolling");
-      moveTo(s);
+      const dur = walkTo(freeSpot(h.spot, c));
       later(() => {
         if (c.leaving) return;
         setMode("");
         face(h.face ?? 1);
         img.src = clip(h.kind);
         later(() => { face(1); img.src = greet; behave(); }, rnd(7000, 9500));
-      }, 10200);
+      }, dur + 150);
     }
   }
 
@@ -275,6 +307,60 @@ fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen
 document.addEventListener("fullscreenchange", () => {
   fsBtn.style.display = document.fullscreenElement ? "none" : "";
 });
+
+// ---- ambient sky & grass, anchored to the artwork ---------------------------
+const ambient = []; // {el, fx, fy, wFrac, hFrac}
+function placeAmbient() {
+  for (const m of ambient) {
+    const p = toPx(m.fx, m.fy);
+    m.el.style.left = p.x + "px";
+    m.el.style.top = p.y + "px";
+    m.el.style.width = m.wFrac * bg.h * bg.scale + "px";
+    m.el.style.height = m.hFrac * bg.h * bg.scale + "px";
+  }
+}
+const _layout = layout;
+layout = function () { _layout(); placeAmbient(); };
+addEventListener("resize", placeAmbient);
+
+// clouds: soft flat-white clusters drifting across the sky band
+for (let i = 0; i < 3; i++) {
+  const el = document.createElement("div");
+  el.className = "cloud2";
+  el.style.setProperty("--drift", rnd(90, 150) + "s");
+  el.style.animationDelay = -rnd(0, 120) + "s";
+  el.innerHTML = `<svg viewBox="0 0 120 44">
+    <ellipse cx="38" cy="30" rx="34" ry="13" fill="#fffdf7"/>
+    <ellipse cx="70" cy="22" rx="26" ry="14" fill="#fffdf7"/>
+    <ellipse cx="94" cy="31" rx="22" ry="10" fill="#fffdf7"/>
+  </svg>`;
+  document.body.appendChild(el);
+  ambient.push({ el, fx: 0, fy: rnd(0.05, 0.2), wFrac: rnd(0.14, 0.22), hFrac: rnd(0.05, 0.08) });
+}
+
+// pampas grass planted over the painted clumps (left + right foreground)
+const GRASS_SPOTS = [
+  ...Array.from({ length: 7 }, () => ({ fx: rnd(0.01, 0.14), fy: rnd(0.86, 0.99) })),
+  ...Array.from({ length: 4 }, () => ({ fx: rnd(0.9, 0.99), fy: rnd(0.9, 1.0) })),
+  ...Array.from({ length: 3 }, () => ({ fx: rnd(0.3, 0.42), fy: rnd(0.96, 1.02) })),
+];
+for (const g of GRASS_SPOTS) {
+  const el = document.createElement("div");
+  el.className = "stalk";
+  el.style.setProperty("--sway", rnd(1.8, 3.2) + "s");
+  el.style.animationDelay = -rnd(0, 3) + "s";
+  el.style.zIndex = g.fy > 0.94 ? 30 : 1; // front row overlaps the creatures a touch
+  const lean = rnd(-14, 14);
+  el.innerHTML = `<svg viewBox="0 0 20 80">
+    <path d="M10 80 C ${10 + lean * 0.3} 55, ${10 + lean} 35, ${10 + lean} 22" stroke="#d9c08a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="${10 + lean}" cy="15" rx="5.5" ry="12" fill="#f4ead2"/>
+    <ellipse cx="${10 + lean}" cy="13" rx="3.6" ry="9" fill="#fdf8ea"/>
+  </svg>`;
+  const h = rnd(0.09, 0.16);
+  document.body.appendChild(el);
+  ambient.push({ el, fx: g.fx, fy: g.fy - h, wFrac: h * 0.25, hFrac: h });
+}
+placeAmbient();
 
 // ---- ambient wind: autumn leaves drifting across the courtyard -------------
 // small leaves in the art's palette; some fall BEHIND the creatures and some
