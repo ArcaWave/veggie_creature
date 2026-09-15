@@ -69,11 +69,23 @@
 // any screen: a 16:10 MacBook, a 16:9 55"/60" TV, whatever `cover` crops.
 const stage = document.getElementById("stage");
 const onStage = new Map(); // id -> creature controller
-const departed = new Set(); // ids that finished their visit (don't re-add)
+// ids that finished their visit — persisted so a refresh doesn't resurrect them
+const departed = new Set();
+try { for (const id of JSON.parse(localStorage.getItem("vc-departed") || "[]")) departed.add(id); } catch (e) {}
+function markDeparted(id) {
+  departed.add(id);
+  try {
+    const keep = [...departed].filter((d) => Number(d.split("-")[0]) > Date.now() - 6 * 3600e3);
+    localStorage.setItem("vc-departed", JSON.stringify(keep.slice(-300)));
+  } catch (e) {}
+}
 const MAX_ON_STAGE = 12;
 const POLL_MS = 4000;
 const DEMO = new URLSearchParams(location.search).has("demo");
-const STAY_MS = () => (DEMO ? 14000 + Math.random() * 6000 : 90000 + Math.random() * 60000);
+// each guest's stay is fixed by its record timestamp and counts from the scan
+// moment — deterministic across refreshes, so expired guests never come back
+const stayFor = (entry) => (DEMO ? 14000 + (entry.at % 6000) : 90000 + (entry.at % 60000));
+const gone = (entry) => Date.now() > entry.at + stayFor(entry);
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -271,10 +283,10 @@ function addCreature(entry, isNew) {
         c.timers.forEach(clearTimeout);
         el.remove();
         onStage.delete(entry.id);
-        departed.add(entry.id);
+        markDeparted(entry.id);
       }, 6300);
     }, 2600);
-  }, STAY_MS());
+  }, Math.max(entry.at + stayFor(entry) - Date.now(), DEMO ? 6000 : 15000));
 }
 
 async function poll(first) {
@@ -283,7 +295,7 @@ async function poll(first) {
     const j = await r.json();
     const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
     for (const entry of [...latest].reverse()) {
-      if (!onStage.has(entry.id) && !departed.has(entry.id)) addCreature(entry, !first);
+      if (!onStage.has(entry.id) && !departed.has(entry.id) && !gone(entry)) addCreature(entry, !first);
     }
     // safety cap: if the courtyard somehow overflows, the oldest leaves first
     while (onStage.size > MAX_ON_STAGE) {
@@ -291,7 +303,7 @@ async function poll(first) {
       oldest.timers.forEach(clearTimeout);
       oldest.el.remove();
       onStage.delete(oldest.entry.id);
-      departed.add(oldest.entry.id);
+      markDeparted(oldest.entry.id);
     }
   } catch (e) {
     /* offline blip — try again next poll */
