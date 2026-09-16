@@ -42,8 +42,8 @@ function drawDebug(rise: number) {
 
 // drifting leaves + embers over the courtyard (fixed at module load so the
 // attract loop never re-randomises mid-day)
-const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
-  glyph: ["🍂", "🍁", "✨", "🍂", "✨", "🍁"][i % 6],
+const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
+  kind: i % 3 === 2 ? "ember" : "leaf",
   left: (i * 61) % 100,
   size: 14 + ((i * 37) % 22),
   dur: 14 + ((i * 53) % 14),
@@ -61,17 +61,20 @@ function Cine({ children, dim = false }: { children: React.ReactNode; dim?: bool
         {PARTICLES.map((p, i) => (
           <span
             key={i}
-            className="cine-particle"
+            className={`cine-particle ${p.kind}`}
             style={{
               left: `${p.left}vw`,
-              fontSize: p.size,
+              width: p.size,
+              height: p.size,
               animationDuration: `${p.dur}s`,
               animationDelay: `${p.delay}s`,
               // @ts-expect-error css var
               "--drift": `${p.drift}vw`,
             }}
           >
-            {p.glyph}
+            {p.kind === "leaf" && (
+              <svg viewBox="0 0 24 24"><path d="M12 2 C 19 6, 21 13, 12 22 C 3 13, 5 6, 12 2 Z" /><path className="vein" d="M12 5 L12 19" /></svg>
+            )}
           </span>
         ))}
       </div>
@@ -337,11 +340,11 @@ export function Build({ onDone }: { onDone: () => void }) {
   }
 
   const caption =
-    count !== null && count > 0 ? "그대로 있어 주세요…"
-    : tries > 0 ? "채소 친구가 잘 안 보였어요 — 조금 더 가까이 보여줄래요?"
+    count !== null && count > 0 ? "그대로 있어 주세요"
+    : tries > 0 ? "채소 친구가 잘 보이지 않았어요 — 조금 더 가까이 보여 주세요"
     : waitingClear ? "다음 친구는 잠시 후에 거울 앞에 서 주세요"
-    : dwell > 0.05 ? "좋아요! 잠시만 그대로…"
-    : "채소 친구를 들고 거울 앞에 서 보세요";
+    : dwell > 0.05 ? "좋아요, 잠시만 그대로"
+    : "채소 친구를 들고 거울 앞에 서 주세요";
 
   return (
     <Cine>
@@ -360,8 +363,7 @@ export function Build({ onDone }: { onDone: () => void }) {
             <video ref={videoRef} autoPlay playsInline muted className="portal-cam" />
           ) : (
             <div className="portal-ph">
-              <span>📷</span>
-              <p>{camError ?? "거울을 깨우는 중…"}</p>
+              <p>{camError ?? "거울을 깨우는 중"}</p>
             </div>
           )}
           {count !== null && count > 0 && <span className="portal-count">{count}</span>}
@@ -373,7 +375,7 @@ export function Build({ onDone }: { onDone: () => void }) {
 
       {!camOn && camError && (
         <button className="btn-glass" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
-          📷 다시 시도
+          다시 시도
         </button>
       )}
       <label className="cine-upload">
@@ -498,11 +500,10 @@ function MagicStep({
   if (phase === "noshow") {
     return (
       <CineScreen>
-        <p className="lead">🔍 어라? 채소 친구가 잘 안 보여요!</p>
+        <p className="lead">채소 친구가 잘 보이지 않아요</p>
         <div className="noshow-card">
-          <span className="noshow-emoji">🥕🙌</span>
-          <p>조금만 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여줄래요?</p>
-          <p className="noshow-sub">잠시 후에 다시 찍어요…</p>
+                    <p>조금 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여 주세요</p>
+          <p className="noshow-sub">잠시 후 다시 찍습니다</p>
         </div>
       </CineScreen>
     );
@@ -511,7 +512,7 @@ function MagicStep({
   if (phase === "dance") {
     return (
       <CineScreen>
-        <p className="lead">🕺 마법 동작으로 채소 친구를 깨워 줘!</p>
+        <p className="lead">마법 동작으로 채소 친구를 깨워 주세요</p>
         <DanceCharge stream={stream} onFull={danceDone} />
       </CineScreen>
     );
@@ -521,10 +522,9 @@ function MagicStep({
     return (
       <CineScreen>
         <div className="sendoff-card">
-          <span className="sendoff-emoji" aria-hidden="true">🏘️</span>
-          <p className="sendoff-title">디지털 마을로 떠났어요!</p>
+                    <p className="sendoff-title">디지털 마을로 떠났어요</p>
           <p className="sendoff-sub">
-            옆 화면 <span className="sendoff-arrow">👉</span> 디지털 마을에서<br />네 친구를 확인해 봐!
+            옆 화면 <span className="sendoff-arrow">→</span> 디지털 마을에서<br />내 친구를 만나 보세요
           </p>
         </div>
       </CineScreen>
@@ -534,7 +534,7 @@ function MagicStep({
   if (phase === "walk" && variant) {
     return (
       <CineScreen>
-        <p className="lead">🌏 디지털 세계로 출발!</p>
+        <p className="lead">디지털 마을로 떠나요</p>
         <div className="walk-stage">
           <div className="walker">
             <img src={`/variants/${variant}.smile.gif`} alt="" />
@@ -547,7 +547,7 @@ function MagicStep({
   return (
     <CineScreen>
       <p className="lead">
-        {phase === "match" ? "✨ 마법을 읽는 중…" : phase === "dust" ? "✨ 마법가루를 뿌리는 중…" : "🎉 살아났다!"}
+        {phase === "match" ? "채소 친구를 읽고 있어요" : phase === "dust" ? "마법가루가 내려와요" : "깨어났어요"}
       </p>
 
       <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
@@ -590,8 +590,8 @@ function MagicStep({
 // hard-completes by ~20s, and plain motion detection takes over if the pose
 // model cannot load.
 const SCENES = [
-  { prompt: "🐰 폴짝폴짝! 점프 두 번!", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
-  { prompt: "🙌 두 손 번쩍! 만세~!", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
+  { prompt: "폴짝폴짝, 점프 두 번", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
+  { prompt: "두 손을 번쩍, 만세", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
 ];
 
 function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
@@ -803,21 +803,34 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
         ) : (
           <div className="dance-cam dance-cam-ph">🥕✨</div>
         )}
-        <span className="dance-scene-no">{scene + 1} / {SCENES.length}</span>
+        <span className="dance-scene-no">{scene + 1} <em>/ {SCENES.length}</em></span>
         <div className="dance-demo">
           <span className={`demo-fig demo-${sc.demo}`} aria-hidden="true">
-            {sc.demo === "jump" ? "🐰" : <><span className="fa">🧍</span><span className="fb">🙌</span></>}
+            {sc.demo === "jump" ? (
+              <svg viewBox="0 0 60 80" className="fig">
+                <circle cx="30" cy="14" r="8" />
+                <path d="M30 22 V48 M30 30 L14 40 M30 30 L46 40 M30 48 L18 70 M30 48 L42 70" />
+                <path className="fig-ground" d="M8 76 H52" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 60 80" className="fig">
+                <circle cx="30" cy="14" r="8" />
+                <path d="M30 22 V50 M30 50 L18 72 M30 50 L42 72" />
+                <path className="fa" d="M30 30 L14 44 M30 30 L46 44" />
+                <path className="fb" d="M30 30 L14 10 M30 30 L46 10" />
+              </svg>
+            )}
           </span>
-          <span className="demo-label">따라 해 봐!</span>
+          <span className="demo-label">따라 해 보세요</span>
         </div>
         <span className="dance-prompt">{sc.prompt}</span>
-        {cleared && <div className="dance-clear">통과! 🎉</div>}
+        {cleared && <div className="dance-clear">통과</div>}
       </div>
       <div className="magic-gauge" aria-hidden="true">
         <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
-        <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
+        <span className="magic-gauge-label">마법가루 {Math.round(gauge)}%</span>
       </div>
-      <p className="dance-hint">화면을 팡팡 눌러도 마법가루가 모여요!</p>
+      <p className="dance-hint">화면을 두드려도 마법가루가 모여요</p>
     </div>
   );
 }

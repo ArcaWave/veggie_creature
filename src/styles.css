@@ -17,7 +17,7 @@
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  font-family: "Baloo 2", "Jua", system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+  font-family: "Noto Serif KR", "Apple SD Gothic Neo", serif;
   color: var(--ink);
   background: linear-gradient(160deg, var(--bg1), var(--bg2));
   -webkit-font-smoothing: antialiased;
@@ -613,8 +613,8 @@ body {
 
 /* title */
 .cine-head { text-align: center; display: flex; flex-direction: column; gap: 6px; }
-.cine-eyebrow { margin: 0; font-family: "Jua", "Baloo 2", sans-serif; font-size: clamp(15px, 2.2vmin, 22px); letter-spacing: 0.28em; color: #ffd98a; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
-.cine-title { margin: 0; font-family: "Nanum Myeongjo", "Jua", serif; font-weight: 800; font-size: clamp(26px, 4.2vmin, 48px); letter-spacing: 0.02em; color: #fff6e3; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 170, 70, 0.35); }
+.cine-eyebrow { margin: 0; font-family: inherit; font-size: clamp(15px, 2.2vmin, 22px); letter-spacing: 0.28em; color: #ffd98a; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
+.cine-title { margin: 0; font-family: inherit; font-weight: 800; font-size: clamp(26px, 4.2vmin, 48px); letter-spacing: 0.02em; color: #fff6e3; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 170, 70, 0.35); }
 
 /* the mirror portal — the camera IS the hero: a big 16:9 panel that shows
    the whole feed, framed by a gold progress stroke */
@@ -632,12 +632,12 @@ body {
 .portal-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
 .portal-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 54px; color: #ffd98a; }
 .portal-ph p { margin: 0; font-size: 18px; font-weight: 700; }
-.portal-count { position: absolute; inset: 0; display: grid; place-items: center; font-family: "Nanum Myeongjo", serif; font-weight: 800; font-size: clamp(120px, 26vmin, 260px); color: #fff8e6; text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6); animation: countPulseC 1s ease infinite; pointer-events: none; }
+.portal-count { position: absolute; inset: 0; display: grid; place-items: center; font-family: inherit; font-weight: 800; font-size: clamp(120px, 26vmin, 260px); color: #fff8e6; text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6); animation: countPulseC 1s ease infinite; pointer-events: none; }
 @keyframes countPulseC { 0% { transform: scale(1.2); opacity: 0.2; } 30% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.94); opacity: 0.9; } }
 .portal-flash { position: absolute; inset: 0; background: #fff; animation: flashOut 0.5s ease-out forwards; }
 @keyframes flashOut { from { opacity: 1; } to { opacity: 0; } }
 
-.cine-caption { margin: 0; font-family: "Jua", "Baloo 2", sans-serif; font-size: clamp(22px, 3.6vmin, 38px); color: #fff3dd; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.6); text-align: center; min-height: 1.4em; }
+.cine-caption { margin: 0; font-family: inherit; font-size: clamp(22px, 3.6vmin, 38px); color: #fff3dd; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.6); text-align: center; min-height: 1.4em; }
 .cine-upload { position: absolute; bottom: 18px; right: 22px; font-size: 13px; color: rgba(255, 240, 210, 0.45); cursor: pointer; }
 .btn-glass { background: rgba(255, 244, 220, 0.14); color: #fff3dd; border: 1px solid rgba(255, 220, 160, 0.4); border-radius: 999px; padding: 14px 26px; font-family: inherit; font-weight: 800; font-size: 20px; backdrop-filter: blur(12px); cursor: pointer; }
 
@@ -656,3 +656,71 @@ body {
 .cine .dance-demo, .cine .dance-scene-no, .cine .dance-prompt { background: rgba(35, 16, 5, 0.62); color: #ffd98a; backdrop-filter: blur(12px); border: 1px solid rgba(255, 220, 160, 0.3); }
 .cine .demo-label { color: #ffd98a; }
 .cine .dance-clear { color: #ffd98a; background: radial-gradient(circle, rgba(35, 16, 5, 0.9), rgba(35, 16, 5, 0.5) 70%, transparent); }
+
+
+/* =====================================================================
+   CINEMATIC REFINEMENT — one serif, gold line-work, no emoji
+   ===================================================================== */
+:root { --gold: #e9b968; --gold-soft: rgba(233, 185, 104, 0.55); --cream: #fff4dc; }
+.cine { font-family: "Noto Serif KR", "Apple SD Gothic Neo", serif; }
+.cine-eyebrow { font-weight: 600; letter-spacing: 0.42em; color: var(--gold); font-size: clamp(13px, 1.7vmin, 18px); text-transform: none; }
+.cine-title { font-weight: 900; letter-spacing: -0.005em; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55); }
+.cine-caption { font-weight: 600; letter-spacing: 0.02em; font-size: clamp(20px, 3.1vmin, 34px); }
+.cine .lead { font-weight: 700; letter-spacing: 0.01em; }
+.cine-upload { font-family: inherit; letter-spacing: 0.08em; }
+.btn-glass { font-family: inherit; font-weight: 600; letter-spacing: 0.06em; border-color: var(--gold-soft); }
+
+/* particles: small gold/red leaves and soft embers */
+.cine-particle { top: -6vh; opacity: 0; }
+.cine-particle svg { width: 100%; height: 100%; display: block; }
+.cine-particle.leaf svg path { fill: #d9752f; opacity: 0.85; }
+.cine-particle.leaf svg .vein { fill: none; stroke: rgba(80, 30, 5, 0.5); stroke-width: 0.8; }
+.cine-particle:nth-child(3n+1).leaf svg path { fill: #e9b968; }
+.cine-particle:nth-child(4n+2).leaf svg path { fill: #c8402f; }
+.cine-particle.ember { border-radius: 50%; background: radial-gradient(circle, rgba(255, 220, 150, 0.95), rgba(255, 180, 80, 0.25) 60%, transparent 72%); transform: scale(0.45); }
+
+/* portal frame: hairline gold + warm inner shade */
+.portal-clip { box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), inset 0 0 120px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.3); border-radius: 28px; }
+.portal.armed .portal-clip { box-shadow: inset 0 0 0 2px rgba(233, 185, 104, 1), inset 0 0 120px rgba(0, 0, 0, 0.3), 0 0 80px rgba(233, 185, 104, 0.45); }
+.ring-track { stroke: rgba(233, 185, 104, 0.28); }
+.ring-fill { stroke: var(--gold); stroke-width: 4; }
+.portal-count { font-weight: 900; color: var(--cream); }
+.portal-ph { color: var(--gold); font-size: 20px; }
+
+/* glass panels */
+.cine .noshow-card, .cine .sendoff-card, .cine .dance-demo, .cine .dance-scene-no, .cine .dance-prompt, .cine .magic-gauge {
+  background: rgba(28, 13, 4, 0.55); border: 1px solid var(--gold-soft); backdrop-filter: blur(16px); color: var(--cream); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+.cine .noshow-card, .cine .sendoff-card { border-radius: 26px; padding: 44px 64px; gap: 14px; }
+.cine .sendoff-title { color: var(--gold); font-weight: 900; letter-spacing: 0.02em; }
+.cine .sendoff-sub { font-weight: 600; }
+.cine .sendoff-arrow { color: var(--gold); font-weight: 400; }
+.cine .noshow-card p { font-weight: 600; }
+.cine .noshow-card b { color: var(--gold); }
+
+/* dance UI */
+.cine .dance-prompt { font-weight: 700; letter-spacing: 0.02em; color: var(--cream); border-radius: 999px; animation: none; padding: 12px 28px; }
+.cine .dance-scene-no { color: var(--cream); font-weight: 700; }
+.cine .dance-scene-no em { font-style: normal; color: var(--gold-soft); font-weight: 400; }
+.cine .dance-demo { padding: 14px 22px 12px; border-radius: 22px; }
+.cine .demo-label { color: var(--gold); font-weight: 600; letter-spacing: 0.06em; font-size: clamp(12px, 1.7vmin, 16px); }
+.demo-fig .fig { width: clamp(44px, 8vmin, 76px); height: auto; display: block; fill: none; stroke: var(--cream); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.demo-fig .fig circle { fill: var(--cream); stroke: none; }
+.demo-fig .fig .fig-ground { stroke: var(--gold-soft); stroke-width: 2; }
+.demo-jump .fig circle, .demo-jump .fig path:not(.fig-ground) { animation: figJump 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+@keyframes figJump { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-18%); } 65% { transform: translateY(-6%); } }
+.demo-manse .fig .fa { animation: demoSwapA 1.4s steps(1) infinite; }
+.demo-manse .fig .fb { opacity: 0; animation: demoSwap 1.4s steps(1) infinite; }
+.cine .magic-gauge { height: 38px; border-radius: 999px; }
+.cine .magic-gauge-fill { background: linear-gradient(90deg, rgba(233, 185, 104, 0.85), #ffd27a); box-shadow: 0 0 18px rgba(233, 185, 104, 0.7); }
+.cine .magic-gauge-label { font-weight: 700; letter-spacing: 0.04em; color: var(--cream); }
+.cine .dance-hint { font-weight: 400; letter-spacing: 0.04em; color: rgba(255, 244, 220, 0.55); }
+.cine .dance-clear { font-weight: 900; letter-spacing: 0.1em; color: var(--gold); }
+.cine .dance-cam-box { border-radius: 28px; box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), 0 30px 80px rgba(0, 0, 0, 0.5); }
+
+/* reveal frame + walk stage */
+.cine .wake-frame { border-radius: 28px; box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), 0 30px 80px rgba(0, 0, 0, 0.55); }
+.cine .dust-shower .sparkle-msg, .cine .sparkle-overlay { color: var(--cream); font-family: inherit; }
+.cine .sparkle-overlay { background: rgba(28, 13, 4, 0.55); }
+
+/* top-bar controls become glass on the stage */
+.sound-toggle, .fs-toggle { background: rgba(28, 13, 4, 0.45); color: var(--cream); border: 1px solid var(--gold-soft); backdrop-filter: blur(12px); box-shadow: none; }
