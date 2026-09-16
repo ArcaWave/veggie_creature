@@ -523,6 +523,29 @@ body {
 .camera.placeholder { position: relative; }
 .camera.placeholder > span, .camera.placeholder > p { position: relative; }
 
+/* staff-less guidance: a friendly dashed target zone over the live camera */
+.guide-zone { position: absolute; inset: 9%; border: 5px dashed rgba(255, 255, 255, 0.85); border-radius: 28px; pointer-events: none; box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.12); animation: guideBreathe 2.2s ease-in-out infinite; }
+.guide-label { position: absolute; left: 50%; bottom: -2px; transform: translate(-50%, 50%); background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(16px, 2.6vmin, 24px); padding: 8px 18px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
+@keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
+
+/* dance mini-game: your own moves charge the magic gauge */
+.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(94vw, 640px); user-select: none; touch-action: manipulation; }
+.dance-cam-box { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
+.dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
+.dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
+@keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
+.magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(60, 90, 30, 0.18); overflow: hidden; }
+.magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
+.magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 22px); }
+.dance-hint { color: var(--ink-soft, #7a8471); font-size: clamp(13px, 2.2vmin, 18px); }
+
+/* "couldn't see it — hold it closer" auto-retry card */
+.noshow-card { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 34px 46px; font-size: clamp(18px, 3vmin, 26px); color: var(--ink); text-align: center; }
+.noshow-emoji { font-size: clamp(44px, 9vmin, 76px); animation: guidePop 1.1s ease-in-out infinite alternate; }
+.noshow-sub { color: var(--ink-soft, #7a8471); font-size: 0.75em; }
+@keyframes guidePop { from { transform: scale(1) rotate(-3deg); } to { transform: scale(1.12) rotate(3deg); } }
+
 /* ---------- the creature stomps off the right edge into the Digital World ---------- */
 .walk-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
 /* starts exactly where the reveal showed it — screen centre — then strolls right */

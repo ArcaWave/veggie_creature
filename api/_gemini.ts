@@ -99,7 +99,10 @@ const MATCH_PROMPT =
   "biggest central piece), and small arms/legs. Identify the MAIN BODY vegetable only — its " +
   "kind and color. Ignore hats, googly eyes, toothpicks, arms, legs, hands holding it, the " +
   "table and other decorations. First describe the main body briefly in `reason`, then pick " +
-  "the closest matching character type in `variant`.";
+  "the closest matching character type in `variant`. " +
+  "IMPORTANT: if NO vegetable creation is visible at all — an empty scene, only a person or " +
+  "face with nothing held up, or the creation is too far away or fully hidden — answer " +
+  '`variant` "none" instead of guessing.';
 
 async function matchOnce(img: { mimeType: string; data: string }): Promise<string | null> {
   const r = await fetch(`${GEMINI}/models/${matchModel()}:generateContent`, {
@@ -118,7 +121,7 @@ async function matchOnce(img: { mimeType: string; data: string }): Promise<strin
           type: "OBJECT",
           properties: {
             reason: { type: "STRING" },
-            variant: { type: "STRING", enum: [...VARIANT_IDS] },
+            variant: { type: "STRING", enum: [...VARIANT_IDS, "none"] },
           },
           required: ["reason", "variant"],
         },
@@ -129,7 +132,7 @@ async function matchOnce(img: { mimeType: string; data: string }): Promise<strin
   const j = (await r.json()) as any;
   try {
     const parsed = JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
-    return VARIANT_IDS.includes(parsed.variant) ? parsed.variant : null;
+    return parsed.variant === "none" || VARIANT_IDS.includes(parsed.variant) ? parsed.variant : null;
   } catch {
     return null;
   }
@@ -144,10 +147,17 @@ export async function matchVariant(image: string): Promise<Result> {
     const votes = (await Promise.all([matchOnce(img), matchOnce(img), matchOnce(img)]))
       .filter((v): v is string => !!v);
     if (!votes.length) return { status: 200, body: { variant: fallback, reason: "no_votes" } };
+    const real = votes.filter((v) => v !== "none");
     const tally = new Map<string, number>();
-    for (const v of votes) tally.set(v, (tally.get(v) ?? 0) + 1);
-    const [winner] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
-    return { status: 200, body: { variant: winner, matched: true, votes } };
+    for (const v of real) tally.set(v, (tally.get(v) ?? 0) + 1);
+    const best = real.length ? [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+    // a "none" majority means no creation was visible — let the kiosk ask the
+    // child to hold it closer, with `best` as a last-resort guess
+    if (votes.length - real.length >= 2) {
+      return { status: 200, body: { variant: null, none: true, best, votes } };
+    }
+    if (!best) return { status: 200, body: { variant: fallback, reason: "no_votes" } };
+    return { status: 200, body: { variant: best, matched: real.length === votes.length, votes } };
   } catch (e: any) {
     return { status: 200, body: { variant: fallback, reason: "server_error", detail: String(e?.message || e) } };
   }

@@ -5,19 +5,23 @@ import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
+import { speak } from "../lib/guide";
 
 // "Show it to the camera and it comes alive."
-// No taps, no mini-games: the camera counts down and snaps by itself, the scan
-// is matched to a pre-made creature, and the creature stomps off the RIGHT edge
-// of the screen — walking into the Digital World (it then appears on the
-// display PC's world.html). Small Retake escape hatch only.
+// The station runs WITHOUT staff: big on-screen guidance + spoken Korean
+// prompts, the camera counts down and snaps by itself, and if the AI can't
+// see a creation in the shot it kindly asks the child to hold it closer and
+// retries on its own (never a dead end — after 2 retries the show goes on
+// with the best guess). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
-const COUNTDOWN_S = 5; // time to hold the creature up before the auto-snap
+const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
+const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
 
 export function Build({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
+  const [tries, setTries] = useState(0);
 
   // -------- camera with auto countdown snap --------
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -27,11 +31,9 @@ export function Build({ onDone }: { onDone: () => void }) {
   const [camTry, setCamTry] = useState(0);
   const [count, setCount] = useState<number | null>(null);
 
+  // the stream is kept alive through the magic step too — the dance mini-game
+  // watches the child move — and only stops on unmount / retake
   useEffect(() => {
-    if (step !== "photo") {
-      stopCam();
-      return;
-    }
     let cancelled = false;
     setCamError(null);
 
@@ -65,7 +67,7 @@ export function Build({ onDone }: { onDone: () => void }) {
       stopCam();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, camTry]);
+  }, [camTry]);
 
   // bind the stream after the <video> renders (prevents a black screen)
   useEffect(() => {
@@ -82,6 +84,8 @@ export function Build({ onDone }: { onDone: () => void }) {
       setCount(null);
       return;
     }
+    // (retries were already prompted by the noshow screen's voice line)
+    if (tries === 0) speak("내가 만든 채소 친구를 화면 가운데에 보여 줘! 곧 사진을 찍을 거야!");
     setCount(COUNTDOWN_S);
     const id = setInterval(() => {
       setCount((c) => {
@@ -143,22 +147,46 @@ export function Build({ onDone }: { onDone: () => void }) {
   function retake() {
     track("photo_retake");
     setPhoto("");
+    setTries(0);
+    setStep("photo");
+    setCamTry((t) => t + 1);
+  }
+
+  // the AI saw no creation in the shot — ask (with a voice) and reshoot
+  function retryCloser() {
+    track("match_retry", { tries: tries + 1 });
+    setPhoto("");
+    setTries((t) => t + 1);
     setStep("photo");
     setCamTry((t) => t + 1);
   }
 
   if (step === "magic") {
-    return <MagicStep photo={photo} onRetake={retake} onDone={onDone} />;
+    return (
+      <MagicStep
+        photo={photo}
+        stream={streamRef.current}
+        tries={tries}
+        onRetake={retake}
+        onRetryCloser={retryCloser}
+        onDone={onDone}
+      />
+    );
   }
 
   return (
     <div className="screen">
       <div className="stack center">
-        <p className="lead">📸 내가 만든 채소 친구를 카메라에 보여주세요!</p>
+        <p className="lead">
+          {tries > 0 ? "🥕 조금만 더 가까이 보여줄래요?" : "📸 내가 만든 채소 친구를 카메라에 보여주세요!"}
+        </p>
         <div className="camera-box">
           {camOn ? (
             <>
               <video ref={videoRef} autoPlay playsInline muted className="camera" />
+              <div className="guide-zone" aria-hidden="true">
+                <span className="guide-label">여기에 보여 줘!</span>
+              </div>
               {count !== null && count > 0 && <span className="count-badge">{count}</span>}
             </>
           ) : (
@@ -190,27 +218,40 @@ export function Build({ onDone }: { onDone: () => void }) {
 // the screen into the Digital World, and the station resets.
 function MagicStep({
   photo,
+  stream,
+  tries,
   onRetake,
+  onRetryCloser,
   onDone,
 }: {
   photo: string;
+  stream: MediaStream | null;
+  tries: number;
   onRetake: () => void;
+  onRetryCloser: () => void;
   onDone: () => void;
 }) {
-  type Phase = "match" | "dust" | "alive" | "walk";
+  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk";
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const aliveRef = useRef(true);
+  const timersRef = useRef<number[]>([]);
+  const later = (fn: () => void, ms: number) => timersRef.current.push(window.setTimeout(fn, ms));
 
+  useEffect(() => {
+    aliveRef.current = true;
+    const timers = timersRef.current;
+    return () => { aliveRef.current = false; timers.forEach(clearTimeout); };
+  }, []);
+
+  // 1) which pre-made creature does this creation resemble?
   // no run-once ref: StrictMode's dev double-mount would strand the live run.
   useEffect(() => {
-    let alive = true;
-    const timers: number[] = [];
-
     (async () => {
-      // 1) which pre-made creature does this creation resemble?
       track("match_start");
-      let v = "carrot";
+      const RANDOM = ["carrot", "broccoli", "tomato", "potato", "cucumber", "eggplant", "corn", "cauliflower"];
+      let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
       try {
         const r = await fetch("/api/match", {
           method: "POST",
@@ -218,46 +259,86 @@ function MagicStep({
           body: JSON.stringify({ image: photo }),
         });
         const j = await r.json();
-        if (typeof j.variant === "string") v = j.variant;
+        // nothing visible in the shot? ask the child to hold it closer and
+        // reshoot (twice at most — then the show goes on with the best guess)
+        if (j.none && tries < MAX_RETRIES) {
+          if (!aliveRef.current) return;
+          track("match_none", { tries });
+          speak("어라? 채소 친구가 잘 안 보여! 조금만 더 가까이 보여줄래? 다시 찍어 보자!");
+          setPhase("noshow");
+          later(onRetryCloser, 2800);
+          return;
+        }
+        if (typeof j.variant === "string" && j.variant) v = j.variant;
+        else if (typeof j.best === "string" && j.best) v = j.best;
         track("match_done", { variant: v, matched: j.matched ?? false });
       } catch {
         track("match_fail");
       }
-      if (!alive) return;
+      if (!aliveRef.current) return;
       setVariant(v);
-
-      // 2) magic dust -> 3) ALIVE (waves for a beat) -> 4) walks off right
-      setPhase("dust");
-      timers.push(window.setTimeout(() => {
-        if (!alive) return;
-        setPhase("alive");
-        magicDustBurst(frameRef.current);
-        sparkle();
-        timers.push(window.setTimeout(() => {
-          if (!alive) return;
-          setPhase("walk");
-          track("walk_off", { variant: v });
-          // the creature leaves this screen — announce it to the Digital World
-          fetch("/api/creatures", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ variant: v }),
-          }).catch(() => {});
-          timers.push(window.setTimeout(() => {
-            if (!alive) return;
-            track("build_done", { variant: v });
-            onDone();
-          }, 5200)); // walk duration + a breath
-        }, 3200));
-      }, 2600));
+      // 2) the dance mini-game: the child's own moves charge the magic
+      setPhase("dance");
+      speak("이제 마법 춤을 출 시간이야! 신나게 움직여서 마법가루를 모아 줘!");
     })();
-
-    return () => {
-      alive = false;
-      timers.forEach(clearTimeout);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 3) gauge full -> dust -> 4) ALIVE -> 5) walks off right
+  const variantRef = useRef<string | null>(null);
+  variantRef.current = variant;
+  const danceDoneRef = useRef(false);
+  function danceDone() {
+    if (!aliveRef.current || danceDoneRef.current) return;
+    danceDoneRef.current = true;
+    const v = variantRef.current ?? "carrot";
+    track("dance_done", { variant: v });
+    setPhase("dust");
+    speak("우와! 마법가루가 가득 모였어! 마법가루가 내려온다!");
+    later(() => {
+      setPhase("alive");
+      magicDustBurst(frameRef.current);
+      sparkle();
+      speak("채소 친구가 살아났어!");
+      later(() => {
+        setPhase("walk");
+        speak("디지털 세계로 출발! 큰 화면에서 다시 만나!");
+        track("walk_off", { variant: v });
+        // the creature leaves this screen — announce it to the Digital World
+        fetch("/api/creatures", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant: v }),
+        }).catch(() => {});
+        later(() => {
+          track("build_done", { variant: v });
+          onDone();
+        }, 5200); // walk duration + a breath
+      }, 3200);
+    }, 1600);
+  }
+
+  if (phase === "noshow") {
+    return (
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🔍 어라? 채소 친구가 잘 안 보여요!</p>
+        <div className="noshow-card">
+          <span className="noshow-emoji">🥕🙌</span>
+          <p>조금만 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여줄래요?</p>
+          <p className="noshow-sub">잠시 후에 다시 찍어요…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "dance") {
+    return (
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🕺 마법 춤을 춰서 채소 친구를 깨워 줘!</p>
+        <DanceCharge stream={stream} onFull={danceDone} />
+      </div>
+    );
+  }
 
   if (phase === "walk" && variant) {
     return (
@@ -305,6 +386,100 @@ function MagicStep({
       {phase !== "alive" && (
         <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
       )}
+    </div>
+  );
+}
+
+// -------- the dance mini-game: the child's own movement charges the magic ----
+// Frame-difference motion detection on a tiny canvas — ANY joyful movement
+// counts (deliberately forgiving for the special-needs event). Tapping the
+// screen also charges it, a gentle trickle starts after a few seconds, so a
+// shy or still child is never stuck; a vigorous dancer fills it in ~5s.
+const DANCE_PROMPTS = [
+  "🙌 손을 높이 들고 흔들어!",
+  "🕺 신나게 몸을 흔들흔들!",
+  "🐰 폴짝폴짝 뛰어 볼까?",
+  "🌀 빙글빙글 돌아 보자!",
+];
+
+function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
+  const vRef = useRef<HTMLVideoElement>(null);
+  const [gauge, setGauge] = useState(0);
+  const gaugeRef = useRef(0);
+  const doneRef = useRef(false);
+  const onFullRef = useRef(onFull);
+  onFullRef.current = onFull;
+  const [promptIdx, setPromptIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setPromptIdx((i) => (i + 1) % DANCE_PROMPTS.length), 3200);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const v = vRef.current;
+    if (v && stream) {
+      v.srcObject = stream;
+      v.play?.().catch(() => {});
+    }
+  }, [stream]);
+
+  function charge(amount: number) {
+    if (doneRef.current) return;
+    gaugeRef.current = Math.min(100, gaugeRef.current + amount);
+    setGauge(gaugeRef.current);
+    if (gaugeRef.current >= 100) {
+      doneRef.current = true;
+      onFullRef.current();
+    }
+  }
+  const chargeRef = useRef(charge);
+  chargeRef.current = charge;
+
+  useEffect(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 48;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    let prev: Uint8ClampedArray | null = null;
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      const v = vRef.current;
+      if (ctx && v && v.readyState >= 2) {
+        ctx.drawImage(v, 0, 0, 64, 48);
+        const d = ctx.getImageData(0, 0, 64, 48).data;
+        if (prev) {
+          let moved = 0;
+          const samples = d.length / 16;
+          for (let i = 0; i < d.length; i += 16) {
+            if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
+          }
+          const frac = moved / samples;
+          if (frac > 0.04) chargeRef.current(1.2 + frac * 6);
+        }
+        prev = d;
+      }
+      // never a dead end: a slow trickle kicks in, hard-full within ~22s
+      if (Date.now() - t0 > 7000) chargeRef.current(0.9);
+    }, 140);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="dance-stage" onPointerDown={() => chargeRef.current(6)}>
+      <div className="dance-cam-box">
+        {stream ? (
+          <video ref={vRef} autoPlay playsInline muted className="dance-cam" />
+        ) : (
+          <div className="dance-cam dance-cam-ph">🥕✨</div>
+        )}
+        <span className="dance-prompt">{DANCE_PROMPTS[promptIdx]}</span>
+      </div>
+      <div className="magic-gauge" aria-hidden="true">
+        <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
+        <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
+      </div>
+      <p className="dance-hint">화면을 팡팡 눌러도 마법가루가 모여요!</p>
     </div>
   );
 }
