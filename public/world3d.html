@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Veggie Creature — Digital Village (3D)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; background: #1a0d05; }
+  canvas { display: block; }
+  body.hide-cursor, body.hide-cursor * { cursor: none !important; }
+  #fs { position: absolute; top: 14px; right: 14px; z-index: 10; width: 48px; height: 48px; border-radius: 50%; background: rgba(28, 13, 4, 0.45); color: #fff4dc; border: 1px solid rgba(233, 185, 104, 0.55); backdrop-filter: blur(12px); font-size: 22px; cursor: pointer; }
+  #hud { position: absolute; left: 14px; bottom: 12px; z-index: 10; color: rgba(255, 244, 220, 0.55); font: 600 13px/1.4 "Noto Serif KR", serif; letter-spacing: 0.08em; pointer-events: none; }
+</style>
+</head>
+<body>
+<button id="fs" title="전체화면">⛶</button>
+<div id="hud"></div>
+
+<script type="module">
+// =====================================================================
+// The Digital Village in REAL 3D (Three.js). Creatures are ASSEMBLED from
+// parts at runtime — body vegetable + hat + limb style — and every motion
+// (walk, wave, jump, spin, dance) is PROCEDURAL, shared by all bodies. So a
+// hundred variants cost a handful of part assets and zero per-variant work.
+// This first cut uses primitive geometry for the parts; each body/hat can be
+// swapped for a real mesh (image-to-3D GLB) without touching the system.
+// =====================================================================
+import * as THREE from "/vendor/three/three.module.js";
+
+const DEMO = new URLSearchParams(location.search).has("demo");
+const DEBUG = new URLSearchParams(location.search).has("debug");
+const POLL_MS = 4000;
+const MAX_ON_STAGE = 12;
+const STAY_MS = (e) => (DEMO ? 16000 + (e.at % 8000) : 90000 + (e.at % 60000));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const hash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+
+// ---- stage -----------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 3.2, 12);
+camera.lookAt(0, 1.1, -1.5);
+
+// painted courtyard as a far backdrop; the 3D ground sits on its stone floor
+const BACKDROP_Z = -20;
+const texLoader = new THREE.TextureLoader();
+const bgTex = texLoader.load("/main-bg.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; });
+const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: bgTex }));
+backdrop.position.set(0, 0, BACKDROP_Z);
+scene.add(backdrop);
+function fitBackdrop() {
+  const d = camera.position.z - BACKDROP_Z;
+  const h = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.06;
+  const w = Math.max(h * (16 / 9), h * camera.aspect);
+  backdrop.scale.set(w, w * (9 / 16), 1);
+  backdrop.position.y = camera.position.y - 0.9; // horizon of the painting ≈ upper-middle
+}
+
+// ground: invisible except for the shadows it catches (the painting shows through)
+const GROUND = { x: [-7.5, 7.5], z: [-5.5, 4.5] };
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), new THREE.ShadowMaterial({ opacity: 0.32 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+if (DEBUG) {
+  const g = new THREE.GridHelper(20, 20, 0xffcc66, 0x885522);
+  g.position.y = 0.01;
+  scene.add(g);
+}
+
+// warm autumn light
+scene.add(new THREE.HemisphereLight(0xffe2b8, 0x6b3a1c, 0.9));
+const sun = new THREE.DirectionalLight(0xffd9a0, 1.6);
+sun.position.set(6, 9, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -14; sun.shadow.camera.right = 14;
+sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -8;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 40;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0xff9a4a, 0.5);
+rim.position.set(-6, 4, -6);
+scene.add(rim);
+
+// ---- part library ----------------------------------------------------------
+// Everything below is a PART. Swap any maker for a GLB loader later; the
+// assembly, sockets and animation stay the same.
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.02, ...extra });
+
+// bodies: return { mesh, height, headY (where the hat sits), armY, armX, legX }
+const BODIES = {
+  carrot: () => {
+    const g = new THREE.CapsuleGeometry(0.42, 0.9, 8, 18);
+    g.scale(1, 1, 0.9);
+    const m = new THREE.Mesh(g, mat(0xf3832c));
+    // tapered by scaling lower rings
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); const s = THREE.MathUtils.mapLinear(y, -0.9, 0.9, 0.55, 1.05); pos.setX(i, pos.getX(i) * s); pos.setZ(i, pos.getZ(i) * s); }
+    g.computeVertexNormals();
+    return { mesh: m, height: 1.9, headY: 0.95, armY: 0.35, armX: 0.44, legX: 0.18 };
+  },
+  tomato: () => ({ mesh: new THREE.Mesh(new THREE.SphereGeometry(0.66, 28, 22).scale(1, 0.9, 1), mat(0xe23d2f)), height: 1.4, headY: 0.6, armY: 0.05, armX: 0.66, legX: 0.24 }),
+  potato: () => ({ mesh: new THREE.Mesh(new THREE.SphereGeometry(0.6, 22, 18).scale(0.95, 1.15, 0.85), mat(0xc9a06a, { roughness: 0.9 })), height: 1.5, headY: 0.7, armY: 0.1, armX: 0.58, legX: 0.22 }),
+  broccoli: () => {
+    const grp = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.7, 14), mat(0xa9c66a));
+    stem.position.y = -0.35;
+    grp.add(stem);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 14), mat(0x3e8a3a, { roughness: 0.95 }));
+    head.position.y = 0.3;
+    grp.add(head);
+    for (let i = 0; i < 9; i++) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(rnd(0.16, 0.26), 10, 8), mat(0x357c31, { roughness: 0.95 }));
+      const a = (i / 9) * Math.PI * 2, r = 0.5;
+      b.position.set(Math.cos(a) * r, 0.3 + Math.sin(i * 1.7) * 0.35, Math.sin(a) * r);
+      grp.add(b);
+    }
+    return { mesh: grp, height: 1.7, headY: 0.9, armY: -0.1, armX: 0.5, legX: 0.2 };
+  },
+  cucumber: () => ({ mesh: new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 1.25, 8, 18), mat(0x4f9a3d)), height: 2.1, headY: 1.05, armY: 0.4, armX: 0.36, legX: 0.16 }),
+  eggplant: () => ({ mesh: new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 0.8, 8, 18).scale(1, 1, 0.95), mat(0x5b2a7a, { roughness: 0.4 })), height: 1.8, headY: 0.9, armY: 0.3, armX: 0.46, legX: 0.2 }),
+  corn: () => {
+    const grp = new THREE.Group();
+    const cob = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 1.0, 8, 18), mat(0xf2c744));
+    grp.add(cob);
+    for (let i = 0; i < 26; i++) {
+      const k = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), mat(0xffd76a));
+      const a = (i * 2.4) % (Math.PI * 2), y = -0.5 + (i / 26) * 1.0;
+      k.position.set(Math.cos(a) * 0.37, y, Math.sin(a) * 0.37);
+      grp.add(k);
+    }
+    return { mesh: grp, height: 1.9, headY: 0.95, armY: 0.35, armX: 0.4, legX: 0.18 };
+  },
+  cauliflower: () => {
+    const grp = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 14), mat(0xf3ead6, { roughness: 0.95 }));
+    grp.add(head);
+    for (let i = 0; i < 8; i++) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(rnd(0.18, 0.26), 10, 8), mat(0xfaf3e2, { roughness: 0.95 }));
+      const a = (i / 8) * Math.PI * 2;
+      b.position.set(Math.cos(a) * 0.48, Math.sin(i * 2.1) * 0.3, Math.sin(a) * 0.48);
+      grp.add(b);
+    }
+    const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.8, 0.35, 10, 1, true), mat(0x9bc46a, { side: THREE.DoubleSide }));
+    skirt.position.y = -0.45;
+    grp.add(skirt);
+    return { mesh: grp, height: 1.6, headY: 0.7, armY: 0.05, armX: 0.62, legX: 0.24 };
+  },
+};
+
+const HATS = {
+  none: () => null,
+  party: () => { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.62, 18), mat(pick([0xff6b9d, 0x5ab0ff, 0xffd447, 0x7fd36b]))); c.position.y = 0.31; g.add(c); const p = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xfff2c8)); p.position.y = 0.64; g.add(p); return g; },
+  sprout: () => { const g = new THREE.Group(); for (let i = -1; i <= 1; i++) { const l = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.34, 4, 8), mat(0x6cbf47)); l.position.set(i * 0.14, 0.24, 0); l.rotation.z = -i * 0.5; g.add(l); } return g; },
+  cap: () => { const g = new THREE.Group(); const d = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x3b6fd1)); g.add(d); const b = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.3), mat(0x3b6fd1)); b.position.set(0, 0.02, 0.36); g.add(b); return g; },
+  crown: () => { const g = new THREE.Group(); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.26, 0.24, 8, 1, true), mat(0xf0c419, { side: THREE.DoubleSide, metalness: 0.4, roughness: 0.35 })); r.position.y = 0.12; g.add(r); for (let i = 0; i < 8; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 4), mat(0xf0c419, { metalness: 0.4, roughness: 0.35 })); const a = (i / 8) * Math.PI * 2; s.position.set(Math.cos(a) * 0.29, 0.31, Math.sin(a) * 0.29); g.add(s); } return g; },
+  bow: () => { const g = new THREE.Group(); const c = mat(0xff5c8a); for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10).scale(1.3, 0.8, 0.6), c); w.position.set(s * 0.17, 0.12, 0); g.add(w); } const k = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), c); k.position.y = 0.12; g.add(k); return g; },
+};
+
+// limbs: a style returns { arm(), leg() } meshes whose origin is the socket
+const LIMBS = {
+  stick: { arm: () => limb(0.035, 0.55, 0x8b5a2b), leg: () => limb(0.04, 0.42, 0x8b5a2b) },
+  pipe: { arm: () => limb(0.075, 0.5, pick([0xff7a3d, 0x5ac8fa, 0xffd447, 0xff5c8a]), 0.9), leg: () => limb(0.08, 0.4, 0x7fd36b, 0.9) },
+  chunky: { arm: () => limb(0.11, 0.45, 0xf1c9a5, 0.7), leg: () => limb(0.12, 0.36, 0xf1c9a5, 0.7) },
+};
+function limb(r, len, color, rough = 0.8) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat(color, { roughness: rough }));
+  m.position.y = -len / 2; // hang from the socket
+  m.castShadow = true;
+  g.add(m);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 2.2, 10, 8), mat(color, { roughness: rough }));
+  tip.position.y = -len - r * 0.4;
+  g.add(tip);
+  return g;
+}
+
+function makeEyes(armX) {
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 12), mat(0xffffff, { roughness: 0.3 }));
+    w.position.set(s * armX * 0.42, 0, 0);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mat(0x1b1410, { roughness: 0.3 }));
+    p.position.set(0, 0, 0.085);
+    w.add(p);
+    g.add(w);
+  }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 8, 16, Math.PI), mat(0x7a2a1e));
+  mouth.rotation.z = Math.PI;
+  mouth.position.set(0, -0.2, 0.02);
+  g.add(mouth);
+  return g;
+}
+
+// ---- assembly ---------------------------------------------------------------
+// parts = { body, hat, limbs }  ->  a Creature with named sockets + animation state
+function assemble(parts) {
+  const root = new THREE.Group();          // feet on the ground (y=0)
+  const b = BODIES[parts.body]();
+  const bodyPivot = new THREE.Group();     // squash/waddle/bob happens here
+  bodyPivot.position.y = b.height * 0.52;
+  root.add(bodyPivot);
+  b.mesh.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+  bodyPivot.add(b.mesh);
+
+  const eyes = makeEyes(b.armX);
+  eyes.position.set(0, b.headY * 0.35, b.armX * 0.92);
+  bodyPivot.add(eyes);
+
+  const hat = HATS[parts.hat]();
+  if (hat) { hat.position.y = b.headY; hat.traverse((o) => { if (o.isMesh) o.castShadow = true; }); bodyPivot.add(hat); }
+
+  const L = LIMBS[parts.limbs];
+  const armL = L.arm(), armR = L.arm();
+  armL.position.set(-b.armX, b.armY, 0); armR.position.set(b.armX, b.armY, 0);
+  armL.rotation.z = 0.5; armR.rotation.z = -0.5;
+  bodyPivot.add(armL, armR);
+  const legL = L.leg(), legR = L.leg();
+  const legY = bodyPivot.position.y - b.height * 0.36;
+  legL.position.set(-b.legX, legY, 0); legR.position.set(b.legX, legY, 0);
+  root.add(legL, legR);
+
+  return { root, bodyPivot, armL, armR, legL, legR, height: b.height, t: rnd(0, 10), mode: "idle", modeT: 0 };
+}
+
+// procedural motion — the same for every body
+function animate(c, dt) {
+  c.t += dt; c.modeT += dt;
+  const t = c.t, bp = c.bodyPivot;
+  const rest = () => { bp.rotation.set(0, 0, 0); bp.scale.set(1, 1, 1); c.legL.rotation.x = c.legR.rotation.x = 0; };
+  switch (c.mode) {
+    case "walk": {
+      const s = Math.sin(t * 9);
+      bp.position.y = c.height * 0.52 + Math.abs(s) * 0.08;
+      bp.rotation.z = s * 0.09;
+      bp.rotation.x = 0.06;
+      c.legL.rotation.x = s * 0.7; c.legR.rotation.x = -s * 0.7;
+      c.armL.rotation.z = 0.5 + s * 0.25; c.armR.rotation.z = -0.5 + s * 0.25;
+      break;
+    }
+    case "wave": {
+      rest();
+      bp.position.y = c.height * 0.52 + Math.sin(t * 4) * 0.03;
+      c.armR.rotation.z = -2.6 + Math.sin(t * 12) * 0.35;
+      c.armR.rotation.x = -0.3;
+      c.armL.rotation.z = 0.5;
+      break;
+    }
+    case "jump": {
+      const p = Math.min(1, c.modeT / 0.75);
+      const arc = Math.sin(p * Math.PI);
+      bp.position.y = c.height * 0.52 + arc * 1.1;
+      const sq = p < 0.12 ? 1 - (0.12 - p) * 2 : 1 + arc * 0.08;
+      bp.scale.set(1 / sq, sq, 1 / sq);
+      c.legL.rotation.x = c.legR.rotation.x = -arc * 0.8;
+      c.legL.position.y = c.legR.position.y = bp.position.y - c.height * 0.36;
+      c.armL.rotation.z = 0.5 + arc * 1.6; c.armR.rotation.z = -0.5 - arc * 1.6;
+      if (c.modeT >= 0.75) { c.modeT = 0; c.jumps = (c.jumps || 0) + 1; if (c.jumps >= 3) { c.jumps = 0; c.mode = "idle"; } }
+      break;
+    }
+    case "spin": {
+      rest();
+      c.root.rotation.y += dt * 9;
+      c.armL.rotation.z = 1.3; c.armR.rotation.z = -1.3;
+      bp.position.y = c.height * 0.52 + Math.abs(Math.sin(t * 10)) * 0.05;
+      break;
+    }
+    case "dance": {
+      const s = Math.sin(t * 7), s2 = Math.sin(t * 7 + Math.PI / 2);
+      bp.rotation.z = s * 0.14;
+      bp.position.y = c.height * 0.52 + Math.abs(s2) * 0.1;
+      c.armL.rotation.z = 0.5 + (s > 0 ? 2.2 : 0.3);
+      c.armR.rotation.z = -0.5 - (s <= 0 ? 2.2 : 0.3);
+      c.legL.rotation.x = s * 0.3; c.legR.rotation.x = -s * 0.3;
+      break;
+    }
+    default: { // idle: breathe + tiny sway
+      rest();
+      bp.position.y = c.height * 0.52 + Math.sin(t * 2.2) * 0.03;
+      bp.scale.set(1 + Math.sin(t * 2.2) * 0.012, 1 - Math.sin(t * 2.2) * 0.012, 1);
+      bp.rotation.z = Math.sin(t * 0.9) * 0.03;
+      c.armL.rotation.z = 0.5 + Math.sin(t * 1.6) * 0.1; c.armR.rotation.z = -0.5 - Math.sin(t * 1.6 + 1) * 0.1;
+    }
+  }
+  if (c.mode !== "jump") { c.legL.position.y = c.legR.position.y = bp.position.y - c.height * 0.36; }
+  if (c.mode !== "spin") { // face where we walk, else the camera
+    const target = c.faceAngle ?? 0;
+    c.root.rotation.y += (target - c.root.rotation.y) * Math.min(1, dt * 6);
+  }
+}
+
+// ---- creatures on stage -----------------------------------------------------
+const onStage = new Map();
+const departed = new Set();
+try { for (const id of JSON.parse(localStorage.getItem("vc3d-departed") || "[]")) departed.add(id); } catch (e) {}
+function markDeparted(id) {
+  departed.add(id);
+  try { localStorage.setItem("vc3d-departed", JSON.stringify([...departed].slice(-300))); } catch (e) {}
+}
+const gone = (e) => Date.now() > e.at + STAY_MS(e);
+
+// until the matcher returns parts, derive hat/limbs from the record id
+function partsFor(entry) {
+  if (entry.parts) return entry.parts;
+  const h = hash(entry.id);
+  return {
+    body: BODIES[entry.variant] ? entry.variant : "carrot",
+    hat: Object.keys(HATS)[h % Object.keys(HATS).length],
+    limbs: Object.keys(LIMBS)[(h >>> 8) % Object.keys(LIMBS).length],
+  };
+}
+
+function freeSpot(self) {
+  for (let i = 0; i < 12; i++) {
+    const s = { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
+    const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 1.6);
+    if (!crowded) return s;
+  }
+  return { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
+}
+
+function addCreature(entry, isNew) {
+  const c = assemble(partsFor(entry));
+  c.entry = entry;
+  c.timers = [];
+  c.leaving = false;
+  const spot = freeSpot(c);
+  c.target = spot;
+  if (isNew) { c.root.position.set(-13, 0, spot.z); c.mode = "walk"; }
+  else { c.root.position.set(spot.x, 0, spot.z); c.mode = "idle"; }
+  c.speed = 2.6;
+  scene.add(c.root);
+  onStage.set(entry.id, c);
+  const later = (fn, ms) => c.timers.push(setTimeout(fn, ms));
+
+  // life: pick a behaviour every few seconds
+  function behave() {
+    if (c.leaving) return;
+    const r = Math.random();
+    if (r < 0.3) { c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...GROUND.x), z: THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z) }; c.mode = "walk"; }
+    else if (r < 0.5) { c.mode = "wave"; c.faceAngle = 0; }
+    else if (r < 0.65) { c.mode = "jump"; c.modeT = 0; c.faceAngle = 0; }
+    else if (r < 0.8) { c.mode = "spin"; }
+    else { c.mode = "dance"; c.faceAngle = 0; }
+    later(behave, rnd(3500, 7000));
+  }
+  later(behave, isNew ? 6000 : rnd(500, 2500));
+
+  // departure: wave bye, then walk off right
+  later(() => {
+    c.leaving = true;
+    c.mode = "wave"; c.faceAngle = 0;
+    later(() => { c.target = { x: 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200);
+  }, Math.max(entry.at + STAY_MS(entry) - Date.now(), DEMO ? 6000 : 15000));
+}
+
+function removeCreature(c) {
+  c.timers.forEach(clearTimeout);
+  scene.remove(c.root);
+  onStage.delete(c.entry.id);
+  markDeparted(c.entry.id);
+}
+
+// ---- data ------------------------------------------------------------------
+async function poll(first) {
+  try {
+    const r = await fetch("/api/creatures", { cache: "no-store" });
+    const j = await r.json();
+    const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
+    for (const e of [...latest].reverse()) {
+      if (!onStage.has(e.id) && !departed.has(e.id) && !gone(e)) addCreature(e, !first);
+    }
+    while (onStage.size > MAX_ON_STAGE) removeCreature(onStage.get([...onStage.keys()][0]));
+  } catch (e) { /* offline blip */ }
+}
+if (DEMO && location.search.includes("seed")) {
+  // local rehearsal without a server: a small crowd of mixed builds
+  const bodies = Object.keys(BODIES);
+  for (let i = 0; i < 6; i++) addCreature({ id: `${Date.now() - i * 777}-${bodies[i % bodies.length]}`, variant: bodies[i % bodies.length], at: Date.now() - i * 777 }, i < 2);
+} else {
+  poll(true);
+  setInterval(() => poll(false), POLL_MS);
+}
+
+// ---- loop ------------------------------------------------------------------
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, clock.getDelta());
+  for (const c of onStage.values()) {
+    if (c.mode === "walk") {
+      const dx = c.target.x - c.root.position.x, dz = c.target.z - c.root.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.faceAngle = 0; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
+      else {
+        const step = Math.min(d, c.speed * dt);
+        c.root.position.x += (dx / d) * step; c.root.position.z += (dz / d) * step;
+        c.faceAngle = Math.atan2(dx, dz); // +z is toward the camera
+      }
+    }
+    animate(c, dt);
+  }
+  renderer.render(scene, camera);
+  document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
+}
+fitBackdrop();
+frame();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  fitBackdrop();
+});
+
+// fullscreen + auto-hiding cursor
+const fsBtn = document.getElementById("fs");
+fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen?.().catch(() => {}));
+document.addEventListener("fullscreenchange", () => { fsBtn.style.display = document.fullscreenElement ? "none" : ""; });
+let cursorTimer;
+function wakeCursor() { document.body.classList.remove("hide-cursor"); clearTimeout(cursorTimer); cursorTimer = setTimeout(() => document.body.classList.add("hide-cursor"), 2500); }
+document.addEventListener("mousemove", wakeCursor);
+wakeCursor();
+</script>
+</body>
+</html>
