@@ -6,7 +6,7 @@ import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import { speak } from "../lib/guide";
-import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST } from "../lib/pose";
+import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_HIP, R_HIP } from "../lib/pose";
 
 // "Show it to the camera and it comes alive."
 // The station runs WITHOUT staff: big on-screen guidance + spoken Korean
@@ -396,34 +396,37 @@ function MagicStep({
   );
 }
 
-// -------- the dance mini-game: two magic moves wake the creature ------------
-// MediaPipe pose tracking picks the MAIN child (largest body in frame) and
-// draws a glowing outline around them so everyone can see who is recognised.
-// Stage 1: raise ONE hand overhead. Stage 2: raise BOTH hands (만세!) —
-// the two easiest poses to detect reliably. Deliberately forgiving for the
-// special-needs event: tapping the screen also charges, a trickle starts
-// after 10s and each stage hard-completes by ~20s, so nobody is ever stuck.
-// If the pose model cannot load, plain motion detection takes over.
-const STAGES = [
-  { prompt: "🙌 한 손을 머리 위로 번쩍!", voice: "마법 동작 시간이야! 한 손을 머리 위로 번쩍 들어 볼까?", hands: 1 },
-  { prompt: "🙌🙌 두 손 다 번쩍! 만세~!", voice: "우와, 잘했어! 이번엔 두 손 다 번쩍! 만세 해 볼까?", hands: 2 },
+// -------- the dance mini-game: one move per SCENE wakes the creature -------
+// Scene 1: JUMP (hip height dips above its rolling baseline). Scene 2: raise
+// both hands (만세). A "따라 해 봐!" demo card animates the move beside the
+// big camera view, the recognised child gets a glowing outline, and clearing
+// a scene pops a 통과! splash before the next scene slides in.
+// Deliberately forgiving: taps charge, a trickle starts after 10s, each scene
+// hard-completes by ~20s, and plain motion detection takes over if the pose
+// model cannot load.
+const SCENES = [
+  { prompt: "🐰 폴짝폴짝! 점프 두 번!", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
+  { prompt: "🙌 두 손 번쩍! 만세~!", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
 ];
-const STAGE_SPAN = 50; // gauge points per stage (2 stages -> 100)
 
 function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
   const vRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [gauge, setGauge] = useState(0);
-  const [stage, setStage] = useState(0);
+  const [scene, setScene] = useState(0);
+  const [cleared, setCleared] = useState(false);
   const gaugeRef = useRef(0);
-  const stageRef = useRef(0);
-  const stageT0 = useRef(Date.now());
+  const sceneRef = useRef(0);
+  const sceneT0 = useRef(Date.now());
+  const clearedRef = useRef(false);
   const doneRef = useRef(false);
+  const hipBase = useRef(0);
+  const lastJump = useRef(0);
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
 
   useEffect(() => {
-    speak(STAGES[0].voice);
+    speak(SCENES[0].voice);
   }, []);
 
   useEffect(() => {
@@ -435,21 +438,29 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
   }, [stream]);
 
   function charge(amount: number) {
-    if (doneRef.current) return;
-    const bound = (stageRef.current + 1) * STAGE_SPAN;
-    gaugeRef.current = Math.min(bound, gaugeRef.current + amount);
+    if (doneRef.current || clearedRef.current) return;
+    gaugeRef.current = Math.min(100, gaugeRef.current + amount);
     setGauge(gaugeRef.current);
-    if (gaugeRef.current >= bound) {
-      if (stageRef.current < STAGES.length - 1) {
-        stageRef.current += 1;
-        stageT0.current = Date.now();
-        setStage(stageRef.current);
-        sparkle();
-        speak(STAGES[stageRef.current].voice);
-      } else {
-        doneRef.current = true;
-        onFullRef.current();
-      }
+    if (gaugeRef.current < 100) return;
+    // scene cleared! pop the splash, then the next scene (or the finale)
+    sparkle();
+    if (sceneRef.current < SCENES.length - 1) {
+      clearedRef.current = true;
+      setCleared(true);
+      setTimeout(() => {
+        sceneRef.current += 1;
+        sceneT0.current = Date.now();
+        gaugeRef.current = 0;
+        hipBase.current = 0;
+        clearedRef.current = false;
+        setGauge(0);
+        setScene(sceneRef.current);
+        setCleared(false);
+        speak(SCENES[sceneRef.current].voice);
+      }, 1300);
+    } else {
+      doneRef.current = true;
+      onFullRef.current();
     }
   }
   const chargeRef = useRef(charge);
@@ -493,9 +504,20 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
             drawOverlay(v, boxes, main);
             if (main >= 0) {
               const lm = poses[main];
-              const headY = lm[NOSE].y - 0.03;
-              const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
-              if (up >= STAGES[stageRef.current].hands) chargeRef.current(5);
+              if (sceneRef.current === 0) {
+                // JUMP: hips rising sharply above their rolling standing level
+                const hipY = (lm[L_HIP].y + lm[R_HIP].y) / 2;
+                const b = hipBase.current || hipY;
+                hipBase.current = hipY > b ? hipY : b + (hipY - b) * 0.04;
+                if (hipBase.current - hipY > 0.05 && Date.now() - lastJump.current > 650) {
+                  lastJump.current = Date.now();
+                  chargeRef.current(50); // two jumps clear the scene
+                }
+              } else {
+                const headY = lm[NOSE].y - 0.03;
+                const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
+                if (up >= 2) chargeRef.current(8); // hold 만세 ~1.5s
+              }
             }
           } catch { /* one bad frame — skip */ }
         } else if (diffCtx) {
@@ -506,14 +528,14 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) chargeRef.current(2.5);
+            if (moved / (d.length / 16) > 0.04) chargeRef.current(3);
           }
           prev = d;
         }
       }
-      // never a dead end: per-stage trickle, hard-full within ~20s
-      const held = Date.now() - stageT0.current;
-      if (held > 10000) chargeRef.current(0.8);
+      // never a dead end: per-scene trickle, hard-full within ~20s
+      const held = Date.now() - sceneT0.current;
+      if (held > 10000) chargeRef.current(1);
       if (held > 20000) chargeRef.current(5);
     }, 130);
     return () => { stopped = true; clearInterval(id); };
@@ -540,8 +562,7 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
       const y1 = oy + Math.min(1, b.y1 + pad) * v.videoHeight * s;
       const mx0 = cw - x1, mx1 = cw - x0; // mirror to match the mirrored video
       ctx.beginPath();
-      const r = 22;
-      ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, r);
+      ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, 22);
       if (i === main) {
         const pulse = 0.75 + 0.25 * Math.sin(Date.now() / 220);
         ctx.lineWidth = 6;
@@ -562,15 +583,9 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
     });
   }
 
+  const sc = SCENES[scene];
   return (
-    <div className="dance-stage" onPointerDown={() => chargeRef.current(4)}>
-      <div className="dance-steps">
-        {STAGES.map((st, i) => (
-          <span key={i} className={`dance-step${i === stage ? " on" : i < stage ? " done" : ""}`}>
-            {i < stage ? "✅" : `${i + 1}.`} {st.prompt}
-          </span>
-        ))}
-      </div>
+    <div className="dance-stage" onPointerDown={() => chargeRef.current(6)}>
       <div className="dance-cam-box">
         {stream ? (
           <>
@@ -580,7 +595,15 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
         ) : (
           <div className="dance-cam dance-cam-ph">🥕✨</div>
         )}
-        <span className="dance-prompt">{STAGES[stage].prompt}</span>
+        <span className="dance-scene-no">{scene + 1} / {SCENES.length}</span>
+        <div className="dance-demo">
+          <span className={`demo-fig demo-${sc.demo}`} aria-hidden="true">
+            {sc.demo === "jump" ? "🐰" : <><span className="fa">🧍</span><span className="fb">🙌</span></>}
+          </span>
+          <span className="demo-label">따라 해 봐!</span>
+        </div>
+        <span className="dance-prompt">{sc.prompt}</span>
+        {cleared && <div className="dance-clear">통과! 🎉</div>}
       </div>
       <div className="magic-gauge" aria-hidden="true">
         <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />

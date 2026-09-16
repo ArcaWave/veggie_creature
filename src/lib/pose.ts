@@ -24,3 +24,5 @@ export function getPoseLandmarker(): Promise<PoseLandmarker> {
 export const NOSE = 0;
 export const L_WRIST = 15;
 export const R_WRIST = 16;
+export const L_HIP = 23;
+export const R_HIP = 24;

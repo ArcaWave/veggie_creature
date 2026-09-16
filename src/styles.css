@@ -531,14 +531,26 @@ body {
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
 /* dance mini-game: your own moves charge the magic gauge */
-.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(94vw, 640px); user-select: none; touch-action: manipulation; }
-.dance-cam-box { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
+.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(96vw, 1300px); user-select: none; touch-action: manipulation; }
+/* the recognition view stays BIG: as tall as the room allows */
+.dance-cam-box { position: relative; width: 100%; height: min(66vh, calc(100vh - 265px)); min-height: 300px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #241c10; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.dance-steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.dance-step { background: rgba(255, 255, 255, 0.7); color: var(--muted); font-weight: 800; font-size: clamp(14px, 2.4vmin, 20px); padding: 8px 16px; border-radius: 999px; transition: all 0.25s ease; }
-.dance-step.on { background: #fff; color: var(--green-dark); box-shadow: var(--shadow); transform: scale(1.06); }
-.dance-step.done { background: #f8ecd2; color: var(--ink); }
+.dance-scene-no { position: absolute; top: 14px; right: 16px; background: rgba(255, 255, 255, 0.9); color: var(--green-dark); font-weight: 800; font-size: clamp(15px, 2.4vmin, 22px); padding: 8px 16px; border-radius: 999px; box-shadow: var(--shadow); }
+/* "따라 해 봐!" demo card: an animated figure showing the move to copy */
+.dance-demo { position: absolute; top: 14px; left: 16px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: rgba(255, 255, 255, 0.92); border-radius: 20px; padding: 12px 20px 10px; box-shadow: var(--shadow); }
+.demo-fig { position: relative; display: block; font-size: clamp(40px, 8vmin, 72px); line-height: 1.15; }
+.demo-jump { animation: demoJump 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+@keyframes demoJump { 0%, 100% { transform: translateY(0) scale(1.04, 0.96); } 35% { transform: translateY(-26%) scale(0.97, 1.05); } 65% { transform: translateY(-8%); } }
+.demo-manse .fa, .demo-manse .fb { display: block; }
+.demo-manse .fb { position: absolute; inset: 0; opacity: 0; animation: demoSwap 1.4s steps(1) infinite; }
+.demo-manse .fa { animation: demoSwapA 1.4s steps(1) infinite; }
+@keyframes demoSwap { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes demoSwapA { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+.demo-label { font-weight: 800; color: var(--green-dark); font-size: clamp(13px, 2vmin, 18px); }
+/* scene-clear splash */
+.dance-clear { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(255, 251, 235, 0.95), rgba(255, 251, 235, 0.55) 70%, transparent); font-weight: 800; font-size: clamp(44px, 9vmin, 90px); color: var(--green-dark); animation: clearPop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes clearPop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
 .dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
