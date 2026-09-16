@@ -30,8 +30,16 @@ try {
   });
 } catch { /* no speech support */ }
 
+// Spoken guidance is OPT-IN (?voice on the kiosk URL): even a browser that
+// LISTS a Korean voice can silently fall back to the default English one when
+// that voice isn't actually installed — which reads Korean text as just its
+// punctuation ("exclamation point", "comma"). Off by default; the on-screen
+// text carries the whole flow.
+const VOICE_ON = new URLSearchParams(location.search).has("voice");
+
 export function speak(text: string) {
   try {
+    if (!VOICE_ON) return;
     if (!sfxEnabled()) return; // the 🔇 toggle silences guidance too
     const synth = window.speechSynthesis;
     if (!synth) return;
