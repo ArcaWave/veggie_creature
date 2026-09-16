@@ -14,19 +14,37 @@ function pickVoice() {
     null;
   return koVoice;
 }
-// voices load async in Chrome — warm the cache when they arrive
+// voices load async in Chrome — warm the cache when they arrive, and flush
+// any line that was requested before the list was ready
+let pending: string | null = null;
 try {
-  window.speechSynthesis?.addEventListener?.("voiceschanged", () => { koVoice = null; pickVoice(); });
+  window.speechSynthesis?.addEventListener?.("voiceschanged", () => {
+    koVoice = null;
+    if (pickVoice() && pending) {
+      const t = pending;
+      pending = null;
+      speak(t);
+    }
+  });
 } catch { /* no speech support */ }
 
 export function speak(text: string) {
   try {
     const synth = window.speechSynthesis;
     if (!synth) return;
+    const v = pickVoice();
+    // WITHOUT a Korean voice, never speak: a default English voice skips the
+    // Hangul and reads only the punctuation aloud ("exclamation point…").
+    // Park the line instead — voiceschanged above delivers it if a Korean
+    // voice shows up; otherwise the on-screen text carries the flow.
+    if (!v) {
+      pending = text;
+      return;
+    }
+    pending = null;
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    const v = pickVoice();
-    if (v) u.voice = v;
+    u.voice = v;
     u.lang = "ko-KR";
     u.rate = 0.95;
     u.pitch = 1.1;
