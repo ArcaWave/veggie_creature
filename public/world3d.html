@@ -68,20 +68,20 @@ camera.lookAt(0, 1.1, -1.5);
 // painted backdrops, glued to the CAMERA at a fixed distance and sized exactly
 // like CSS `cover` (never stretched beyond what the screen needs). The scene
 // rotates every ROTATE_MS with a crossfade; the slot comes from the wall clock
-// so refreshes and both PCs agree. ?bg=day|field|night forces one.
+// so refreshes and both PCs agree. ?bg=harvest|field|night forces one.
 // ground: where feet may land (x range at the far z edge; xNear = the x range
 // at the near edge when the painted floor tapers). cam: this painting's eye
 // height — a diorama shot from table height needs a lower camera than the
-// courtyard, and the camera glides between scenes with the crossfade.
+// moon village, and the camera glides between scenes with the crossfade.
 const BACKDROP_D = 32;
 const DEFAULT_CAM = { pos: [0, 3.2, 12], look: [0, 1.1, -1.5] };
 const texLoader = new THREE.TextureLoader();
 const SCENES = {
-  day:   { label: "한옥 노을", src: "/main-bg.png",        aspect: 1672 / 941, ground: { x: [-7.5, 7.5], z: [-5.5, 4.5] }, hemi: [0xffe9c8, 0x7a4a26, 0.95], sun: [0xffe0b0, 1.55], rim: [0xffb070, 0.9] },
+  harvest: { label: "황금 들녘", src: "/world3d-harvest.png", aspect: 1672 / 941, ground: { x: [-4.8, 4.8], xNear: [-2.6, 2.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff0d0, 0x9a6a3a, 1.0], sun: [0xffe8b8, 1.5], rim: [0xffc070, 0.7] },
   field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7] },
   night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8] },
 };
-const SCENE_ORDER = ["day", "field", "night"];
+const SCENE_ORDER = ["harvest", "field", "night"];
 const _q = new URLSearchParams(location.search);
 const FORCED_SCENE = SCENE_ORDER.includes(_q.get("bg")) ? _q.get("bg") : null;
 const ROTATE_MS = Math.max(0.5, Number(_q.get("rotate")) || 10) * 60000;
@@ -98,7 +98,7 @@ function fitBackdrop() {
   const vh = 2 * BACKDROP_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   const vw = vh * camera.aspect;
   for (const [m, name] of [[bgA, bgA.userData.scene], [bgB, bgB.userData.scene]]) {
-    const sc = SCENES[name] || SCENES.day;
+    const sc = SCENES[name] || SCENES[SCENE_ORDER[0]];
     const lift = vh * (sc.lift ?? 0.06);      // the painting's floor meets the 3D ground
     const w = Math.max(vw, (vh + lift * 2) * sc.aspect); // cover, including the lifted strip
     m.scale.set(w, w / sc.aspect, 1);
@@ -473,7 +473,7 @@ function frame() {
     bgB.material.opacity = fading.t;
     if (fading.t >= 1) { bgA.material.map = bgB.material.map; bgA.userData.scene = bgB.userData.scene; bgA.material.needsUpdate = true; bgB.material.opacity = 0; fading = null; fitBackdrop(); }
   }
-  { const sc = SCENES[currentScene] || SCENES.day; const k = Math.min(1, dt * 1.5);
+  { const sc = SCENES[currentScene] || SCENES[SCENE_ORDER[0]]; const k = Math.min(1, dt * 1.5);
     hemi.color.lerp(new THREE.Color(sc.hemi[0]), k); hemi.groundColor.lerp(new THREE.Color(sc.hemi[1]), k); hemi.intensity += (sc.hemi[2] - hemi.intensity) * k;
     sun.color.lerp(new THREE.Color(sc.sun[0]), k); sun.intensity += (sc.sun[1] - sun.intensity) * k;
     rim.color.lerp(new THREE.Color(sc.rim[0]), k); rim.intensity += (sc.rim[1] - rim.intensity) * k; }
