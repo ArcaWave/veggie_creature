@@ -1,3 +1,5 @@
+import { sfxEnabled } from "./sfx";
+
 // Spoken guidance for the staff-less kiosk, via the browser's built-in Korean
 // TTS (offline, free — unlike lib/voice.ts, which is the legacy Typecast
 // character voice). Every call cancels the previous line so prompts never pile
@@ -30,6 +32,7 @@ try {
 
 export function speak(text: string) {
   try {
+    if (!sfxEnabled()) return; // the 🔇 toggle silences guidance too
     const synth = window.speechSynthesis;
     if (!synth) return;
     const v = pickVoice();
@@ -43,7 +46,8 @@ export function speak(text: string) {
     }
     pending = null;
     synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    // belt-and-braces: strip punctuation so no engine can ever read it aloud
+    const u = new SpeechSynthesisUtterance(text.replace(/[!?~…]/g, ","));
     u.voice = v;
     u.lang = "ko-KR";
     u.rate = 0.95;
