@@ -238,7 +238,7 @@ function MagicStep({
   onRetryCloser: () => void;
   onDone: () => void;
 }) {
-  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk";
+  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk" | "sendoff";
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -317,8 +317,13 @@ function MagicStep({
           body: JSON.stringify({ variant: v }),
         }).catch(() => {});
         later(() => {
-          track("build_done", { variant: v });
-          onDone();
+          // tell the child where to go next — then reset for the next family
+          setPhase("sendoff");
+          speak("옆에 있는 디지털 마을 화면에서 네 친구를 확인해 봐!");
+          later(() => {
+            track("build_done", { variant: v });
+            onDone();
+          }, 5000);
         }, 5200); // walk duration + a breath
       }, 3200);
     }, 1600);
@@ -342,6 +347,20 @@ function MagicStep({
       <div className="screen center-screen" style={{ alignItems: "center" }}>
         <p className="lead">🕺 마법 동작으로 채소 친구를 깨워 줘!</p>
         <DanceCharge stream={stream} onFull={danceDone} />
+      </div>
+    );
+  }
+
+  if (phase === "sendoff") {
+    return (
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <div className="sendoff-card">
+          <span className="sendoff-emoji" aria-hidden="true">🏘️</span>
+          <p className="sendoff-title">디지털 마을로 떠났어요!</p>
+          <p className="sendoff-sub">
+            옆 화면 <span className="sendoff-arrow">👉</span> 디지털 마을에서<br />네 친구를 확인해 봐!
+          </p>
+        </div>
       </div>
     );
   }

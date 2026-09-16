@@ -577,3 +577,11 @@ body {
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }
+
+/* send-off: after the creature leaves, point the child at the display wall */
+.sendoff-card { display: flex; flex-direction: column; align-items: center; gap: 12px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 44px 64px; text-align: center; animation: pop 0.35s ease; }
+.sendoff-emoji { font-size: clamp(64px, 13vmin, 120px); animation: idle 3s ease-in-out infinite; }
+.sendoff-title { margin: 0; font-weight: 800; font-size: clamp(28px, 5vmin, 48px); color: var(--green-dark); }
+.sendoff-sub { margin: 0; font-weight: 800; font-size: clamp(20px, 3.6vmin, 34px); color: var(--ink); line-height: 1.5; }
+.sendoff-arrow { display: inline-block; font-size: 1.25em; animation: arrowNudge 0.9s ease-in-out infinite; }
+@keyframes arrowNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(12px); } }
