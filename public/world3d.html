@@ -17,6 +17,7 @@
 <button id="fs" title="전체화면">⛶</button>
 <div id="hud"></div>
 
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
 <script type="module">
 // =====================================================================
 // The Digital Village in REAL 3D (Three.js). Creatures are ASSEMBLED from
@@ -26,7 +27,8 @@
 // This first cut uses primitive geometry for the parts; each body/hat can be
 // swapped for a real mesh (image-to-3D GLB) without touching the system.
 // =====================================================================
-import * as THREE from "/vendor/three/three.module.js";
+import * as THREE from "three";
+import { GLTFLoader } from "/vendor/three/examples/jsm/loaders/GLTFLoader.js";
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 const DEBUG = new URLSearchParams(location.search).has("debug");
@@ -56,19 +58,26 @@ const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 10
 camera.position.set(0, 3.2, 12);
 camera.lookAt(0, 1.1, -1.5);
 
-// painted courtyard as a far backdrop; the 3D ground sits on its stone floor
-const BACKDROP_Z = -20;
+// painted courtyard as a backdrop. It is a child of the CAMERA at a fixed
+// distance, sized to cover the view exactly like CSS `cover` — never stretched
+// beyond what the screen needs, so the art stays as sharp as its pixels allow.
+const BACKDROP_D = 32;
 const texLoader = new THREE.TextureLoader();
-const bgTex = texLoader.load("/main-bg.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; });
-const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: bgTex }));
-backdrop.position.set(0, 0, BACKDROP_Z);
-scene.add(backdrop);
+const bgTex = texLoader.load("/main-bg.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.minFilter = THREE.LinearMipmapLinearFilter; });
+const BG_ASPECT = 1672 / 941;
+const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: bgTex, toneMapped: false }));
+backdrop.position.set(0, 0, -BACKDROP_D);
+camera.add(backdrop);
+scene.add(camera);
 function fitBackdrop() {
-  const d = camera.position.z - BACKDROP_Z;
-  const h = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.4;
-  const w = Math.max(h * (16 / 9), h * camera.aspect);
-  backdrop.scale.set(w, w * (9 / 16), 1);
-  backdrop.position.y = camera.position.y - 0.9; // horizon of the painting ≈ upper-middle
+  const vh = 2 * BACKDROP_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const vw = vh * camera.aspect;
+  // cover: match the wider constraint, keep the image's own aspect
+  const w = Math.max(vw, vh * BG_ASPECT);
+  backdrop.scale.set(w, w / BG_ASPECT, 1);
+  // the painting's stone floor should meet the 3D ground: nudge the art up a
+  // little so its horizon sits where the camera looks
+  backdrop.position.y = vh * 0.06;
 }
 
 // ground: invisible except for the shadows it catches (the painting shows through)
@@ -110,14 +119,14 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, rough
 // bodies: sticker + where things attach (fractions: y from the TOP of the
 // sticker, x of the half-width)
 const BODIES = {
-  carrot:      { tex: "/parts/clay_body_carrot.png",      aspect: 313 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.16, armY: 0.50, armX: 0.96, legX: 0.4 },
-  eggplant:    { tex: "/parts/clay_body_eggplant.png",    aspect: 410 / 700, h: 1.9,  ax: 0.5, ay: 1.0, hatY: 0.15, armY: 0.56, armX: 0.94, legX: 0.36 },
-  tomato:      { tex: "/parts/clay_body_tomato.png",      aspect: 584 / 625, h: 1.45, ax: 0.5, ay: 1.0, hatY: 0.22, armY: 0.52, armX: 0.94, legX: 0.3 },
-  potato:      { tex: "/parts/clay_body_potato.png",      aspect: 546 / 700, h: 1.6,  ax: 0.5, ay: 1.0, hatY: 0.09, armY: 0.5, armX: 0.94, legX: 0.34 },
-  cucumber:    { tex: "/parts/clay_body_cucumber.png",    aspect: 358 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.05, armY: 0.50, armX: 0.96, legX: 0.4 },
-  corn:        { tex: "/parts/clay_body_corn.png",        aspect: 370 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.18, armY: 0.55, armX: 0.94, legX: 0.4 },
-  broccoli:    { tex: "/parts/clay_body_broccoli.png",    aspect: 584 / 700, h: 1.75, ax: 0.5, ay: 1.0, hatY: 0.06, armY: 0.5, armX: 0.9, legX: 0.22 },
-  cauliflower: { tex: "/parts/clay_body_cauliflower.png", aspect: 700 / 600, h: 1.35, ax: 0.5, ay: 1.0, hatY: 0.1, armY: 0.56, armX: 0.9, legX: 0.3 },
+  carrot:      { tex: "/parts/cute_body_carrot.png",      aspect: 466 / 800, h: 1.9,  ax: 0.5, ay: 1.0, hatY: 0.14, armY: 0.52, armX: 0.92, legX: 0.36 },
+  eggplant:    { tex: "/parts/cute_body_eggplant.png",    aspect: 583 / 793, h: 1.8,  ax: 0.5, ay: 1.0, hatY: 0.12, armY: 0.56, armX: 0.92, legX: 0.34 },
+  tomato:      { tex: "/parts/cute_body_tomato.png",      aspect: 716 / 730, h: 1.5,  ax: 0.5, ay: 1.0, hatY: 0.14, armY: 0.55, armX: 0.92, legX: 0.3 },
+  potato:      { tex: "/parts/cute_body_potato.png",      aspect: 667 / 800, h: 1.65, ax: 0.5, ay: 1.0, hatY: 0.06, armY: 0.52, armX: 0.92, legX: 0.32 },
+  cucumber:    { tex: "/parts/cute_body_cucumber.png",    aspect: 587 / 800, h: 1.85, ax: 0.5, ay: 1.0, hatY: 0.05, armY: 0.52, armX: 0.92, legX: 0.34 },
+  corn:        { tex: "/parts/cute_body_corn.png",        aspect: 608 / 716, h: 1.7,  ax: 0.5, ay: 1.0, hatY: 0.12, armY: 0.55, armX: 0.9, legX: 0.34 },
+  broccoli:    { tex: "/parts/cute_body_broccoli.png",    aspect: 736 / 794, h: 1.75, ax: 0.5, ay: 1.0, hatY: 0.06, armY: 0.55, armX: 0.9, legX: 0.26 },
+  cauliflower: { tex: "/parts/cute_body_cauliflower.png", aspect: 738 / 594, h: 1.35, ax: 0.5, ay: 1.0, hatY: 0.08, armY: 0.58, armX: 0.9, legX: 0.3 },
 };
 
 // ---- sticker parts ----------------------------------------------------------
@@ -129,19 +138,19 @@ const BODIES = {
 const PARTS = {
   hats: {
     none: null,
-    leaves:  { tex: "/parts/clay_hat_leaves.png",  h: 0.62, aspect: 671 / 543, ax: 0.5, ay: 0.97 },
-    acorn:   { tex: "/parts/clay_hat_acorn.png",   h: 0.74, aspect: 599 / 700, ax: 0.5, ay: 0.96 },
-    straw:   { tex: "/parts/clay_hat_straw.png",   h: 0.44, aspect: 700 / 370, ax: 0.5, ay: 0.82 },
+    leaves:  { tex: "/parts/cute_hat_leaves.png",  h: 0.5,  aspect: 518 / 416, ax: 0.5, ay: 0.96 },
+    acorn:   { tex: "/parts/cute_hat_acorn.png",   h: 0.62, aspect: 545 / 604, ax: 0.5, ay: 0.95 },
+    straw:   { tex: "/parts/cute_hat_straw.png",   h: 0.4,  aspect: 719 / 367, ax: 0.5, ay: 0.82 },
   },
   arms: {
-    twig:     { tex: "/parts/clay_arm_twig.png",     h: 0.82, aspect: 370 / 700, ax: 0.48, ay: 0.03 },
-    cucumber: { tex: "/parts/clay_arm_cucumber.png", h: 0.8,  aspect: 290 / 700, ax: 0.5,  ay: 0.03 },
-    carrot:   { tex: "/parts/clay_arm_carrot.png",   h: 0.8,  aspect: 256 / 638, ax: 0.5,  ay: 0.04 },
+    twig:     { tex: "/parts/cute_arm_twig.png",     h: 0.72, aspect: 350 / 659, ax: 0.5, ay: 0.04 },
+    cucumber: { tex: "/parts/cute_arm_cucumber.png", h: 0.75, aspect: 344 / 800, ax: 0.5, ay: 0.03 },
+    carrot:   { tex: "/parts/cute_arm_carrot.png",   h: 0.75, aspect: 278 / 800, ax: 0.5, ay: 0.04 },
   },
   legs: {
-    twig:     { tex: "/parts/clay_leg_twig.png",     h: 0.62, aspect: 312 / 700, ax: 0.5, ay: 0.03 },
-    cucumber: { tex: "/parts/clay_leg_cucumber.png", h: 0.6,  aspect: 296 / 700, ax: 0.5, ay: 0.03 },
-    carrot:   { tex: "/parts/clay_leg_carrot.png",   h: 0.62, aspect: 296 / 700, ax: 0.5, ay: 0.03 },
+    twig:     { tex: "/parts/cute_leg_twig.png",     h: 0.58, aspect: 420 / 800, ax: 0.5, ay: 0.03 },
+    cucumber: { tex: "/parts/cute_leg_cucumber.png", h: 0.55, aspect: 291 / 587, ax: 0.5, ay: 0.03 },
+    carrot:   { tex: "/parts/cute_leg_carrot.png",   h: 0.58, aspect: 361 / 771, ax: 0.5, ay: 0.03 },
   },
 };
 const RIG = new URLSearchParams(location.search).has("rig");
@@ -150,14 +159,21 @@ function getTex(url) {
   if (!stickerTex[url]) { const t = texLoader.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; stickerTex[url] = t; }
   return stickerTex[url];
 }
-// a sticker: a thin double-sided plane whose origin is its ANCHOR point
+// a PART: a real 3D model (GLB, normalised to `h` tall with its ANCHOR at the
+// origin) when one exists, else a flat sticker plane. The sticker shows while
+// a model is still loading, so the show never waits.
+const gltf = new GLTFLoader();
+const modelCache = {};
+function loadModel(url) {
+  if (!modelCache[url]) modelCache[url] = new Promise((res, rej) => gltf.load(url, (g) => res(g.scene), undefined, rej));
+  return modelCache[url];
+}
 function sticker(def, mirror = false) {
   const g = new THREE.Group();
   if (!def) return g;
   const h = def.h, w = h * def.aspect;
   const ax = def.ax ?? 0.5, ay = def.ay ?? 0.5;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: getTex(def.tex), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
-  // move the anchor to the origin (mirror flips the x offset with the image)
   const ox = w / 2 - ax * w, oy = ay * h - h / 2;
   const inner = new THREE.Group();
   m.position.set(ox, oy, 0);
@@ -166,24 +182,26 @@ function sticker(def, mirror = false) {
   if (def.rot) inner.rotation.z = def.rot;
   if (mirror) inner.scale.x = -1;
   g.add(inner);
-  if (RIG) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff88 })); g.add(dot); const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, h)), new THREE.LineBasicMaterial({ color: 0x00ffcc })); box.position.copy(m.position); inner.add(box); }
-  return g;
-}
-
-function makeEyes(armX) {
-  const g = new THREE.Group();
-  for (const s of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), mat(0xffffff, { roughness: 0.25 }));
-    w.position.set(s * armX, 0, 0);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), mat(0x1b1410, { roughness: 0.2 }));
-    p.position.set(0, -0.01, 0.09);
-    w.add(p);
-    g.add(w);
+  g.userData.flat = true;
+  if (def.model && HAVE_MODELS.has(def.model.split('/').pop())) {
+    loadModel(def.model).then((src) => {
+      const model = src.clone(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const k = h / size.y;
+      model.scale.setScalar(k);
+      box.setFromObject(model);
+      // anchor: ax from the left, ay from the top of the model's bounds; depth centred
+      const anchor = new THREE.Vector3(box.min.x + (box.max.x - box.min.x) * ax, box.max.y - (box.max.y - box.min.y) * ay, (box.min.z + box.max.z) / 2);
+      model.position.sub(anchor);
+      model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      if (mirror) model.scale.x *= -1;
+      g.remove(inner);
+      g.add(model);
+      g.userData.flat = false;
+    }).catch(() => { /* keep the sticker */ });
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 8, 16, Math.PI), mat(0x6e2418));
-  mouth.rotation.z = Math.PI;
-  mouth.position.set(0, -0.2, 0.02);
-  g.add(mouth);
+  if (RIG) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff88 })); g.add(dot); }
   return g;
 }
 
@@ -218,7 +236,7 @@ function assemble(parts) {
   legL.position.set(-legX, legY, -0.02); legR.position.set(legX, legY, -0.02);
   root.add(legL, legR);
 
-  return { root, bodyPivot, armL, armR, legL, legR, height: b.h, baseY, legY, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
+  return { root, body, bodyPivot, armL, armR, legL, legR, height: b.h, baseY, legY, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
 }
 
 // procedural motion — the same for every body
@@ -291,7 +309,10 @@ function animate(c, dt) {
     }
   }
   if (c.mode !== "jump") { c.legL.position.y = c.legR.position.y = c.legY + (bp.position.y - c.baseY); }
-  if (c.mode !== "spin" && c.mode !== "pop") c.root.scale.x += (c.dir - c.root.scale.x) * Math.min(1, dt * 10); // mirror to face the way we walk
+  if (c.mode !== "spin" && c.mode !== "pop") {
+    if (c.body.userData.flat) c.root.scale.x += (c.dir - c.root.scale.x) * Math.min(1, dt * 10); // flat doll: mirror
+    else { c.root.scale.x = 1; const target = c.dir < 0 ? -Math.PI / 2.6 : (c.mode === "walk" ? Math.PI / 2.6 : 0); c.root.rotation.y += (target - c.root.rotation.y) * Math.min(1, dt * 6); } // solid: turn
+  }
   bp.rotation.y = 0;
 }
 
@@ -360,6 +381,14 @@ function markDeparted(id) {
 const gone = (e) => Date.now() > e.at + STAY_MS(e);
 
 // until the matcher returns parts, derive hat/limbs from the record id
+// every catalog entry gets a matching model slot (/models/<name>.glb); the
+// loader falls back to the sticker when the file isn't there yet
+const withModel = (def) => (def ? { ...def, model: def.tex.replace("/parts/", "/models/").replace(".png", ".glb") } : def);
+for (const k in BODIES) BODIES[k] = withModel(BODIES[k]);
+for (const grp of ["hats", "arms", "legs"]) for (const k in PARTS[grp]) PARTS[grp][k] = withModel(PARTS[grp][k]);
+const HAVE_MODELS = new Set(); // filled from /models/index.json (which parts already have 3D)
+fetch("/models/index.json").then((r) => r.json()).then((j) => { for (const n of j.models || []) HAVE_MODELS.add(n); }).catch(() => {});
+
 function partsFor(entry) {
   if (entry.parts) return entry.parts;
   const h = hash(entry.id);
