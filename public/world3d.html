@@ -62,14 +62,20 @@ camera.lookAt(0, 1.1, -1.5);
 // painted backdrops, glued to the CAMERA at a fixed distance and sized exactly
 // like CSS `cover` (never stretched beyond what the screen needs). The scene
 // rotates every ROTATE_MS with a crossfade; the slot comes from the wall clock
-// so refreshes and both PCs agree. ?bg=day|night forces one.
+// so refreshes and both PCs agree. ?bg=day|field|night forces one.
+// ground: where feet may land (x range at the far z edge; xNear = the x range
+// at the near edge when the painted floor tapers). cam: this painting's eye
+// height — a diorama shot from table height needs a lower camera than the
+// courtyard, and the camera glides between scenes with the crossfade.
 const BACKDROP_D = 32;
+const DEFAULT_CAM = { pos: [0, 3.2, 12], look: [0, 1.1, -1.5] };
 const texLoader = new THREE.TextureLoader();
 const SCENES = {
   day:   { src: "/main-bg.png",        aspect: 1672 / 941, ground: { x: [-7.5, 7.5], z: [-5.5, 4.5] }, hemi: [0xffe9c8, 0x7a4a26, 0.95], sun: [0xffe0b0, 1.55], rim: [0xffb070, 0.9] },
+  field: { src: "/world3d-field.png",  aspect: 1672 / 941, ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7] },
   night: { src: "/world3d-night.png",  aspect: 1672 / 941, ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8] },
 };
-const SCENE_ORDER = ["day", "night"];
+const SCENE_ORDER = ["day", "field", "night"];
 const _q = new URLSearchParams(location.search);
 const FORCED_SCENE = SCENE_ORDER.includes(_q.get("bg")) ? _q.get("bg") : null;
 const ROTATE_MS = Math.max(0.5, Number(_q.get("rotate")) || 10) * 60000;
@@ -103,8 +109,21 @@ function applyScene(name, instant) {
   }
   currentScene = name;
   GROUND = sc.ground || GROUND;
+  camGoal = sc.cam || DEFAULT_CAM;
+  if (instant) { camera.position.set(...camGoal.pos); camLook.set(...camGoal.look); camera.lookAt(camLook); }
+  else for (const c of onStage.values()) { // anyone now standing on a painted prop strolls back onto the floor
+    const p = c.root.position, [x0, x1] = groundX(p.z);
+    if (!c.leaving && (p.x < x0 || p.x > x1 || p.z < GROUND.z[0] || p.z > GROUND.z[1])) { c.target = freeSpot(c); c.mode = "walk"; }
+  }
   fitBackdrop();
 }
+let camGoal = DEFAULT_CAM;
+const camLook = new THREE.Vector3(...DEFAULT_CAM.look);
+const groundX = (z) => { // painted floors narrow toward the viewer: x range at this depth
+  if (!GROUND.xNear) return GROUND.x;
+  const t = THREE.MathUtils.clamp((z - GROUND.z[0]) / (GROUND.z[1] - GROUND.z[0]), 0, 1);
+  return [THREE.MathUtils.lerp(GROUND.x[0], GROUND.xNear[0], t), THREE.MathUtils.lerp(GROUND.x[1], GROUND.xNear[1], t)];
+};
 // ground: invisible except for the shadows it catches (the painting shows through)
 let GROUND = { x: [-7.5, 7.5], z: [-5.5, 4.5] };
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), new THREE.ShadowMaterial({ opacity: 0.32 }));
@@ -343,11 +362,13 @@ function partsFor(entry) {
 
 function freeSpot(self) {
   for (let i = 0; i < 12; i++) {
-    const s = { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
+    const z = rnd(...GROUND.z);
+    const s = { x: rnd(...groundX(z)), z };
     const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4);
     if (!crowded) return s;
   }
-  return { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
+  const z = rnd(...GROUND.z);
+  return { x: rnd(...groundX(z)), z };
 }
 
 function addCreature(entry, isNew) {
@@ -373,7 +394,7 @@ function addCreature(entry, isNew) {
   function behave() {
     if (c.leaving) return;
     const r = Math.random();
-    if (r < 0.3) { c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...GROUND.x), z: THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z) }; c.mode = "walk"; }
+    if (r < 0.3) { const z = THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z); c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...groundX(z)), z }; c.mode = "walk"; }
     else if (r < 0.5) { c.mode = "wave"; c.dir = 1; }
     else if (r < 0.72) { c.mode = "jump"; c.modeT = 0; c.dir = 1; }
     else { c.mode = "dance"; c.dir = 1; }
@@ -448,6 +469,12 @@ function frame() {
     hemi.color.lerp(new THREE.Color(sc.hemi[0]), k); hemi.groundColor.lerp(new THREE.Color(sc.hemi[1]), k); hemi.intensity += (sc.hemi[2] - hemi.intensity) * k;
     sun.color.lerp(new THREE.Color(sc.sun[0]), k); sun.intensity += (sc.sun[1] - sun.intensity) * k;
     rim.color.lerp(new THREE.Color(sc.rim[0]), k); rim.intensity += (sc.rim[1] - rim.intensity) * k; }
+  if (!CLOSEUP) { // ease the eye height to this scene's painting
+    const k = Math.min(1, dt * 1.4);
+    camera.position.lerp(new THREE.Vector3(...camGoal.pos), k);
+    camLook.lerp(new THREE.Vector3(...camGoal.look), k);
+    camera.lookAt(camLook);
+  }
   for (const c of onStage.values()) {
     if (c.mode === "walk") {
       const dx = c.target.x - c.root.position.x, dz = c.target.z - c.root.position.z;
@@ -465,6 +492,7 @@ function frame() {
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
 setInterval(() => applyScene(sceneNow()), 10000);
+if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES }; // rehearse scene changes from the console
 frame();
 
 addEventListener("resize", () => {
