@@ -40,7 +40,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const hash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
 // ---- stage -----------------------------------------------------------------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: /[?&](rig|closeup|shot)/.test(location.search) }); // canvas readback for asset review
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -64,7 +64,7 @@ backdrop.position.set(0, 0, BACKDROP_Z);
 scene.add(backdrop);
 function fitBackdrop() {
   const d = camera.position.z - BACKDROP_Z;
-  const h = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.06;
+  const h = 2 * d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.4;
   const w = Math.max(h * (16 / 9), h * camera.aspect);
   backdrop.scale.set(w, w * (9 / 16), 1);
   backdrop.position.y = camera.position.y - 0.9; // horizon of the painting ≈ upper-middle
@@ -109,56 +109,63 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, rough
 // bodies: sticker + where things attach (fractions: y from the TOP of the
 // sticker, x of the half-width)
 const BODIES = {
-  carrot:      { tex: "/parts/body_carrot.png",      aspect: 273 / 700, h: 2.0, hatY: 0.06, faceY: 0.40, armY: 0.50, armX: 0.85, legX: 0.5 },
-  eggplant:    { tex: "/parts/body_eggplant.png",    aspect: 417 / 700, h: 1.9, hatY: 0.10, faceY: 0.44, armY: 0.58, armX: 0.88, legX: 0.4 },
-  tomato:      { tex: "/parts/body_tomato.png",      aspect: 585 / 554, h: 1.45, hatY: 0.08, faceY: 0.42, armY: 0.55, armX: 0.9, legX: 0.32 },
-  potato:      { tex: "/parts/body_potato.png",      aspect: 524 / 684, h: 1.6, hatY: 0.03, faceY: 0.36, armY: 0.5, armX: 0.9, legX: 0.36 },
-  cucumber:    { tex: "/parts/body_cucumber.png",    aspect: 337 / 700, h: 2.0, hatY: 0.03, faceY: 0.34, armY: 0.5, armX: 0.88, legX: 0.45 },
-  corn:        { tex: "/parts/body_corn.png",        aspect: 508 / 700, h: 2.0, hatY: 0.02, faceY: 0.38, armY: 0.52, armX: 0.7, legX: 0.36 },
-  broccoli:    { tex: "/parts/body_broccoli.png",    aspect: 678 / 700, h: 1.8, hatY: 0.04, faceY: 0.34, armY: 0.5, armX: 0.8, legX: 0.22 },
-  cauliflower: { tex: "/parts/body_cauliflower.png", aspect: 700 / 429, h: 1.3, hatY: 0.05, faceY: 0.42, armY: 0.6, armX: 0.7, legX: 0.3 },
+  carrot:      { tex: "/parts/clay_body_carrot.png",      aspect: 313 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.16, armY: 0.50, armX: 0.96, legX: 0.4 },
+  eggplant:    { tex: "/parts/clay_body_eggplant.png",    aspect: 410 / 700, h: 1.9,  ax: 0.5, ay: 1.0, hatY: 0.15, armY: 0.56, armX: 0.94, legX: 0.36 },
+  tomato:      { tex: "/parts/clay_body_tomato.png",      aspect: 584 / 625, h: 1.45, ax: 0.5, ay: 1.0, hatY: 0.22, armY: 0.52, armX: 0.94, legX: 0.3 },
+  potato:      { tex: "/parts/clay_body_potato.png",      aspect: 546 / 700, h: 1.6,  ax: 0.5, ay: 1.0, hatY: 0.09, armY: 0.5, armX: 0.94, legX: 0.34 },
+  cucumber:    { tex: "/parts/clay_body_cucumber.png",    aspect: 358 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.05, armY: 0.50, armX: 0.96, legX: 0.4 },
+  corn:        { tex: "/parts/clay_body_corn.png",        aspect: 370 / 700, h: 1.95, ax: 0.5, ay: 1.0, hatY: 0.18, armY: 0.55, armX: 0.94, legX: 0.4 },
+  broccoli:    { tex: "/parts/clay_body_broccoli.png",    aspect: 584 / 700, h: 1.75, ax: 0.5, ay: 1.0, hatY: 0.06, armY: 0.5, armX: 0.9, legX: 0.22 },
+  cauliflower: { tex: "/parts/clay_body_cauliflower.png", aspect: 700 / 600, h: 1.35, ax: 0.5, ay: 1.0, hatY: 0.1, armY: 0.56, armX: 0.9, legX: 0.3 },
 };
 
 // ---- sticker parts ----------------------------------------------------------
-// catalog: texture + world size (height in units) + where the socket sits on
-// the plane (0..1 from the top). arms/legs hang from their socket; hats stand
-// on theirs. Every entry is one PNG in /parts — that's the whole cost of a new part.
+// catalog: texture, world height, and the ANCHOR — where this sticker is
+// glued on (fractions of the image: x from the left, y from the top). Arms and
+// legs hang from their anchor (shoulder / hip), hats stand on theirs. `rot`
+// spins a sticker whose drawing points the other way. One PNG + one line per
+// new part.
 const PARTS = {
   hats: {
     none: null,
-    leaves:  { tex: "/parts/hat_leaves.png",  h: 0.62, socket: 1.0, aspect: 600 / 482 },
-    acorn:   { tex: "/parts/hat_acorn.png",   h: 0.72, socket: 0.98, aspect: 551 / 600 },
-    straw:   { tex: "/parts/hat_straw.png",   h: 0.46, socket: 0.85, aspect: 600 / 370 },
+    leaves:  { tex: "/parts/clay_hat_leaves.png",  h: 0.62, aspect: 671 / 543, ax: 0.5, ay: 0.97 },
+    acorn:   { tex: "/parts/clay_hat_acorn.png",   h: 0.74, aspect: 599 / 700, ax: 0.5, ay: 0.96 },
+    straw:   { tex: "/parts/clay_hat_straw.png",   h: 0.44, aspect: 700 / 370, ax: 0.5, ay: 0.82 },
   },
   arms: {
-    twig:     { tex: "/parts/arm_twig.png",     h: 0.9,  socket: 0.02, aspect: 400 / 600 },
-    cucumber: { tex: "/parts/arm_cucumber.png", h: 0.85, socket: 0.03, aspect: 384 / 528 },
-    carrot:   { tex: "/parts/arm_carrot.png",   h: 0.85, socket: 0.03, aspect: 518 / 523 },
+    twig:     { tex: "/parts/clay_arm_twig.png",     h: 0.82, aspect: 370 / 700, ax: 0.48, ay: 0.03 },
+    cucumber: { tex: "/parts/clay_arm_cucumber.png", h: 0.8,  aspect: 290 / 700, ax: 0.5,  ay: 0.03 },
+    carrot:   { tex: "/parts/clay_arm_carrot.png",   h: 0.8,  aspect: 256 / 638, ax: 0.5,  ay: 0.04 },
   },
   legs: {
-    twig:     { tex: "/parts/leg_twig.png",     h: 0.62, socket: 0.02, aspect: 258 / 600 },
-    cucumber: { tex: "/parts/leg_cucumber.png", h: 0.6,  socket: 0.03, aspect: 244 / 600 },
-    carrot:   { tex: "/parts/leg_carrot.png",   h: 0.62, socket: 0.03, aspect: 237 / 600 },
+    twig:     { tex: "/parts/clay_leg_twig.png",     h: 0.62, aspect: 312 / 700, ax: 0.5, ay: 0.03 },
+    cucumber: { tex: "/parts/clay_leg_cucumber.png", h: 0.6,  aspect: 296 / 700, ax: 0.5, ay: 0.03 },
+    carrot:   { tex: "/parts/clay_leg_carrot.png",   h: 0.62, aspect: 296 / 700, ax: 0.5, ay: 0.03 },
   },
 };
+const RIG = new URLSearchParams(location.search).has("rig");
 const stickerTex = {};
 function getTex(url) {
   if (!stickerTex[url]) { const t = texLoader.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; stickerTex[url] = t; }
   return stickerTex[url];
 }
-// a sticker: a thin double-sided plane whose origin is its socket point
+// a sticker: a thin double-sided plane whose origin is its ANCHOR point
 function sticker(def, mirror = false) {
   const g = new THREE.Group();
   if (!def) return g;
   const h = def.h, w = h * def.aspect;
-  const geo = new THREE.PlaneGeometry(w, h);
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: getTex(def.tex), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 }));
-  m.position.y = def.socket * h - h / 2; // put the socket point at the origin
+  const ax = def.ax ?? 0.5, ay = def.ay ?? 0.5;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: getTex(def.tex), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
+  // move the anchor to the origin (mirror flips the x offset with the image)
+  const ox = w / 2 - ax * w, oy = ay * h - h / 2;
+  const inner = new THREE.Group();
+  m.position.set(ox, oy, 0);
   m.castShadow = true;
-  if (mirror) m.scale.x = -1;
-  // paper thickness: a slightly darker copy just behind
-  const back = m.clone(); back.material = m.material.clone(); back.material.color.setScalar(0.72); back.position.z = -0.012; back.castShadow = false;
-  g.add(back, m);
+  inner.add(m);
+  if (def.rot) inner.rotation.z = def.rot;
+  if (mirror) inner.scale.x = -1;
+  g.add(inner);
+  if (RIG) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff88 })); g.add(dot); const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w, h)), new THREE.LineBasicMaterial({ color: 0x00ffcc })); box.position.copy(m.position); inner.add(box); }
   return g;
 }
 
@@ -191,25 +198,23 @@ function assemble(parts) {
   const bodyPivot = new THREE.Group();     // squash/waddle/bob happens here (origin = body bottom)
   bodyPivot.position.y = baseY;
   root.add(bodyPivot);
-  const body = sticker({ ...b, socket: 1.0 });
+  const body = sticker(b);
   bodyPivot.add(body);
 
-  const eyes = makeEyes(bw * 0.28);
-  eyes.position.set(0, b.h * (1 - b.faceY), 0.06);
-  bodyPivot.add(eyes);
-
   const hat = sticker(PARTS.hats[parts.hat]);
-  hat.position.set(0, b.h * (1 - b.hatY), 0.04);
+  hat.position.set(0, b.h * (1 - b.hatY), 0.05);
   bodyPivot.add(hat);
 
-  const armL = sticker(PARTS.arms[parts.arms], true), armR = sticker(PARTS.arms[parts.arms]);
+  const armDef = { ...PARTS.arms[parts.arms] };
+  armDef.h = Math.min(armDef.h, b.h * 0.42);
+  const armL = sticker(armDef), armR = sticker(armDef, true);
   const armY = b.h * (1 - b.armY), armX = (bw / 2) * b.armX;
-  armL.position.set(-armX, armY, 0.05); armR.position.set(armX, armY, 0.05);
-  armL.rotation.z = 0.35; armR.rotation.z = -0.35;
+  armL.position.set(-armX, armY, 0.04); armR.position.set(armX, armY, 0.04);
+  armL.rotation.z = 0.32; armR.rotation.z = -0.32;
   bodyPivot.add(armL, armR);
   const legL = sticker(legDef, true), legR = sticker(legDef);
-  const legY = legLift + legDef.h * 0.15, legX = (bw / 2) * b.legX;
-  legL.position.set(-legX, legY, -0.03); legR.position.set(legX, legY, -0.03);
+  const legY = legLift + legDef.h * 0.12, legX = (bw / 2) * b.legX;
+  legL.position.set(-legX, legY, -0.02); legR.position.set(legX, legY, -0.02);
   root.add(legL, legR);
 
   return { root, bodyPivot, armL, armR, legL, legR, height: b.h, baseY, legY, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
@@ -227,7 +232,7 @@ function animate(c, dt) {
       bp.rotation.z = s * 0.09;
       bp.rotation.x = 0.06;
       c.legL.rotation.x = s * 0.7; c.legR.rotation.x = -s * 0.7;
-      c.armL.rotation.z = 0.35 + s * 0.3; c.armR.rotation.z = -0.35 + s * 0.3;
+      c.armL.rotation.z = 0.32 + s * 0.3; c.armR.rotation.z = -0.32 + s * 0.3;
       break;
     }
     case "wave": {
@@ -235,7 +240,7 @@ function animate(c, dt) {
       bp.position.y = c.baseY + Math.sin(t * 4) * 0.03;
       c.armR.rotation.z = -2.7 + Math.sin(t * 12) * 0.35;
       c.armR.rotation.x = -0.3;
-      c.armL.rotation.z = 0.35;
+      c.armL.rotation.z = 0.32;
       break;
     }
     case "jump": {
@@ -246,7 +251,7 @@ function animate(c, dt) {
       bp.scale.set(1 / sq, sq, 1 / sq);
       c.legL.rotation.x = c.legR.rotation.x = -arc * 0.8;
       c.legL.position.y = c.legR.position.y = c.legY + (bp.position.y - c.baseY);
-      c.armL.rotation.z = 0.35 + arc * 1.8; c.armR.rotation.z = -0.35 - arc * 1.8;
+      c.armL.rotation.z = 0.32 + arc * 1.8; c.armR.rotation.z = -0.32 - arc * 1.8;
       if (c.modeT >= 0.75) { c.modeT = 0; c.jumps = (c.jumps || 0) + 1; if (c.jumps >= 3) { c.jumps = 0; c.mode = "idle"; } }
       break;
     }
@@ -261,8 +266,8 @@ function animate(c, dt) {
       const s = Math.sin(t * 7), s2 = Math.sin(t * 7 + Math.PI / 2);
       bp.rotation.z = s * 0.14;
       bp.position.y = c.baseY + Math.abs(s2) * 0.1;
-      c.armL.rotation.z = 0.35 + (s > 0 ? 2.3 : 0.2);
-      c.armR.rotation.z = -0.35 - (s <= 0 ? 2.3 : 0.2);
+      c.armL.rotation.z = 0.32 + (s > 0 ? 2.3 : 0.2);
+      c.armR.rotation.z = -0.32 - (s <= 0 ? 2.3 : 0.2);
       c.legL.rotation.x = s * 0.3; c.legR.rotation.x = -s * 0.3;
       break;
     }
@@ -271,7 +276,7 @@ function animate(c, dt) {
       bp.position.y = c.baseY + Math.sin(t * 2.2) * 0.03;
       bp.scale.set(1 + Math.sin(t * 2.2) * 0.012, 1 - Math.sin(t * 2.2) * 0.012, 1);
       bp.rotation.z = Math.sin(t * 0.9) * 0.03;
-      c.armL.rotation.z = 0.35 + Math.sin(t * 1.6) * 0.1; c.armR.rotation.z = -0.35 - Math.sin(t * 1.6 + 1) * 0.1;
+      c.armL.rotation.z = 0.32 + Math.sin(t * 1.6) * 0.1; c.armR.rotation.z = -0.32 - Math.sin(t * 1.6 + 1) * 0.1;
     }
   }
   if (c.mode !== "jump") { c.legL.position.y = c.legR.position.y = c.legY + (bp.position.y - c.baseY); }
@@ -305,7 +310,7 @@ function partsFor(entry) {
 function freeSpot(self) {
   for (let i = 0; i < 12; i++) {
     const s = { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
-    const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 1.6);
+    const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4);
     if (!crowded) return s;
   }
   return { x: rnd(...GROUND.x), z: rnd(...GROUND.z) };
@@ -373,12 +378,13 @@ if (CLOSEUP) {
   c.timers.forEach(clearTimeout); c.timers = [];
   c.root.position.set(0, 0, 3.5);
   c.mode = "idle";
-  camera.position.set(0, 1.9, 9.6);
-  camera.lookAt(0, 1.45, 3.5);
+  camera.position.set(0, 1.7, 8.0);
+  camera.lookAt(0, 1.35, 3.5);
   fitBackdrop();
+  window.__vc = c; // asset review: poke the creature from the console
   let turn = 0;
-  setInterval(() => { turn += 0.004; c.root.rotation.y = Math.sin(turn) * 0.35; }, 16);
-  setInterval(() => { c.mode = pick(["wave", "jump", "dance", "idle"]); c.modeT = 0; }, 4200);
+  if (!RIG) setInterval(() => { turn += 0.004; c.root.rotation.y = Math.sin(turn) * 0.35; }, 16);
+  if (!RIG) setInterval(() => { c.mode = pick(["wave", "jump", "dance", "idle"]); c.modeT = 0; }, 4200);
 } else if (DEMO && location.search.includes("seed")) {
   // local rehearsal without a server: a small crowd of mixed builds
   const bodies = Object.keys(BODIES);

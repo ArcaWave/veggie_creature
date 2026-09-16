@@ -11,3 +11,6 @@ animator/logs
 logs
 animator/server.log
 animator/creatures
+
+# dev-only visual review captures
+.shots/

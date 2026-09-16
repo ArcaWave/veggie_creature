@@ -44,6 +44,23 @@ function devApiPlugin(): Plugin {
           }
         });
 
+      // dev-only: a page can drop a JPEG/PNG data URL into the scratch dir for
+      // visual review (used while tuning the 3D village rigs); never deployed
+      server.middlewares.use("/api/_shot", async (req, res) => {
+        if (req.method !== "POST") return send(res, 405, { error: "POST only" });
+        try {
+          const b = JSON.parse((await readBody(req)) || "{}");
+          const m = /^data:image\/(png|jpeg);base64,(.+)$/.exec(String(b.image || ""));
+          const name = String(b.name || "shot").replace(/[^\w-]/g, "");
+          const dir = process.env.VC_SHOT_DIR || `${process.cwd()}/.shots`;
+          if (!m) return send(res, 400, { error: "bad" });
+          fs.mkdirSync(dir, { recursive: true });
+          const file = `${dir}/${name}.${m[1] === "png" ? "png" : "jpg"}`;
+          fs.writeFileSync(file, Buffer.from(m[2], "base64"));
+          send(res, 200, { ok: true, file });
+        } catch (e: any) { send(res, 500, { error: String(e?.message || e) }); }
+      });
+
       route("/api/stylize", "stylize", (b) => stylize(b.image, b.prompt));
       route("/api/animate", "animate", (b) => startAnimate(b.image, b.prompt, b.kind));
       route("/api/animate-status", "animate-status", (b) => animateStatus(b.operation));
