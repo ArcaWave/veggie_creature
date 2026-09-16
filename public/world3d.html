@@ -30,6 +30,8 @@ import * as THREE from "/vendor/three/three.module.js";
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 const DEBUG = new URLSearchParams(location.search).has("debug");
+// ?closeup=carrot,leaves,twig,carrot  -> one creature, framed close, slowly turning (asset review / reveal)
+const CLOSEUP = new URLSearchParams(location.search).get("closeup");
 const POLL_MS = 4000;
 const MAX_ON_STAGE = 12;
 const STAY_MS = (e) => (DEMO ? 16000 + (e.at % 8000) : 90000 + (e.at % 60000));
@@ -45,7 +47,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -81,124 +83,96 @@ if (DEBUG) {
 }
 
 // warm autumn light
-scene.add(new THREE.HemisphereLight(0xffe2b8, 0x6b3a1c, 0.9));
-const sun = new THREE.DirectionalLight(0xffd9a0, 1.6);
+scene.add(new THREE.HemisphereLight(0xffe9c8, 0x7a4a26, 1.35));
+const sun = new THREE.DirectionalLight(0xffe0b0, 2.2);
 sun.position.set(6, 9, 4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.radius = 6;
 sun.shadow.camera.left = -14; sun.shadow.camera.right = 14;
 sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -8;
 sun.shadow.camera.near = 1; sun.shadow.camera.far = 40;
 sun.shadow.bias = -0.0005;
 scene.add(sun);
-const rim = new THREE.DirectionalLight(0xff9a4a, 0.5);
+const rim = new THREE.DirectionalLight(0xffb070, 0.9);
 rim.position.set(-6, 4, -6);
 scene.add(rim);
 
 // ---- part library ----------------------------------------------------------
-// Everything below is a PART. Swap any maker for a GLB loader later; the
-// assembly, sockets and animation stay the same.
+// The physical kit is a vegetable with printed STICKER parts stuck on. The 3D
+// creature is the same idea taken literally: EVERY piece — body, hat, arms,
+// legs — is a flat illustrated sticker standing in 3D space like a paper
+// puppet, with real perspective and shadows. Adding a body or a part = one
+// PNG + one catalog line, so a hundred variants stay cheap.
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.02, ...extra });
 
-// bodies: return { mesh, height, headY (where the hat sits), armY, armX, legX }
+// bodies: sticker + where things attach (fractions: y from the TOP of the
+// sticker, x of the half-width)
 const BODIES = {
-  carrot: () => {
-    const g = new THREE.CapsuleGeometry(0.42, 0.9, 8, 18);
-    g.scale(1, 1, 0.9);
-    const m = new THREE.Mesh(g, mat(0xf3832c));
-    // tapered by scaling lower rings
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); const s = THREE.MathUtils.mapLinear(y, -0.9, 0.9, 0.55, 1.05); pos.setX(i, pos.getX(i) * s); pos.setZ(i, pos.getZ(i) * s); }
-    g.computeVertexNormals();
-    return { mesh: m, height: 1.9, headY: 0.95, armY: 0.35, armX: 0.44, legX: 0.18 };
-  },
-  tomato: () => ({ mesh: new THREE.Mesh(new THREE.SphereGeometry(0.66, 28, 22).scale(1, 0.9, 1), mat(0xe23d2f)), height: 1.4, headY: 0.6, armY: 0.05, armX: 0.66, legX: 0.24 }),
-  potato: () => ({ mesh: new THREE.Mesh(new THREE.SphereGeometry(0.6, 22, 18).scale(0.95, 1.15, 0.85), mat(0xc9a06a, { roughness: 0.9 })), height: 1.5, headY: 0.7, armY: 0.1, armX: 0.58, legX: 0.22 }),
-  broccoli: () => {
-    const grp = new THREE.Group();
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.7, 14), mat(0xa9c66a));
-    stem.position.y = -0.35;
-    grp.add(stem);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 14), mat(0x3e8a3a, { roughness: 0.95 }));
-    head.position.y = 0.3;
-    grp.add(head);
-    for (let i = 0; i < 9; i++) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(rnd(0.16, 0.26), 10, 8), mat(0x357c31, { roughness: 0.95 }));
-      const a = (i / 9) * Math.PI * 2, r = 0.5;
-      b.position.set(Math.cos(a) * r, 0.3 + Math.sin(i * 1.7) * 0.35, Math.sin(a) * r);
-      grp.add(b);
-    }
-    return { mesh: grp, height: 1.7, headY: 0.9, armY: -0.1, armX: 0.5, legX: 0.2 };
-  },
-  cucumber: () => ({ mesh: new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 1.25, 8, 18), mat(0x4f9a3d)), height: 2.1, headY: 1.05, armY: 0.4, armX: 0.36, legX: 0.16 }),
-  eggplant: () => ({ mesh: new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 0.8, 8, 18).scale(1, 1, 0.95), mat(0x5b2a7a, { roughness: 0.4 })), height: 1.8, headY: 0.9, armY: 0.3, armX: 0.46, legX: 0.2 }),
-  corn: () => {
-    const grp = new THREE.Group();
-    const cob = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 1.0, 8, 18), mat(0xf2c744));
-    grp.add(cob);
-    for (let i = 0; i < 26; i++) {
-      const k = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), mat(0xffd76a));
-      const a = (i * 2.4) % (Math.PI * 2), y = -0.5 + (i / 26) * 1.0;
-      k.position.set(Math.cos(a) * 0.37, y, Math.sin(a) * 0.37);
-      grp.add(k);
-    }
-    return { mesh: grp, height: 1.9, headY: 0.95, armY: 0.35, armX: 0.4, legX: 0.18 };
-  },
-  cauliflower: () => {
-    const grp = new THREE.Group();
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 14), mat(0xf3ead6, { roughness: 0.95 }));
-    grp.add(head);
-    for (let i = 0; i < 8; i++) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(rnd(0.18, 0.26), 10, 8), mat(0xfaf3e2, { roughness: 0.95 }));
-      const a = (i / 8) * Math.PI * 2;
-      b.position.set(Math.cos(a) * 0.48, Math.sin(i * 2.1) * 0.3, Math.sin(a) * 0.48);
-      grp.add(b);
-    }
-    const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.8, 0.35, 10, 1, true), mat(0x9bc46a, { side: THREE.DoubleSide }));
-    skirt.position.y = -0.45;
-    grp.add(skirt);
-    return { mesh: grp, height: 1.6, headY: 0.7, armY: 0.05, armX: 0.62, legX: 0.24 };
-  },
+  carrot:      { tex: "/parts/body_carrot.png",      aspect: 273 / 700, h: 2.0, hatY: 0.06, faceY: 0.40, armY: 0.50, armX: 0.85, legX: 0.5 },
+  eggplant:    { tex: "/parts/body_eggplant.png",    aspect: 417 / 700, h: 1.9, hatY: 0.10, faceY: 0.44, armY: 0.58, armX: 0.88, legX: 0.4 },
+  tomato:      { tex: "/parts/body_tomato.png",      aspect: 585 / 554, h: 1.45, hatY: 0.08, faceY: 0.42, armY: 0.55, armX: 0.9, legX: 0.32 },
+  potato:      { tex: "/parts/body_potato.png",      aspect: 524 / 684, h: 1.6, hatY: 0.03, faceY: 0.36, armY: 0.5, armX: 0.9, legX: 0.36 },
+  cucumber:    { tex: "/parts/body_cucumber.png",    aspect: 337 / 700, h: 2.0, hatY: 0.03, faceY: 0.34, armY: 0.5, armX: 0.88, legX: 0.45 },
+  corn:        { tex: "/parts/body_corn.png",        aspect: 508 / 700, h: 2.0, hatY: 0.02, faceY: 0.38, armY: 0.52, armX: 0.7, legX: 0.36 },
+  broccoli:    { tex: "/parts/body_broccoli.png",    aspect: 678 / 700, h: 1.8, hatY: 0.04, faceY: 0.34, armY: 0.5, armX: 0.8, legX: 0.22 },
+  cauliflower: { tex: "/parts/body_cauliflower.png", aspect: 700 / 429, h: 1.3, hatY: 0.05, faceY: 0.42, armY: 0.6, armX: 0.7, legX: 0.3 },
 };
 
-const HATS = {
-  none: () => null,
-  party: () => { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.62, 18), mat(pick([0xff6b9d, 0x5ab0ff, 0xffd447, 0x7fd36b]))); c.position.y = 0.31; g.add(c); const p = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xfff2c8)); p.position.y = 0.64; g.add(p); return g; },
-  sprout: () => { const g = new THREE.Group(); for (let i = -1; i <= 1; i++) { const l = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.34, 4, 8), mat(0x6cbf47)); l.position.set(i * 0.14, 0.24, 0); l.rotation.z = -i * 0.5; g.add(l); } return g; },
-  cap: () => { const g = new THREE.Group(); const d = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x3b6fd1)); g.add(d); const b = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.3), mat(0x3b6fd1)); b.position.set(0, 0.02, 0.36); g.add(b); return g; },
-  crown: () => { const g = new THREE.Group(); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.26, 0.24, 8, 1, true), mat(0xf0c419, { side: THREE.DoubleSide, metalness: 0.4, roughness: 0.35 })); r.position.y = 0.12; g.add(r); for (let i = 0; i < 8; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 4), mat(0xf0c419, { metalness: 0.4, roughness: 0.35 })); const a = (i / 8) * Math.PI * 2; s.position.set(Math.cos(a) * 0.29, 0.31, Math.sin(a) * 0.29); g.add(s); } return g; },
-  bow: () => { const g = new THREE.Group(); const c = mat(0xff5c8a); for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10).scale(1.3, 0.8, 0.6), c); w.position.set(s * 0.17, 0.12, 0); g.add(w); } const k = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), c); k.position.y = 0.12; g.add(k); return g; },
+// ---- sticker parts ----------------------------------------------------------
+// catalog: texture + world size (height in units) + where the socket sits on
+// the plane (0..1 from the top). arms/legs hang from their socket; hats stand
+// on theirs. Every entry is one PNG in /parts — that's the whole cost of a new part.
+const PARTS = {
+  hats: {
+    none: null,
+    leaves:  { tex: "/parts/hat_leaves.png",  h: 0.62, socket: 1.0, aspect: 600 / 482 },
+    acorn:   { tex: "/parts/hat_acorn.png",   h: 0.72, socket: 0.98, aspect: 551 / 600 },
+    straw:   { tex: "/parts/hat_straw.png",   h: 0.46, socket: 0.85, aspect: 600 / 370 },
+  },
+  arms: {
+    twig:     { tex: "/parts/arm_twig.png",     h: 0.9,  socket: 0.02, aspect: 400 / 600 },
+    cucumber: { tex: "/parts/arm_cucumber.png", h: 0.85, socket: 0.03, aspect: 384 / 528 },
+    carrot:   { tex: "/parts/arm_carrot.png",   h: 0.85, socket: 0.03, aspect: 518 / 523 },
+  },
+  legs: {
+    twig:     { tex: "/parts/leg_twig.png",     h: 0.62, socket: 0.02, aspect: 258 / 600 },
+    cucumber: { tex: "/parts/leg_cucumber.png", h: 0.6,  socket: 0.03, aspect: 244 / 600 },
+    carrot:   { tex: "/parts/leg_carrot.png",   h: 0.62, socket: 0.03, aspect: 237 / 600 },
+  },
 };
-
-// limbs: a style returns { arm(), leg() } meshes whose origin is the socket
-const LIMBS = {
-  stick: { arm: () => limb(0.035, 0.55, 0x8b5a2b), leg: () => limb(0.04, 0.42, 0x8b5a2b) },
-  pipe: { arm: () => limb(0.075, 0.5, pick([0xff7a3d, 0x5ac8fa, 0xffd447, 0xff5c8a]), 0.9), leg: () => limb(0.08, 0.4, 0x7fd36b, 0.9) },
-  chunky: { arm: () => limb(0.11, 0.45, 0xf1c9a5, 0.7), leg: () => limb(0.12, 0.36, 0xf1c9a5, 0.7) },
-};
-function limb(r, len, color, rough = 0.8) {
+const stickerTex = {};
+function getTex(url) {
+  if (!stickerTex[url]) { const t = texLoader.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; stickerTex[url] = t; }
+  return stickerTex[url];
+}
+// a sticker: a thin double-sided plane whose origin is its socket point
+function sticker(def, mirror = false) {
   const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat(color, { roughness: rough }));
-  m.position.y = -len / 2; // hang from the socket
+  if (!def) return g;
+  const h = def.h, w = h * def.aspect;
+  const geo = new THREE.PlaneGeometry(w, h);
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: getTex(def.tex), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 }));
+  m.position.y = def.socket * h - h / 2; // put the socket point at the origin
   m.castShadow = true;
-  g.add(m);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 2.2, 10, 8), mat(color, { roughness: rough }));
-  tip.position.y = -len - r * 0.4;
-  g.add(tip);
+  if (mirror) m.scale.x = -1;
+  // paper thickness: a slightly darker copy just behind
+  const back = m.clone(); back.material = m.material.clone(); back.material.color.setScalar(0.72); back.position.z = -0.012; back.castShadow = false;
+  g.add(back, m);
   return g;
 }
 
 function makeEyes(armX) {
   const g = new THREE.Group();
   for (const s of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 12), mat(0xffffff, { roughness: 0.3 }));
-    w.position.set(s * armX * 0.42, 0, 0);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mat(0x1b1410, { roughness: 0.3 }));
-    p.position.set(0, 0, 0.085);
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), mat(0xffffff, { roughness: 0.25 }));
+    w.position.set(s * armX, 0, 0);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), mat(0x1b1410, { roughness: 0.2 }));
+    p.position.set(0, -0.01, 0.09);
     w.add(p);
     g.add(w);
   }
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 8, 16, Math.PI), mat(0x7a2a1e));
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 8, 16, Math.PI), mat(0x6e2418));
   mouth.rotation.z = Math.PI;
   mouth.position.set(0, -0.2, 0.02);
   g.add(mouth);
@@ -206,34 +180,39 @@ function makeEyes(armX) {
 }
 
 // ---- assembly ---------------------------------------------------------------
-// parts = { body, hat, limbs }  ->  a Creature with named sockets + animation state
+// parts = { body, hat, arms, legs }  ->  a Creature with sockets + animation state
 function assemble(parts) {
   const root = new THREE.Group();          // feet on the ground (y=0)
-  const b = BODIES[parts.body]();
-  const bodyPivot = new THREE.Group();     // squash/waddle/bob happens here
-  bodyPivot.position.y = b.height * 0.52;
+  const b = BODIES[parts.body];
+  const legDef = PARTS.legs[parts.legs];
+  const legLift = legDef.h * 0.8;          // the body rides on top of its sticker legs
+  const baseY = legLift;
+  const bw = b.h * b.aspect;
+  const bodyPivot = new THREE.Group();     // squash/waddle/bob happens here (origin = body bottom)
+  bodyPivot.position.y = baseY;
   root.add(bodyPivot);
-  b.mesh.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
-  bodyPivot.add(b.mesh);
+  const body = sticker({ ...b, socket: 1.0 });
+  bodyPivot.add(body);
 
-  const eyes = makeEyes(b.armX);
-  eyes.position.set(0, b.headY * 0.35, b.armX * 0.92);
+  const eyes = makeEyes(bw * 0.28);
+  eyes.position.set(0, b.h * (1 - b.faceY), 0.06);
   bodyPivot.add(eyes);
 
-  const hat = HATS[parts.hat]();
-  if (hat) { hat.position.y = b.headY; hat.traverse((o) => { if (o.isMesh) o.castShadow = true; }); bodyPivot.add(hat); }
+  const hat = sticker(PARTS.hats[parts.hat]);
+  hat.position.set(0, b.h * (1 - b.hatY), 0.04);
+  bodyPivot.add(hat);
 
-  const L = LIMBS[parts.limbs];
-  const armL = L.arm(), armR = L.arm();
-  armL.position.set(-b.armX, b.armY, 0); armR.position.set(b.armX, b.armY, 0);
-  armL.rotation.z = 0.5; armR.rotation.z = -0.5;
+  const armL = sticker(PARTS.arms[parts.arms], true), armR = sticker(PARTS.arms[parts.arms]);
+  const armY = b.h * (1 - b.armY), armX = (bw / 2) * b.armX;
+  armL.position.set(-armX, armY, 0.05); armR.position.set(armX, armY, 0.05);
+  armL.rotation.z = 0.35; armR.rotation.z = -0.35;
   bodyPivot.add(armL, armR);
-  const legL = L.leg(), legR = L.leg();
-  const legY = bodyPivot.position.y - b.height * 0.36;
-  legL.position.set(-b.legX, legY, 0); legR.position.set(b.legX, legY, 0);
+  const legL = sticker(legDef, true), legR = sticker(legDef);
+  const legY = legLift + legDef.h * 0.15, legX = (bw / 2) * b.legX;
+  legL.position.set(-legX, legY, -0.03); legR.position.set(legX, legY, -0.03);
   root.add(legL, legR);
 
-  return { root, bodyPivot, armL, armR, legL, legR, height: b.height, t: rnd(0, 10), mode: "idle", modeT: 0 };
+  return { root, bodyPivot, armL, armR, legL, legR, height: b.h, baseY, legY, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
 }
 
 // procedural motion — the same for every body
@@ -244,62 +223,60 @@ function animate(c, dt) {
   switch (c.mode) {
     case "walk": {
       const s = Math.sin(t * 9);
-      bp.position.y = c.height * 0.52 + Math.abs(s) * 0.08;
+      bp.position.y = c.baseY + Math.abs(s) * 0.08;
       bp.rotation.z = s * 0.09;
       bp.rotation.x = 0.06;
       c.legL.rotation.x = s * 0.7; c.legR.rotation.x = -s * 0.7;
-      c.armL.rotation.z = 0.5 + s * 0.25; c.armR.rotation.z = -0.5 + s * 0.25;
+      c.armL.rotation.z = 0.35 + s * 0.3; c.armR.rotation.z = -0.35 + s * 0.3;
       break;
     }
     case "wave": {
       rest();
-      bp.position.y = c.height * 0.52 + Math.sin(t * 4) * 0.03;
-      c.armR.rotation.z = -2.6 + Math.sin(t * 12) * 0.35;
+      bp.position.y = c.baseY + Math.sin(t * 4) * 0.03;
+      c.armR.rotation.z = -2.7 + Math.sin(t * 12) * 0.35;
       c.armR.rotation.x = -0.3;
-      c.armL.rotation.z = 0.5;
+      c.armL.rotation.z = 0.35;
       break;
     }
     case "jump": {
       const p = Math.min(1, c.modeT / 0.75);
       const arc = Math.sin(p * Math.PI);
-      bp.position.y = c.height * 0.52 + arc * 1.1;
+      bp.position.y = c.baseY + arc * 1.1;
       const sq = p < 0.12 ? 1 - (0.12 - p) * 2 : 1 + arc * 0.08;
       bp.scale.set(1 / sq, sq, 1 / sq);
       c.legL.rotation.x = c.legR.rotation.x = -arc * 0.8;
-      c.legL.position.y = c.legR.position.y = bp.position.y - c.height * 0.36;
-      c.armL.rotation.z = 0.5 + arc * 1.6; c.armR.rotation.z = -0.5 - arc * 1.6;
+      c.legL.position.y = c.legR.position.y = c.legY + (bp.position.y - c.baseY);
+      c.armL.rotation.z = 0.35 + arc * 1.8; c.armR.rotation.z = -0.35 - arc * 1.8;
       if (c.modeT >= 0.75) { c.modeT = 0; c.jumps = (c.jumps || 0) + 1; if (c.jumps >= 3) { c.jumps = 0; c.mode = "idle"; } }
       break;
     }
     case "spin": {
       rest();
-      c.root.rotation.y += dt * 9;
-      c.armL.rotation.z = 1.3; c.armR.rotation.z = -1.3;
-      bp.position.y = c.height * 0.52 + Math.abs(Math.sin(t * 10)) * 0.05;
+      c.root.scale.x = Math.cos(t * 11) * c.dir || 0.02; // a flat doll spinning = flip-flop
+      c.armL.rotation.z = 1.4; c.armR.rotation.z = -1.4;
+      bp.position.y = c.baseY + Math.abs(Math.sin(t * 10)) * 0.05;
       break;
     }
     case "dance": {
       const s = Math.sin(t * 7), s2 = Math.sin(t * 7 + Math.PI / 2);
       bp.rotation.z = s * 0.14;
-      bp.position.y = c.height * 0.52 + Math.abs(s2) * 0.1;
-      c.armL.rotation.z = 0.5 + (s > 0 ? 2.2 : 0.3);
-      c.armR.rotation.z = -0.5 - (s <= 0 ? 2.2 : 0.3);
+      bp.position.y = c.baseY + Math.abs(s2) * 0.1;
+      c.armL.rotation.z = 0.35 + (s > 0 ? 2.3 : 0.2);
+      c.armR.rotation.z = -0.35 - (s <= 0 ? 2.3 : 0.2);
       c.legL.rotation.x = s * 0.3; c.legR.rotation.x = -s * 0.3;
       break;
     }
     default: { // idle: breathe + tiny sway
       rest();
-      bp.position.y = c.height * 0.52 + Math.sin(t * 2.2) * 0.03;
+      bp.position.y = c.baseY + Math.sin(t * 2.2) * 0.03;
       bp.scale.set(1 + Math.sin(t * 2.2) * 0.012, 1 - Math.sin(t * 2.2) * 0.012, 1);
       bp.rotation.z = Math.sin(t * 0.9) * 0.03;
-      c.armL.rotation.z = 0.5 + Math.sin(t * 1.6) * 0.1; c.armR.rotation.z = -0.5 - Math.sin(t * 1.6 + 1) * 0.1;
+      c.armL.rotation.z = 0.35 + Math.sin(t * 1.6) * 0.1; c.armR.rotation.z = -0.35 - Math.sin(t * 1.6 + 1) * 0.1;
     }
   }
-  if (c.mode !== "jump") { c.legL.position.y = c.legR.position.y = bp.position.y - c.height * 0.36; }
-  if (c.mode !== "spin") { // face where we walk, else the camera
-    const target = c.faceAngle ?? 0;
-    c.root.rotation.y += (target - c.root.rotation.y) * Math.min(1, dt * 6);
-  }
+  if (c.mode !== "jump") { c.legL.position.y = c.legR.position.y = c.legY + (bp.position.y - c.baseY); }
+  if (c.mode !== "spin") c.root.scale.x += (c.dir - c.root.scale.x) * Math.min(1, dt * 10); // mirror to face the way we walk
+  bp.rotation.y = 0;
 }
 
 // ---- creatures on stage -----------------------------------------------------
@@ -316,10 +293,12 @@ const gone = (e) => Date.now() > e.at + STAY_MS(e);
 function partsFor(entry) {
   if (entry.parts) return entry.parts;
   const h = hash(entry.id);
+  const keys = (o) => Object.keys(o);
   return {
     body: BODIES[entry.variant] ? entry.variant : "carrot",
-    hat: Object.keys(HATS)[h % Object.keys(HATS).length],
-    limbs: Object.keys(LIMBS)[(h >>> 8) % Object.keys(LIMBS).length],
+    hat: keys(PARTS.hats)[h % keys(PARTS.hats).length],
+    arms: keys(PARTS.arms)[(h >>> 8) % keys(PARTS.arms).length],
+    legs: keys(PARTS.legs)[(h >>> 16) % keys(PARTS.legs).length],
   };
 }
 
@@ -351,10 +330,10 @@ function addCreature(entry, isNew) {
     if (c.leaving) return;
     const r = Math.random();
     if (r < 0.3) { c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...GROUND.x), z: THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z) }; c.mode = "walk"; }
-    else if (r < 0.5) { c.mode = "wave"; c.faceAngle = 0; }
-    else if (r < 0.65) { c.mode = "jump"; c.modeT = 0; c.faceAngle = 0; }
+    else if (r < 0.5) { c.mode = "wave"; c.dir = 1; }
+    else if (r < 0.65) { c.mode = "jump"; c.modeT = 0; c.dir = 1; }
     else if (r < 0.8) { c.mode = "spin"; }
-    else { c.mode = "dance"; c.faceAngle = 0; }
+    else { c.mode = "dance"; c.dir = 1; }
     later(behave, rnd(3500, 7000));
   }
   later(behave, isNew ? 6000 : rnd(500, 2500));
@@ -362,7 +341,7 @@ function addCreature(entry, isNew) {
   // departure: wave bye, then walk off right
   later(() => {
     c.leaving = true;
-    c.mode = "wave"; c.faceAngle = 0;
+    c.mode = "wave"; c.dir = 1;
     later(() => { c.target = { x: 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200);
   }, Math.max(entry.at + STAY_MS(entry) - Date.now(), DEMO ? 6000 : 15000));
 }
@@ -386,7 +365,21 @@ async function poll(first) {
     while (onStage.size > MAX_ON_STAGE) removeCreature(onStage.get([...onStage.keys()][0]));
   } catch (e) { /* offline blip */ }
 }
-if (DEMO && location.search.includes("seed")) {
+if (CLOSEUP) {
+  const [body = "carrot", hat = "leaves", arms = "twig", legs = "carrot"] = CLOSEUP.split(",");
+  const e = { id: `closeup-${body}`, variant: body, at: Date.now(), parts: { body, hat, arms, legs } };
+  addCreature(e, false);
+  const c = onStage.get(e.id);
+  c.timers.forEach(clearTimeout); c.timers = [];
+  c.root.position.set(0, 0, 3.5);
+  c.mode = "idle";
+  camera.position.set(0, 1.9, 9.6);
+  camera.lookAt(0, 1.45, 3.5);
+  fitBackdrop();
+  let turn = 0;
+  setInterval(() => { turn += 0.004; c.root.rotation.y = Math.sin(turn) * 0.35; }, 16);
+  setInterval(() => { c.mode = pick(["wave", "jump", "dance", "idle"]); c.modeT = 0; }, 4200);
+} else if (DEMO && location.search.includes("seed")) {
   // local rehearsal without a server: a small crowd of mixed builds
   const bodies = Object.keys(BODIES);
   for (let i = 0; i < 6; i++) addCreature({ id: `${Date.now() - i * 777}-${bodies[i % bodies.length]}`, variant: bodies[i % bodies.length], at: Date.now() - i * 777 }, i < 2);
@@ -404,11 +397,11 @@ function frame() {
     if (c.mode === "walk") {
       const dx = c.target.x - c.root.position.x, dz = c.target.z - c.root.position.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.faceAngle = 0; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
+      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.dir = 1; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
       else {
         const step = Math.min(d, c.speed * dt);
         c.root.position.x += (dx / d) * step; c.root.position.z += (dz / d) * step;
-        c.faceAngle = Math.atan2(dx, dz); // +z is toward the camera
+        if (Math.abs(dx) > 0.05) c.dir = dx < 0 ? -1 : 1; // paper doll flips to face its heading
       }
     }
     animate(c, dt);
