@@ -5,35 +5,108 @@ import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
+import { ensureProfile } from "../lib/profile";
 import { speak } from "../lib/guide";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_SHOULDER, R_SHOULDER } from "../lib/pose";
 
-// "Show it to the camera and it comes alive."
-// The station runs WITHOUT staff: big on-screen guidance + spoken Korean
-// prompts, the camera counts down and snaps by itself, and if the AI can't
-// see a creation in the shot it kindly asks the child to hold it closer and
-// retries on its own (never a dead end — after 2 retries the show goes on
-// with the best guess). Small Retake escape hatch only.
+// "Step up to the magic mirror and your creature comes alive."
+// The station is an ALWAYS-ON attract screen: a cinematic courtyard with the
+// live camera in a round mirror portal. No buttons — pose tracking notices a
+// child standing close (shoulders in view, big enough) and, after a short
+// steady dwell, counts 3-2-1 and snaps by itself. If the AI can't see a
+// creation in the shot it asks to hold it closer and reshoots (never a dead
+// end). The camera stream lives for the whole day; nothing ever restarts it
+// between visitors.
 type Step = "photo" | "magic";
 
-const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
+const COUNTDOWN_S = 3; // after presence is confirmed
+const DWELL_MS = 2200; // steady presence needed before the countdown arms
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
+const CINE_BG = "/main-bg.jpg";
+
+// drifting leaves + embers over the courtyard (fixed at module load so the
+// attract loop never re-randomises mid-day)
+const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
+  glyph: ["🍂", "🍁", "✨", "🍂", "✨", "🍁"][i % 6],
+  left: (i * 61) % 100,
+  size: 14 + ((i * 37) % 22),
+  dur: 14 + ((i * 53) % 14),
+  delay: -((i * 29) % 20),
+  drift: ((i * 17) % 9) - 4,
+}));
+
+// the cinematic stage every screen sits on: courtyard, slow drift, vignette
+function Cine({ children, dim = false }: { children: React.ReactNode; dim?: boolean }) {
+  return (
+    <div className={`cine${dim ? " dim" : ""}`}>
+      <div className="cine-bg" style={{ backgroundImage: `url(${CINE_BG})` }} />
+      <div className="cine-vignette" />
+      <div className="cine-particles" aria-hidden="true">
+        {PARTICLES.map((p, i) => (
+          <span
+            key={i}
+            className="cine-particle"
+            style={{
+              left: `${p.left}vw`,
+              fontSize: p.size,
+              animationDuration: `${p.dur}s`,
+              animationDelay: `${p.delay}s`,
+              // @ts-expect-error css var
+              "--drift": `${p.drift}vw`,
+            }}
+          >
+            {p.glyph}
+          </span>
+        ))}
+      </div>
+      <div className="cine-content">{children}</div>
+    </div>
+  );
+}
+
+// a magic-step screen: dimmed courtyard behind glass panels
+function CineScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <Cine dim>
+      <div className="cine-screen">{children}</div>
+    </Cine>
+  );
+}
 
 export function Build({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
   const [tries, setTries] = useState(0);
 
-  // -------- camera with auto countdown snap --------
+  // -------- the always-on camera --------
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [camOn, setCamOn] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
   const [count, setCount] = useState<number | null>(null);
+  const [flash, setFlash] = useState(false);
 
-  // the stream is kept alive through the magic step too — the dance mini-game
-  // watches the child move — and only stops on unmount / retake
+  // presence: a child standing close and steady arms the countdown
+  const [dwell, setDwell] = useState(0); // 0..1
+  const dwellRef = useRef(0);
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
+  // after a show the mirror waits for the frame to EMPTY for a moment, so the
+  // same child lingering in front doesn't restart it — the next child steps up
+  const needClearRef = useRef(false);
+  const clearSinceRef = useRef(0);
+  const [waitingClear, setWaitingClear] = useState(false);
+  function disarm(requireClear = false) {
+    armedRef.current = false;
+    dwellRef.current = 0;
+    setArmed(false);
+    setDwell(0);
+    needClearRef.current = requireClear;
+    clearSinceRef.current = 0;
+    setWaitingClear(requireClear);
+  }
+
   useEffect(() => {
     let cancelled = false;
     setCamError(null);
@@ -44,7 +117,7 @@ export function Build({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    md.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    md.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -70,9 +143,7 @@ export function Build({ onDone }: { onDone: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camTry]);
 
-  // bind the stream after the <video> renders (prevents a black screen).
-  // keyed on step/camTry too: coming back from the magic step remounts the
-  // <video> without camOn ever toggling, and it must be re-bound.
+  // (re)bind the stream whenever the <video> (re)mounts
   useEffect(() => {
     const v = videoRef.current;
     if (camOn && v && streamRef.current && v.srcObject !== streamRef.current) {
@@ -81,14 +152,66 @@ export function Build({ onDone }: { onDone: () => void }) {
     }
   }, [camOn, step, camTry]);
 
-  // the countdown starts as soon as the camera is live, then snaps by itself
+  // presence watcher: pose tracking on the mirror. A person whose shoulders
+  // are in view and who fills enough of the frame counts as "standing here";
+  // dwell fills over DWELL_MS while they stay, drains when they leave.
+  // Without a pose model (load failure) the mirror simply arms after a while.
   useEffect(() => {
-    if (!camOn || step !== "photo") {
+    if (!camOn || step !== "photo") return;
+    let landmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
+    let stopped = false;
+    let modelFailed = false;
+    const t0 = Date.now();
+    getPoseLandmarker()
+      .then((l) => { if (!stopped) landmarker = l; })
+      .catch(() => { modelFailed = true; });
+    let last = Date.now();
+    const id = setInterval(() => {
+      const now = Date.now();
+      const dt = now - last;
+      last = now;
+      if (armedRef.current) return;
+      const v = videoRef.current;
+      let present = false;
+      if (v && v.readyState >= 2) {
+        if (landmarker) {
+          try {
+            const res = landmarker.detectForVideo(v, performance.now());
+            present = (res.landmarks ?? []).some((lm) => {
+              const shoulders = (lm[L_SHOULDER].visibility ?? 1) > 0.5 && (lm[R_SHOULDER].visibility ?? 1) > 0.5;
+              let y0 = 1, y1 = 0;
+              for (const q of lm) { if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
+              return shoulders && y1 - y0 > 0.3;
+            });
+          } catch { /* skip frame */ }
+        } else if (modelFailed || now - t0 > 8000) {
+          present = true;
+        }
+      }
+      if (needClearRef.current) {
+        if (present) clearSinceRef.current = 0;
+        else if (!clearSinceRef.current) clearSinceRef.current = now;
+        else if (now - clearSinceRef.current > 1500) { needClearRef.current = false; setWaitingClear(false); }
+        return;
+      }
+      dwellRef.current = Math.max(0, Math.min(1, dwellRef.current + (present ? dt / DWELL_MS : -dt / 900)));
+      setDwell(dwellRef.current);
+      if (dwellRef.current >= 1) {
+        armedRef.current = true;
+        setArmed(true);
+      }
+    }, 120);
+    return () => { stopped = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camOn, step, camTry]);
+
+  // once armed: 3-2-1, then snap by itself
+  useEffect(() => {
+    if (!armed || !camOn || step !== "photo") {
       setCount(null);
       return;
     }
-    // (retries were already prompted by the noshow screen's voice line)
-    if (tries === 0) speak("내가 만든 채소 친구를 화면 가운데에 보여 줘! 곧 사진을 찍을 거야!");
+    if (tries === 0) speak("좋아요, 그대로! 셋, 둘, 하나!");
     setCount(COUNTDOWN_S);
     const id = setInterval(() => {
       setCount((c) => {
@@ -104,7 +227,7 @@ export function Build({ onDone }: { onDone: () => void }) {
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camOn, step, camTry]);
+  }, [armed, camOn, step, camTry]);
 
   function stopCam() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -116,11 +239,15 @@ export function Build({ onDone }: { onDone: () => void }) {
     const v = videoRef.current;
     if (!v || v.readyState < 2) {
       // camera wasn't ready at snap time — restart it instead of stranding
+      disarm();
       setCamTry((t) => t + 1);
       return;
     }
+    ensureProfile(); // silent session profile keys rate limits & saves
     sparkle();
-    // WYSIWYG: crop what the (object-fit: cover) preview shows
+    setFlash(true);
+    setTimeout(() => setFlash(false), 500);
+    // WYSIWYG: crop what the (object-fit: cover) mirror shows
     const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
     let cw = v.videoWidth, ch = v.videoHeight;
     if (cw / ch > ratio) cw = Math.round(ch * ratio);
@@ -151,21 +278,25 @@ export function Build({ onDone }: { onDone: () => void }) {
     reader.readAsDataURL(file);
   }
 
+  // back to the mirror WITHOUT touching the camera stream
+  function backToMirror(nextTries: number, requireClear = false) {
+    setPhoto("");
+    setTries(nextTries);
+    disarm(requireClear);
+    setStep("photo");
+  }
   function retake() {
     track("photo_retake");
-    setPhoto("");
-    setTries(0);
-    setStep("photo");
-    setCamTry((t) => t + 1);
+    backToMirror(0);
   }
-
-  // the AI saw no creation in the shot — ask (with a voice) and reshoot
+  // the AI saw no creation in the shot — ask and reshoot
   function retryCloser() {
     track("match_retry", { tries: tries + 1 });
-    setPhoto("");
-    setTries((t) => t + 1);
-    setStep("photo");
-    setCamTry((t) => t + 1);
+    backToMirror(tries + 1);
+  }
+  function finish() {
+    onDone();
+    backToMirror(0, true);
   }
 
   if (step === "magic") {
@@ -176,45 +307,56 @@ export function Build({ onDone }: { onDone: () => void }) {
         tries={tries}
         onRetake={retake}
         onRetryCloser={retryCloser}
-        onDone={onDone}
+        onDone={finish}
       />
     );
   }
 
+  const caption =
+    count !== null && count > 0 ? "그대로 있어 주세요…"
+    : tries > 0 ? "채소 친구가 잘 안 보였어요 — 조금 더 가까이 보여줄래요?"
+    : waitingClear ? "다음 친구는 잠시 후에 거울 앞에 서 주세요"
+    : dwell > 0.05 ? "좋아요! 잠시만 그대로…"
+    : "채소 친구를 들고 거울 앞에 서 보세요";
+
   return (
-    <div className="screen">
-      <div className="stack center">
-        <p className="lead">
-          {tries > 0 ? "🥕 조금만 더 가까이 보여줄래요?" : "📸 내가 만든 채소 친구를 카메라에 보여주세요!"}
-        </p>
-        <div className="camera-box">
+    <Cine>
+      <header className="cine-head">
+        <p className="cine-eyebrow">몽글몽글 가을 놀이터</p>
+        <h1 className="cine-title">채소 친구를 깨우는 마법 거울</h1>
+      </header>
+
+      <div className={`portal${dwell > 0.05 ? " sensing" : ""}${armed ? " armed" : ""}`}>
+        <svg className="portal-ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle className="ring-track" cx="50" cy="50" r="48" />
+          <circle className="ring-fill" cx="50" cy="50" r="48" style={{ strokeDashoffset: 301.6 * (1 - dwell) }} />
+        </svg>
+        <div className="portal-clip">
           {camOn ? (
-            <>
-              <video ref={videoRef} autoPlay playsInline muted className="camera" />
-              <div className="guide-zone" aria-hidden="true">
-                <span className="guide-label">여기에 보여 줘!</span>
-              </div>
-              {count !== null && count > 0 && <span className="count-badge">{count}</span>}
-            </>
+            <video ref={videoRef} autoPlay playsInline muted className="portal-cam" />
           ) : (
-            <div className="camera placeholder">
-              <img src="/camera-cover.jpg" alt="" className="cover-bg" />
+            <div className="portal-ph">
               <span>📷</span>
-              <p>{camError ?? "카메라 켜는 중…"}</p>
+              <p>{camError ?? "거울을 깨우는 중…"}</p>
             </div>
           )}
+          {count !== null && count > 0 && <span className="portal-count">{count}</span>}
+          {flash && <div className="portal-flash" />}
         </div>
-        {!camOn && camError && (
-          <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
-            📷 다시 시도
-          </button>
-        )}
-        <label className="btn-ghost">
-          🖼️ 사진으로 올리기
-          <input type="file" accept="image/*" onChange={onFile} hidden />
-        </label>
       </div>
-    </div>
+
+      <p className="cine-caption">{caption}</p>
+
+      {!camOn && camError && (
+        <button className="btn-glass" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
+          📷 다시 시도
+        </button>
+      )}
+      <label className="cine-upload">
+        사진으로 올리기
+        <input type="file" accept="image/*" onChange={onFile} hidden />
+      </label>
+    </Cine>
   );
 }
 
@@ -331,29 +473,29 @@ function MagicStep({
 
   if (phase === "noshow") {
     return (
-      <div className="screen center-screen" style={{ alignItems: "center" }}>
+      <CineScreen>
         <p className="lead">🔍 어라? 채소 친구가 잘 안 보여요!</p>
         <div className="noshow-card">
           <span className="noshow-emoji">🥕🙌</span>
           <p>조금만 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여줄래요?</p>
           <p className="noshow-sub">잠시 후에 다시 찍어요…</p>
         </div>
-      </div>
+      </CineScreen>
     );
   }
 
   if (phase === "dance") {
     return (
-      <div className="screen center-screen" style={{ alignItems: "center" }}>
+      <CineScreen>
         <p className="lead">🕺 마법 동작으로 채소 친구를 깨워 줘!</p>
         <DanceCharge stream={stream} onFull={danceDone} />
-      </div>
+      </CineScreen>
     );
   }
 
   if (phase === "sendoff") {
     return (
-      <div className="screen center-screen" style={{ alignItems: "center" }}>
+      <CineScreen>
         <div className="sendoff-card">
           <span className="sendoff-emoji" aria-hidden="true">🏘️</span>
           <p className="sendoff-title">디지털 마을로 떠났어요!</p>
@@ -361,25 +503,25 @@ function MagicStep({
             옆 화면 <span className="sendoff-arrow">👉</span> 디지털 마을에서<br />네 친구를 확인해 봐!
           </p>
         </div>
-      </div>
+      </CineScreen>
     );
   }
 
   if (phase === "walk" && variant) {
     return (
-      <div className="screen center-screen" style={{ alignItems: "center" }}>
+      <CineScreen>
         <p className="lead">🌏 디지털 세계로 출발!</p>
         <div className="walk-stage">
           <div className="walker">
             <img src={`/variants/${variant}.smile.gif`} alt="" />
           </div>
         </div>
-      </div>
+      </CineScreen>
     );
   }
 
   return (
-    <div className="screen center-screen" style={{ alignItems: "center" }}>
+    <CineScreen>
       <p className="lead">
         {phase === "match" ? "✨ 마법을 읽는 중…" : phase === "dust" ? "✨ 마법가루를 뿌리는 중…" : "🎉 살아났다!"}
       </p>
@@ -411,7 +553,7 @@ function MagicStep({
       {phase !== "alive" && (
         <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
       )}
-    </div>
+    </CineScreen>
   );
 }
 
