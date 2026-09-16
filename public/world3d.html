@@ -29,6 +29,7 @@
 // =====================================================================
 import * as THREE from "three";
 import { GLTFLoader } from "/vendor/three/examples/jsm/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "/vendor/three/examples/jsm/environments/RoomEnvironment.js";
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 const DEBUG = new URLSearchParams(location.search).has("debug");
@@ -92,9 +93,13 @@ if (DEBUG) {
   scene.add(g);
 }
 
+// soft studio environment (reflections for the vinyl-figure material)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
 // warm autumn light
-scene.add(new THREE.HemisphereLight(0xffe9c8, 0x7a4a26, 1.35));
-const sun = new THREE.DirectionalLight(0xffe0b0, 2.2);
+scene.add(new THREE.HemisphereLight(0xffe9c8, 0x7a4a26, 0.95));
+const sun = new THREE.DirectionalLight(0xffe0b0, 1.55);
 sun.position.set(6, 9, 4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -168,38 +173,102 @@ function loadModel(url) {
   if (!modelCache[url]) modelCache[url] = new Promise((res, rej) => gltf.load(url, (g) => res(g.scene), undefined, rej));
   return modelCache[url];
 }
+// Build a SOLID part from a render: read the image's alpha silhouette, spin it
+// into a plump body of revolution (per-row centre + radius, slightly flattened
+// front-to-back), and project the render onto it as the surface colour. The
+// result is a real mesh — it has volume, turns, catches the scene's sun and
+// casts a proper shadow — while keeping the render's exact face and look.
+const HAVE_MODELS = new Set(); // filled from /models/index.json (which parts already have real GLBs)
+fetch("/models/index.json").then((r) => r.json()).then((j) => { for (const n of j.models || []) HAVE_MODELS.add(n); }).catch(() => {});
+const profileCache = {};
+function loadProfile(url) {
+  if (!profileCache[url]) profileCache[url] = new Promise((res) => {
+    const im = new Image();
+    im.onload = () => {
+      const W = im.naturalWidth, H = im.naturalHeight;
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(im, 0, 0);
+      const a = ctx.getImageData(0, 0, W, H).data;
+      const rows = [];
+      const N = 56;
+      for (let i = 0; i <= N; i++) {
+        const y = Math.min(H - 1, Math.round((i / N) * (H - 1)));
+        let l = -1, r = -1;
+        for (let x = 0; x < W; x++) if (a[(y * W + x) * 4 + 3] > 110) { l = x; break; }
+        for (let x = W - 1; x >= 0; x--) if (a[(y * W + x) * 4 + 3] > 110) { r = x; break; }
+        rows.push(l < 0 ? { cx: 0.5, r: 0 } : { cx: (l + r) / 2 / W, r: (r - l) / 2 / W });
+      }
+      // smooth a little so bumps don't turn into rings
+      for (let k = 0; k < 2; k++) for (let i = 1; i < rows.length - 1; i++) { rows[i].r = (rows[i - 1].r + rows[i].r * 2 + rows[i + 1].r) / 4; rows[i].cx = (rows[i - 1].cx + rows[i].cx * 2 + rows[i + 1].cx) / 4; }
+      res({ rows, aspect: W / H });
+    };
+    im.onerror = () => res(null);
+    im.src = url;
+  });
+  return profileCache[url];
+}
+function solidGeometry(prof, w, h, depth = 0.78) {
+  const rows = prof.rows, N = rows.length - 1, SEG = 40;
+  const pos = [], uv = [], idx = [];
+  for (let i = 0; i <= N; i++) {
+    const y = h / 2 - (i / N) * h;               // top -> bottom, centred
+    const rr = Math.max(0.004, rows[i].r * w);    // ring radius in world units
+    const cx = (rows[i].cx - 0.5) * w;            // ring centre offset
+    for (let j = 0; j <= SEG; j++) {
+      const a = (j / SEG) * Math.PI * 2;
+      const x = cx + Math.cos(a) * rr, z = Math.sin(a) * rr * depth;
+      pos.push(x, y, z);
+      // planar projection of the render (front and back both see the face)
+      uv.push(THREE.MathUtils.clamp(x / w + 0.5, 0, 1), THREE.MathUtils.clamp(y / h + 0.5, 0, 1));
+    }
+  }
+  for (let i = 0; i < N; i++) for (let j = 0; j < SEG; j++) {
+    const a = i * (SEG + 1) + j, b = a + SEG + 1;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+const VINYL = (tex) => new THREE.MeshPhysicalMaterial({ map: tex, color: 0xe2e2e2, roughness: 0.52, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4, envMapIntensity: 0.28 });
+
 function sticker(def, mirror = false) {
   const g = new THREE.Group();
   if (!def) return g;
   const h = def.h, w = h * def.aspect;
   const ax = def.ax ?? 0.5, ay = def.ay ?? 0.5;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: getTex(def.tex), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
   const ox = w / 2 - ax * w, oy = ay * h - h / 2;
   const inner = new THREE.Group();
-  m.position.set(ox, oy, 0);
-  m.castShadow = true;
-  inner.add(m);
   if (def.rot) inner.rotation.z = def.rot;
   if (mirror) inner.scale.x = -1;
   g.add(inner);
-  g.userData.flat = true;
+  g.userData.flat = false;
+  // solid volume from the silhouette (arrives a moment after the image loads)
+  loadProfile(def.tex).then((prof) => {
+    if (!prof) return;
+    const m = new THREE.Mesh(solidGeometry(prof, w, h), VINYL(getTex(def.tex)));
+    m.position.set(ox, oy, 0);
+    m.castShadow = true; m.receiveShadow = true;
+    inner.add(m);
+  });
   if (def.model && HAVE_MODELS.has(def.model.split('/').pop())) {
     loadModel(def.model).then((src) => {
       const model = src.clone(true);
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
-      const k = h / size.y;
-      model.scale.setScalar(k);
+      model.scale.setScalar(h / size.y);
       box.setFromObject(model);
-      // anchor: ax from the left, ay from the top of the model's bounds; depth centred
       const anchor = new THREE.Vector3(box.min.x + (box.max.x - box.min.x) * ax, box.max.y - (box.max.y - box.min.y) * ay, (box.min.z + box.max.z) / 2);
       model.position.sub(anchor);
       model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       if (mirror) model.scale.x *= -1;
-      g.remove(inner);
-      g.add(model);
-      g.userData.flat = false;
-    }).catch(() => { /* keep the sticker */ });
+      inner.clear();
+      inner.add(model);
+    }).catch(() => {});
   }
   if (RIG) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff88 })); g.add(dot); }
   return g;
@@ -386,8 +455,6 @@ const gone = (e) => Date.now() > e.at + STAY_MS(e);
 const withModel = (def) => (def ? { ...def, model: def.tex.replace("/parts/", "/models/").replace(".png", ".glb") } : def);
 for (const k in BODIES) BODIES[k] = withModel(BODIES[k]);
 for (const grp of ["hats", "arms", "legs"]) for (const k in PARTS[grp]) PARTS[grp][k] = withModel(PARTS[grp][k]);
-const HAVE_MODELS = new Set(); // filled from /models/index.json (which parts already have 3D)
-fetch("/models/index.json").then((r) => r.json()).then((j) => { for (const n of j.models || []) HAVE_MODELS.add(n); }).catch(() => {});
 
 function partsFor(entry) {
   if (entry.parts) return entry.parts;
