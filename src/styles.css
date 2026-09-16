@@ -1,12 +1,14 @@
 :root {
-  --green: #7cc242;
-  --green-dark: #5ba12c;
-  --bg1: #f3fbe8;
-  --bg2: #e3f4ff;
-  --ink: #3a4a2f;
-  --muted: #8a9a7c;
+  /* autumn key-visual palette (몽글몽글 가을 놀이터): brand orange on warm
+     cream, warm-brown ink. Variable NAMES kept (--green*) to avoid churn. */
+  --green: #f2a537;
+  --green-dark: #c4770e;
+  --bg1: #fdf7e7;
+  --bg2: #fbeccb;
+  --ink: #453221;
+  --muted: #a3906f;
   --card: #ffffff;
-  --shadow: 0 6px 18px rgba(90, 120, 60, 0.14);
+  --shadow: 0 6px 18px rgba(170, 115, 40, 0.16);
   --radius: 22px;
 }
 
@@ -39,7 +41,7 @@ body {
 
 /* ---- top bar (brand + sound) ---- */
 .brand { position: fixed; top: 10px; left: 18px; z-index: 50; display: flex; align-items: center; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
-.brand-logo { height: 84px; width: auto; display: block; filter: drop-shadow(0 3px 8px rgba(90, 120, 60, 0.18)); }
+.brand-logo { height: 84px; width: auto; display: block; filter: drop-shadow(0 3px 8px rgba(170, 115, 40, 0.18)); }
 .sound-toggle { position: fixed; top: 14px; right: 18px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; }
 
 /* ---- profile gate ---- */
@@ -48,7 +50,7 @@ body {
 .profile-card h2 { margin: 0; font-size: 30px; }
 .profile-sub { margin: -6px 0 4px; color: var(--muted); font-weight: 700; }
 .field { display: flex; flex-direction: column; gap: 6px; font-weight: 800; font-size: 15px; color: var(--ink); }
-.field input { border: 3px solid #d7e6c4; border-radius: 14px; padding: 13px 14px; font-size: 18px; font-family: inherit; font-weight: 700; color: var(--ink); outline: none; }
+.field input { border: 3px solid #f0dcb2; border-radius: 14px; padding: 13px 14px; font-size: 18px; font-family: inherit; font-weight: 700; color: var(--ink); outline: none; }
 .field input:focus { border-color: var(--green); }
 .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 700; font-size: 14px; color: var(--ink); line-height: 1.45; cursor: pointer; }
 .check input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--green); flex: none; }
@@ -65,17 +67,17 @@ body {
 .traits { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .traits-q { margin: 0; font-weight: 800; font-size: 20px; }
 .traits-row { display: flex; gap: 12px; }
-.trait-btn { background: #fff; border: 3px solid #e3eed4; border-radius: 18px; padding: 12px 18px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform 0.08s ease; }
+.trait-btn { background: #fff; border: 3px solid #f3e3c0; border-radius: 18px; padding: 12px 18px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--ink); display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform 0.08s ease; }
 .trait-btn:active { transform: scale(0.94); }
 .trait-emoji { font-size: 30px; }
 .traits-done { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.traits-done .chip { background: #eaf6d9; }
-.name-chips .chip { background: #eaf6d9; }
+.traits-done .chip { background: #faeed3; }
+.name-chips .chip { background: #faeed3; }
 
 /* ---- clay kneading mini-game ---- */
 .clay-game { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .clay-bar { position: relative; width: 360px; height: 26px; background: #fff; border-radius: 999px; box-shadow: var(--shadow); overflow: hidden; }
-.clay-bar-fill { height: 100%; background: linear-gradient(90deg, #b9e08a, #7cc242); border-radius: 999px; transition: width 0.35s ease; }
+.clay-bar-fill { height: 100%; background: linear-gradient(90deg, #ffd54d, #f2a537); border-radius: 999px; transition: width 0.35s ease; }
 .clay-bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; color: #3b6d11; }
 .clay-stage { position: relative; width: 340px; height: 340px; touch-action: none; cursor: pointer; }
 .clay-wobble { width: 100%; height: 100%; }
@@ -95,7 +97,7 @@ body {
 .potion-title { margin: 0; font-weight: 800; font-size: 26px; }
 /* ingredients float scattered around the pot; tap one and it flies in */
 .dust-area { position: relative; width: 500px; height: 330px; }
-.ing-float { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fff; border: 3px solid #e3eed4; border-radius: 16px; padding: 8px 14px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--ink); box-shadow: var(--shadow); animation: bob 2.6s ease-in-out infinite; }
+.ing-float { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fff; border: 3px solid #f3e3c0; border-radius: 16px; padding: 8px 14px; cursor: pointer; font-family: inherit; font-weight: 800; font-size: 15px; color: var(--ink); box-shadow: var(--shadow); animation: bob 2.6s ease-in-out infinite; }
 .ing-emoji { font-size: 34px; }
 .f1 { top: 0; left: 6px; --r: -6deg; animation-delay: 0s; }
 .f2 { top: 6px; left: 188px; --r: 4deg; animation-delay: 0.4s; }
@@ -167,7 +169,7 @@ body {
 }
 .polaroid { background: #fff; padding: 10px 10px 30px; border-radius: 6px; box-shadow: 0 12px 26px rgba(60, 80, 40, 0.22); }
 .photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 2px; }
-.photo-ph { display: flex; align-items: center; justify-content: center; font-size: 64px; background: linear-gradient(150deg, #eaf6d9, #d9ecf7); }
+.photo-ph { display: flex; align-items: center; justify-content: center; font-size: 64px; background: linear-gradient(150deg, #faeed3, #d9ecf7); }
 /* per-snapshot placement (top-to-bottom appearance order) */
 /* earlier snapshots stack above later ones so their doodles never get clipped */
 .s1 { top: 0; left: 10px; width: 250px; --rot: -5deg; z-index: 4; }
@@ -176,7 +178,7 @@ body {
 .s4 { top: 350px; left: 310px; width: 235px; --rot: 4deg; z-index: 1; }
 /* handwritten doodle caption + pig-tail squiggle, outside the frame.
    The arrow art points up-right; .ul/.dr/.dl mirror it so every tip aims at its photo. */
-.doodle { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; font-family: inherit; font-weight: 800; font-size: 27px; color: #55793f; white-space: nowrap; }
+.doodle { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; font-family: inherit; font-weight: 800; font-size: 27px; color: #a8642a; white-space: nowrap; }
 .pigtail { width: 52px; height: 34px; flex: none; }
 .pigtail.ul { transform: scaleX(-1); }
 .pigtail.dr { transform: scaleY(-1); }
@@ -240,7 +242,7 @@ body {
   75% { transform: translateY(0) scale(1.08,0.92); }
   100% { transform: translateY(0) scale(1,1); }
 }
-.face { position: relative; border-radius: 50%; overflow: hidden; background: #eaf6d9; transform-origin: center bottom; animation: breathe 3s ease-in-out infinite; }
+.face { position: relative; border-radius: 50%; overflow: hidden; background: #faeed3; transform-origin: center bottom; animation: breathe 3s ease-in-out infinite; }
 @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
 .face-photo { width: 100%; height: 100%; object-fit: cover; }
 .face-placeholder, .eyes-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 56px; }
@@ -287,7 +289,7 @@ body {
   .camera-box { width: 100%; max-width: none; height: calc(100vh - 225px); min-height: 240px; aspect-ratio: auto; }
 }
 /* invitation cover — camera stays OFF until the child taps this */
-.camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #eaf6d9, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
+.camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #faeed3, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
 .cover-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.45; pointer-events: none; }
 .cover-title { position: relative; font-weight: 800; font-size: 30px; line-height: 1.3; color: var(--green-dark); text-align: center; text-shadow: 0 2px 10px rgba(255, 255, 255, 0.9), 0 0 24px rgba(255, 255, 255, 0.8); }
 .cover-hint { position: relative; font-weight: 800; font-size: 18px; color: var(--ink); text-shadow: 0 2px 10px rgba(255, 255, 255, 0.9); animation: coverBounce 1.4s ease-in-out infinite; }
@@ -302,7 +304,7 @@ body {
 .camera.placeholder span { font-size: 56px; }
 
 /* ---- eyes stage ---- */
-.eyes-stage { position: relative; width: 380px; height: 380px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #eaf6d9; touch-action: none; }
+.eyes-stage { position: relative; width: 380px; height: 380px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #faeed3; touch-action: none; }
 .eyes-photo { width: 100%; height: 100%; object-fit: cover; }
 .eye.draggable { width: 56px; height: 56px; cursor: grab; animation: none; }
 .eye.draggable:active { cursor: grabbing; }
@@ -313,7 +315,7 @@ body {
 .style-row { gap: 24px; }
 .style-frame {
   width: 240px; height: 240px; border-radius: 28px; overflow: hidden; position: relative;
-  background: #eaf6d9; box-shadow: var(--shadow);
+  background: #faeed3; box-shadow: var(--shadow);
 }
 .style-frame img { width: 100%; height: 100%; object-fit: cover; }
 .style-frame .eyes-placeholder { font-size: 64px; }
@@ -324,12 +326,12 @@ body {
   align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.72);
   font-weight: 800; color: var(--green-dark);
 }
-.spin { width: 36px; height: 36px; border: 4px solid #d7e6c4; border-top-color: var(--green); border-radius: 50%; animation: spin 0.9s linear infinite; }
+.spin { width: 36px; height: 36px; border: 4px solid #f0dcb2; border-top-color: var(--green); border-radius: 50%; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .style-note { background: #fff4d6; border-radius: 16px; padding: 14px 18px; font-weight: 800; text-align: center; max-width: 360px; line-height: 1.5; }
 
 /* ---- 깨우기(영상) 단계 ---- */
-.wake-frame { width: 300px; height: 300px; border-radius: 28px; overflow: hidden; position: relative; background: #eaf6d9; box-shadow: var(--shadow); }
+.wake-frame { width: 300px; height: 300px; border-radius: 28px; overflow: hidden; position: relative; background: #faeed3; box-shadow: var(--shadow); }
 .wake-media { width: 100%; height: 100%; object-fit: cover; }
 .wake-frame .eyes-placeholder { font-size: 80px; }
 .hint-small { color: var(--muted); font-weight: 700; font-size: 17px; text-align: center; margin: 0; }
@@ -343,7 +345,7 @@ body {
 /* ---- veggie chips ---- */
 .veg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .veg-chip {
-  border: 3px solid #e3eed4; background: #fff; border-radius: 18px; padding: 14px 6px;
+  border: 3px solid #f3e3c0; background: #fff; border-radius: 18px; padding: 14px 6px;
   display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-family: inherit;
   transition: transform 0.08s ease;
 }
@@ -359,7 +361,7 @@ body {
 .chip { color: #4a3a1a; font-weight: 800; padding: 6px 12px; border-radius: 999px; font-size: 14px; }
 .chip.sm { padding: 3px 10px; font-size: 12px; }
 .name-input {
-  border: 3px solid #d7e6c4; border-radius: 16px; padding: 18px; font-size: 24px;
+  border: 3px solid #f0dcb2; border-radius: 16px; padding: 18px; font-size: 24px;
   text-align: center; font-family: inherit; font-weight: 800; color: var(--ink); outline: none;
 }
 .name-input:focus { border-color: var(--green); }
@@ -405,7 +407,7 @@ body {
 .path-label { font-weight: 800; font-size: 25px; }
 .path-hint { color: var(--muted); font-weight: 700; font-size: 13px; }
 
-.retry-note { background: #eaf6d9; border-radius: 16px; padding: 16px; font-weight: 800; text-align: center; font-size: 17px; max-width: 900px; width: 100%; margin: 0 auto; }
+.retry-note { background: #faeed3; border-radius: 16px; padding: 16px; font-weight: 800; text-align: center; font-size: 17px; max-width: 900px; width: 100%; margin: 0 auto; }
 
 /* ---- photo booth ---- */
 .booth-stage { position: relative; width: 100%; max-width: 760px; aspect-ratio: 4 / 3; border-radius: 24px; overflow: hidden; background: #000; box-shadow: var(--shadow); }
@@ -421,7 +423,7 @@ body {
 
 /* email-me form on the certificate */
 .mail-form { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; border-radius: 18px; padding: 16px 20px; box-shadow: var(--shadow); width: 100%; max-width: 380px; }
-.mail-form input[type="email"] { width: 100%; border: 3px solid #d7e6c4; border-radius: 14px; padding: 12px 14px; font-size: 18px; font-family: inherit; font-weight: 700; color: var(--ink); outline: none; }
+.mail-form input[type="email"] { width: 100%; border: 3px solid #f0dcb2; border-radius: 14px; padding: 12px 14px; font-size: 18px; font-family: inherit; font-weight: 700; color: var(--ink); outline: none; }
 .mail-form input[type="email"]:focus { border-color: var(--green); }
 .mail-form .check { font-size: 14px; }
 .mail-form .btn-primary { width: 100%; padding: 12px; font-size: 19px; }
@@ -446,7 +448,7 @@ body {
 .greet-screen { gap: 18px; align-items: center; }
 .greet-hero { transition: opacity 1.4s ease, transform 1.4s ease; }
 .greet-hero.leaving { opacity: 0; transform: translateY(-60px) scale(0.85); }
-.greet-frame { width: 320px; height: 320px; border-radius: 32px; overflow: hidden; background: #eaf6d9; box-shadow: var(--shadow); }
+.greet-frame { width: 320px; height: 320px; border-radius: 32px; overflow: hidden; background: #faeed3; box-shadow: var(--shadow); }
 .greet-media { width: 100%; height: 100%; object-fit: cover; }
 .greet-cue { font-size: 30px; font-weight: 800; text-align: center; color: var(--ink); margin: 0; animation: pop 0.5s ease; }
 .greet-cue.fade { animation: dropIn 0.8s ease; color: var(--muted); }
@@ -501,7 +503,7 @@ body {
 .wake-cover { opacity: 0.6; }
 
 /* ---------- hand-tracked dust stage: floating items + pot ---------- */
-.hs-item { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; background: rgba(255, 255, 255, 0.92); border: 3px solid #e3eed4; border-radius: 16px; padding: 8px 14px; font-weight: 800; font-size: 15px; color: var(--ink); box-shadow: var(--shadow); pointer-events: none; animation: hsBob 2.6s ease-in-out infinite; }
+.hs-item { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; background: rgba(255, 255, 255, 0.92); border: 3px solid #f3e3c0; border-radius: 16px; padding: 8px 14px; font-weight: 800; font-size: 15px; color: var(--ink); box-shadow: var(--shadow); pointer-events: none; animation: hsBob 2.6s ease-in-out infinite; }
 @keyframes hsBob { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-8px); } }
 .hs-item-fly { animation: hsDive 0.62s cubic-bezier(0.45, -0.1, 0.7, 1) forwards; }
 @keyframes hsDive { to { transform: translate(-50%, 240%) scale(0.25); opacity: 0.1; } }
@@ -535,22 +537,22 @@ body {
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
 .dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
-.magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(60, 90, 30, 0.18); overflow: hidden; }
+.magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
 .magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 22px); }
-.dance-hint { color: var(--ink-soft, #7a8471); font-size: clamp(13px, 2.2vmin, 18px); }
+.dance-hint { color: var(--ink-soft, #a3906f); font-size: clamp(13px, 2.2vmin, 18px); }
 
 /* "couldn't see it — hold it closer" auto-retry card */
 .noshow-card { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 34px 46px; font-size: clamp(18px, 3vmin, 26px); color: var(--ink); text-align: center; }
 .noshow-emoji { font-size: clamp(44px, 9vmin, 76px); animation: guidePop 1.1s ease-in-out infinite alternate; }
-.noshow-sub { color: var(--ink-soft, #7a8471); font-size: 0.75em; }
+.noshow-sub { color: var(--ink-soft, #a3906f); font-size: 0.75em; }
 @keyframes guidePop { from { transform: scale(1) rotate(-3deg); } to { transform: scale(1.12) rotate(3deg); } }
 
 /* ---------- the creature stomps off the right edge into the Digital World ---------- */
 .walk-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
 /* starts exactly where the reveal showed it — screen centre — then strolls right */
 .walker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(52vmin, 480px); animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
-.walker img { width: 100%; display: block; animation: waddleStep 0.48s ease-in-out infinite; filter: drop-shadow(0 12px 14px rgba(60, 90, 30, 0.25)); }
+.walker img { width: 100%; display: block; animation: waddleStep 0.48s ease-in-out infinite; filter: drop-shadow(0 12px 14px rgba(150, 100, 40, 0.25)); }
 @keyframes walkAcross { to { left: 140%; } }
 @keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }
 /* square variant clips in the wide reveal frame: show the whole creature */
