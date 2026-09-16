@@ -5,127 +5,35 @@ import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
-import { ensureProfile } from "../lib/profile";
 import { speak } from "../lib/guide";
-import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_SHOULDER, R_SHOULDER } from "../lib/pose";
+import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST } from "../lib/pose";
 
-// "Step up to the magic mirror and your creature comes alive."
-// The station is an ALWAYS-ON attract screen: a cinematic courtyard with the
-// live camera in a round mirror portal. No buttons — pose tracking notices a
-// child standing close (shoulders in view, big enough) and, after a short
-// steady dwell, counts 3-2-1 and snaps by itself. If the AI can't see a
-// creation in the shot it asks to hold it closer and reshoots (never a dead
-// end). The camera stream lives for the whole day; nothing ever restarts it
-// between visitors.
+// "Show it to the camera and it comes alive."
+// The station runs WITHOUT staff: big on-screen guidance + spoken Korean
+// prompts, the camera counts down and snaps by itself, and if the AI can't
+// see a creation in the shot it kindly asks the child to hold it closer and
+// retries on its own (never a dead end — after 2 retries the show goes on
+// with the best guess). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
-const COUNTDOWN_S = 3; // after presence is confirmed
-const DWELL_MS = 2200; // steady presence needed before the countdown arms
+const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
-const CINE_BG = "/main-bg.png";
-
-const DEBUG_POSE = new URLSearchParams(location.search).has("posedebug");
-function debugLine(text: string, hot = false) {
-  let el = document.getElementById("posedebug");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "posedebug";
-    el.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99;background:rgba(0,0,0,0.75);color:#0f0;font:700 20px monospace;padding:8px 14px;border-radius:10px;pointer-events:none;";
-    document.body.appendChild(el);
-  }
-  el.textContent = text;
-  el.style.color = hot ? "#ff0" : "#0f0";
-}
-function drawDebug(rise: number) {
-  debugLine(`rise ${(rise * 100).toFixed(1)}%  (jump at 4.5%)`, rise > 0.045);
-}
-
-// drifting leaves + embers over the courtyard (fixed at module load so the
-// attract loop never re-randomises mid-day)
-const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
-  kind: i % 3 === 2 ? "ember" : "leaf",
-  left: (i * 61) % 100,
-  size: 14 + ((i * 37) % 22),
-  dur: 14 + ((i * 53) % 14),
-  delay: -((i * 29) % 20),
-  drift: ((i * 17) % 9) - 4,
-}));
-
-// the cinematic stage every screen sits on: courtyard, slow drift, vignette
-function Cine({ children, dim = false }: { children: React.ReactNode; dim?: boolean }) {
-  return (
-    <div className={`cine${dim ? " dim" : ""}`}>
-      <div className="cine-bg" style={{ backgroundImage: `url(${CINE_BG})` }} />
-      <div className="cine-vignette" />
-      <div className="cine-particles" aria-hidden="true">
-        {PARTICLES.map((p, i) => (
-          <span
-            key={i}
-            className={`cine-particle ${p.kind}`}
-            style={{
-              left: `${p.left}vw`,
-              width: p.size,
-              height: p.size,
-              animationDuration: `${p.dur}s`,
-              animationDelay: `${p.delay}s`,
-              // @ts-expect-error css var
-              "--drift": `${p.drift}vw`,
-            }}
-          >
-            {p.kind === "leaf" && (
-              <svg viewBox="0 0 24 24"><path d="M12 2 C 19 6, 21 13, 12 22 C 3 13, 5 6, 12 2 Z" /><path className="vein" d="M12 5 L12 19" /></svg>
-            )}
-          </span>
-        ))}
-      </div>
-      <div className="cine-content">{children}</div>
-    </div>
-  );
-}
-
-// a magic-step screen: dimmed courtyard behind glass panels
-function CineScreen({ children }: { children: React.ReactNode }) {
-  return (
-    <Cine dim>
-      <div className="cine-screen">{children}</div>
-    </Cine>
-  );
-}
 
 export function Build({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState("");
   const [tries, setTries] = useState(0);
 
-  // -------- the always-on camera --------
+  // -------- camera with auto countdown snap --------
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [camOn, setCamOn] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
   const [camTry, setCamTry] = useState(0);
   const [count, setCount] = useState<number | null>(null);
-  const [flash, setFlash] = useState(false);
 
-  // presence: a child standing close and steady arms the countdown
-  const [dwell, setDwell] = useState(0); // 0..1
-  const dwellRef = useRef(0);
-  const [armed, setArmed] = useState(false);
-  const armedRef = useRef(false);
-  // after a show the mirror waits for the frame to EMPTY for a moment, so the
-  // same child lingering in front doesn't restart it — the next child steps up
-  const needClearRef = useRef(false);
-  const clearSinceRef = useRef(0);
-  const [waitingClear, setWaitingClear] = useState(false);
-  function disarm(requireClear = false) {
-    armedRef.current = false;
-    dwellRef.current = 0;
-    setArmed(false);
-    setDwell(0);
-    needClearRef.current = requireClear;
-    clearSinceRef.current = 0;
-    setWaitingClear(requireClear);
-  }
-
+  // the stream is kept alive through the magic step too — the dance mini-game
+  // watches the child move — and only stops on unmount / retake
   useEffect(() => {
     let cancelled = false;
     setCamError(null);
@@ -136,7 +44,7 @@ export function Build({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    md.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+    md.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -162,7 +70,9 @@ export function Build({ onDone }: { onDone: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camTry]);
 
-  // (re)bind the stream whenever the <video> (re)mounts
+  // bind the stream after the <video> renders (prevents a black screen).
+  // keyed on step/camTry too: coming back from the magic step remounts the
+  // <video> without camOn ever toggling, and it must be re-bound.
   useEffect(() => {
     const v = videoRef.current;
     if (camOn && v && streamRef.current && v.srcObject !== streamRef.current) {
@@ -171,74 +81,14 @@ export function Build({ onDone }: { onDone: () => void }) {
     }
   }, [camOn, step, camTry]);
 
-  // presence watcher: pose tracking on the mirror. A person whose shoulders
-  // are in view and who fills enough of the frame counts as "standing here";
-  // dwell fills over DWELL_MS while they stay, drains when they leave.
-  // Without a pose model (load failure) the mirror simply arms after a while.
+  // the countdown starts as soon as the camera is live, then snaps by itself
   useEffect(() => {
-    if (!camOn || step !== "photo") return;
-    let landmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
-    let stopped = false;
-    let modelFailed = false;
-    const t0 = Date.now();
-    getPoseLandmarker()
-      .then((l) => { if (!stopped) landmarker = l; })
-      .catch(() => { modelFailed = true; });
-    let last = Date.now();
-    let lastDetect = 0;
-    let lastPresent = false;
-    let raf = 0;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
-      const now = Date.now();
-      const dt = now - last;
-      last = now;
-      if (armedRef.current) return;
-      const v = videoRef.current;
-      // inference runs at ~30fps; between runs the last verdict holds
-      if (v && v.readyState >= 2 && now - lastDetect >= 33) {
-        lastDetect = now;
-        if (landmarker) {
-          try {
-            const res = landmarker.detectForVideo(v, performance.now());
-            lastPresent = (res.landmarks ?? []).some((lm) => {
-              const shoulders = (lm[L_SHOULDER].visibility ?? 1) > 0.5 && (lm[R_SHOULDER].visibility ?? 1) > 0.5;
-              let y0 = 1, y1 = 0;
-              for (const q of lm) { if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
-              return shoulders && y1 - y0 > 0.3;
-            });
-          } catch { /* skip frame */ }
-        } else if (modelFailed || now - t0 > 8000) {
-          lastPresent = true;
-        }
-      }
-      const present = lastPresent;
-      if (needClearRef.current) {
-        if (present) clearSinceRef.current = 0;
-        else if (!clearSinceRef.current) clearSinceRef.current = now;
-        else if (now - clearSinceRef.current > 1500) { needClearRef.current = false; setWaitingClear(false); }
-        return;
-      }
-      dwellRef.current = Math.max(0, Math.min(1, dwellRef.current + (present ? dt / DWELL_MS : -dt / 900)));
-      setDwell(dwellRef.current);
-      if (DEBUG_POSE) debugLine(`model ${landmarker ? "ok" : modelFailed ? "FAILED" : "loading"}  present ${present}  dwell ${(dwellRef.current * 100).toFixed(0)}%`);
-      if (dwellRef.current >= 1) {
-        armedRef.current = true;
-        setArmed(true);
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { stopped = true; cancelAnimationFrame(raf); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camOn, step, camTry]);
-
-  // once armed: 3-2-1, then snap by itself
-  useEffect(() => {
-    if (!armed || !camOn || step !== "photo") {
+    if (!camOn || step !== "photo") {
       setCount(null);
       return;
     }
-    if (tries === 0) speak("좋아요, 그대로! 셋, 둘, 하나!");
+    // (retries were already prompted by the noshow screen's voice line)
+    if (tries === 0) speak("내가 만든 채소 친구를 화면 가운데에 보여 줘! 곧 사진을 찍을 거야!");
     setCount(COUNTDOWN_S);
     const id = setInterval(() => {
       setCount((c) => {
@@ -254,7 +104,7 @@ export function Build({ onDone }: { onDone: () => void }) {
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [armed, camOn, step, camTry]);
+  }, [camOn, step, camTry]);
 
   function stopCam() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -266,15 +116,11 @@ export function Build({ onDone }: { onDone: () => void }) {
     const v = videoRef.current;
     if (!v || v.readyState < 2) {
       // camera wasn't ready at snap time — restart it instead of stranding
-      disarm();
       setCamTry((t) => t + 1);
       return;
     }
-    ensureProfile(); // silent session profile keys rate limits & saves
     sparkle();
-    setFlash(true);
-    setTimeout(() => setFlash(false), 500);
-    // WYSIWYG: crop what the (object-fit: cover) mirror shows
+    // WYSIWYG: crop what the (object-fit: cover) preview shows
     const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
     let cw = v.videoWidth, ch = v.videoHeight;
     if (cw / ch > ratio) cw = Math.round(ch * ratio);
@@ -305,25 +151,21 @@ export function Build({ onDone }: { onDone: () => void }) {
     reader.readAsDataURL(file);
   }
 
-  // back to the mirror WITHOUT touching the camera stream
-  function backToMirror(nextTries: number, requireClear = false) {
-    setPhoto("");
-    setTries(nextTries);
-    disarm(requireClear);
-    setStep("photo");
-  }
   function retake() {
     track("photo_retake");
-    backToMirror(0);
+    setPhoto("");
+    setTries(0);
+    setStep("photo");
+    setCamTry((t) => t + 1);
   }
-  // the AI saw no creation in the shot — ask and reshoot
+
+  // the AI saw no creation in the shot — ask (with a voice) and reshoot
   function retryCloser() {
     track("match_retry", { tries: tries + 1 });
-    backToMirror(tries + 1);
-  }
-  function finish() {
-    onDone();
-    backToMirror(0, true);
+    setPhoto("");
+    setTries((t) => t + 1);
+    setStep("photo");
+    setCamTry((t) => t + 1);
   }
 
   if (step === "magic") {
@@ -334,55 +176,45 @@ export function Build({ onDone }: { onDone: () => void }) {
         tries={tries}
         onRetake={retake}
         onRetryCloser={retryCloser}
-        onDone={finish}
+        onDone={onDone}
       />
     );
   }
 
-  const caption =
-    count !== null && count > 0 ? "그대로 있어 주세요"
-    : tries > 0 ? "채소 친구가 잘 보이지 않았어요 — 조금 더 가까이 보여 주세요"
-    : waitingClear ? "다음 친구는 잠시 후에 거울 앞에 서 주세요"
-    : dwell > 0.05 ? "좋아요, 잠시만 그대로"
-    : "채소 친구를 들고 거울 앞에 서 주세요";
-
   return (
-    <Cine>
-      <header className="cine-head">
-        <p className="cine-eyebrow">몽글몽글 가을 놀이터</p>
-        <h1 className="cine-title">채소 친구를 깨우는 마법 거울</h1>
-      </header>
-
-      <div className={`portal${dwell > 0.05 ? " sensing" : ""}${armed ? " armed" : ""}`}>
-        <svg className="portal-ring" viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden="true">
-          <rect className="ring-track" x="1" y="1" width="158" height="88" rx="7" pathLength="100" />
-          <rect className="ring-fill" x="1" y="1" width="158" height="88" rx="7" pathLength="100" style={{ strokeDashoffset: 100 * (1 - dwell) }} />
-        </svg>
-        <div className="portal-clip">
+    <div className="screen">
+      <div className="stack center">
+        <p className="lead">
+          {tries > 0 ? "🥕 조금만 더 가까이 보여줄래요?" : "📸 내가 만든 채소 친구를 카메라에 보여주세요!"}
+        </p>
+        <div className="camera-box">
           {camOn ? (
-            <video ref={videoRef} autoPlay playsInline muted className="portal-cam" />
+            <>
+              <video ref={videoRef} autoPlay playsInline muted className="camera" />
+              <div className="guide-zone" aria-hidden="true">
+                <span className="guide-label">여기에 보여 줘!</span>
+              </div>
+              {count !== null && count > 0 && <span className="count-badge">{count}</span>}
+            </>
           ) : (
-            <div className="portal-ph">
-              <p>{camError ?? "거울을 깨우는 중"}</p>
+            <div className="camera placeholder">
+              <img src="/camera-cover.jpg" alt="" className="cover-bg" />
+              <span>📷</span>
+              <p>{camError ?? "카메라 켜는 중…"}</p>
             </div>
           )}
-          {count !== null && count > 0 && <span className="portal-count">{count}</span>}
-          {flash && <div className="portal-flash" />}
         </div>
+        {!camOn && camError && (
+          <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
+            📷 다시 시도
+          </button>
+        )}
+        <label className="btn-ghost">
+          🖼️ 사진으로 올리기
+          <input type="file" accept="image/*" onChange={onFile} hidden />
+        </label>
       </div>
-
-      <p className="cine-caption">{caption}</p>
-
-      {!camOn && camError && (
-        <button className="btn-glass" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
-          다시 시도
-        </button>
-      )}
-      <label className="cine-upload">
-        사진으로 올리기
-        <input type="file" accept="image/*" onChange={onFile} hidden />
-      </label>
-    </Cine>
+    </div>
   );
 }
 
@@ -406,7 +238,7 @@ function MagicStep({
   onRetryCloser: () => void;
   onDone: () => void;
 }) {
-  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk" | "sendoff";
+  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk";
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -485,13 +317,8 @@ function MagicStep({
           body: JSON.stringify({ variant: v }),
         }).catch(() => {});
         later(() => {
-          // tell the child where to go next — then reset for the next family
-          setPhase("sendoff");
-          speak("옆에 있는 디지털 마을 화면에서 네 친구를 확인해 봐!");
-          later(() => {
-            track("build_done", { variant: v });
-            onDone();
-          }, 5000);
+          track("build_done", { variant: v });
+          onDone();
         }, 5200); // walk duration + a breath
       }, 3200);
     }, 1600);
@@ -499,55 +326,43 @@ function MagicStep({
 
   if (phase === "noshow") {
     return (
-      <CineScreen>
-        <p className="lead">채소 친구가 잘 보이지 않아요</p>
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🔍 어라? 채소 친구가 잘 안 보여요!</p>
         <div className="noshow-card">
-                    <p>조금 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여 주세요</p>
-          <p className="noshow-sub">잠시 후 다시 찍습니다</p>
+          <span className="noshow-emoji">🥕🙌</span>
+          <p>조금만 더 <b>가까이</b>, 화면 <b>가운데</b>에 보여줄래요?</p>
+          <p className="noshow-sub">잠시 후에 다시 찍어요…</p>
         </div>
-      </CineScreen>
+      </div>
     );
   }
 
   if (phase === "dance") {
     return (
-      <CineScreen>
-        <p className="lead">마법 동작으로 채소 친구를 깨워 주세요</p>
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🕺 마법 동작으로 채소 친구를 깨워 줘!</p>
         <DanceCharge stream={stream} onFull={danceDone} />
-      </CineScreen>
-    );
-  }
-
-  if (phase === "sendoff") {
-    return (
-      <CineScreen>
-        <div className="sendoff-card">
-                    <p className="sendoff-title">디지털 마을로 떠났어요</p>
-          <p className="sendoff-sub">
-            옆 화면 <span className="sendoff-arrow">→</span> 디지털 마을에서<br />내 친구를 만나 보세요
-          </p>
-        </div>
-      </CineScreen>
+      </div>
     );
   }
 
   if (phase === "walk" && variant) {
     return (
-      <CineScreen>
-        <p className="lead">디지털 마을로 떠나요</p>
+      <div className="screen center-screen" style={{ alignItems: "center" }}>
+        <p className="lead">🌏 디지털 세계로 출발!</p>
         <div className="walk-stage">
           <div className="walker">
             <img src={`/variants/${variant}.smile.gif`} alt="" />
           </div>
         </div>
-      </CineScreen>
+      </div>
     );
   }
 
   return (
-    <CineScreen>
+    <div className="screen center-screen" style={{ alignItems: "center" }}>
       <p className="lead">
-        {phase === "match" ? "채소 친구를 읽고 있어요" : phase === "dust" ? "마법가루가 내려와요" : "깨어났어요"}
+        {phase === "match" ? "✨ 마법을 읽는 중…" : phase === "dust" ? "✨ 마법가루를 뿌리는 중…" : "🎉 살아났다!"}
       </p>
 
       <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
@@ -577,41 +392,38 @@ function MagicStep({
       {phase !== "alive" && (
         <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
       )}
-    </CineScreen>
+    </div>
   );
 }
 
-// -------- the dance mini-game: one move per SCENE wakes the creature -------
-// Scene 1: JUMP (hip height dips above its rolling baseline). Scene 2: raise
-// both hands (만세). A "따라 해 봐!" demo card animates the move beside the
-// big camera view, the recognised child gets a glowing outline, and clearing
-// a scene pops a 통과! splash before the next scene slides in.
-// Deliberately forgiving: taps charge, a trickle starts after 10s, each scene
-// hard-completes by ~20s, and plain motion detection takes over if the pose
-// model cannot load.
-const SCENES = [
-  { prompt: "폴짝폴짝, 점프 두 번", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
-  { prompt: "두 손을 번쩍, 만세", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
+// -------- the dance mini-game: two magic moves wake the creature ------------
+// MediaPipe pose tracking picks the MAIN child (largest body in frame) and
+// draws a glowing outline around them so everyone can see who is recognised.
+// Stage 1: raise ONE hand overhead. Stage 2: raise BOTH hands (만세!) —
+// the two easiest poses to detect reliably. Deliberately forgiving for the
+// special-needs event: tapping the screen also charges, a trickle starts
+// after 10s and each stage hard-completes by ~20s, so nobody is ever stuck.
+// If the pose model cannot load, plain motion detection takes over.
+const STAGES = [
+  { prompt: "🙌 한 손을 머리 위로 번쩍!", voice: "마법 동작 시간이야! 한 손을 머리 위로 번쩍 들어 볼까?", hands: 1 },
+  { prompt: "🙌🙌 두 손 다 번쩍! 만세~!", voice: "우와, 잘했어! 이번엔 두 손 다 번쩍! 만세 해 볼까?", hands: 2 },
 ];
+const STAGE_SPAN = 50; // gauge points per stage (2 stages -> 100)
 
 function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
   const vRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [gauge, setGauge] = useState(0);
-  const [scene, setScene] = useState(0);
-  const [cleared, setCleared] = useState(false);
+  const [stage, setStage] = useState(0);
   const gaugeRef = useRef(0);
-  const sceneRef = useRef(0);
-  const sceneT0 = useRef(Date.now());
-  const clearedRef = useRef(false);
+  const stageRef = useRef(0);
+  const stageT0 = useRef(Date.now());
   const doneRef = useRef(false);
-  const hipBase = useRef(0);
-  const lastJump = useRef(0);
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
 
   useEffect(() => {
-    speak(SCENES[0].voice);
+    speak(STAGES[0].voice);
   }, []);
 
   useEffect(() => {
@@ -623,29 +435,21 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
   }, [stream]);
 
   function charge(amount: number) {
-    if (doneRef.current || clearedRef.current) return;
-    gaugeRef.current = Math.min(100, gaugeRef.current + amount);
+    if (doneRef.current) return;
+    const bound = (stageRef.current + 1) * STAGE_SPAN;
+    gaugeRef.current = Math.min(bound, gaugeRef.current + amount);
     setGauge(gaugeRef.current);
-    if (gaugeRef.current < 100) return;
-    // scene cleared! pop the splash, then the next scene (or the finale)
-    sparkle();
-    if (sceneRef.current < SCENES.length - 1) {
-      clearedRef.current = true;
-      setCleared(true);
-      setTimeout(() => {
-        sceneRef.current += 1;
-        sceneT0.current = Date.now();
-        gaugeRef.current = 0;
-        hipBase.current = 0;
-        clearedRef.current = false;
-        setGauge(0);
-        setScene(sceneRef.current);
-        setCleared(false);
-        speak(SCENES[sceneRef.current].voice);
-      }, 1300);
-    } else {
-      doneRef.current = true;
-      onFullRef.current();
+    if (gaugeRef.current >= bound) {
+      if (stageRef.current < STAGES.length - 1) {
+        stageRef.current += 1;
+        stageT0.current = Date.now();
+        setStage(stageRef.current);
+        sparkle();
+        speak(STAGES[stageRef.current].voice);
+      } else {
+        doneRef.current = true;
+        onFullRef.current();
+      }
     }
   }
   const chargeRef = useRef(charge);
@@ -654,7 +458,6 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
   useEffect(() => {
     let landmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
     let stopped = false;
-    const smoothBoxes: { x0: number; y0: number; x1: number; y1: number }[] = [];
     getPoseLandmarker()
       .then((l) => { if (!stopped) landmarker = l; })
       .catch(() => { /* fallback below keeps working */ });
@@ -666,14 +469,9 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
     const diffCtx = diffCanvas.getContext("2d", { willReadFrequently: true });
     let prev: Uint8ClampedArray | null = null;
 
-    let raf = 0;
-    let lastDetect = 0;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
+    const id = setInterval(() => {
       const v = vRef.current;
-      const now = Date.now();
-      if (v && v.readyState >= 2 && now - lastDetect >= 33) {
-        lastDetect = now;
+      if (v && v.readyState >= 2) {
         if (landmarker) {
           try {
             const res = landmarker.detectForVideo(v, performance.now());
@@ -690,40 +488,14 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
               }
               const area = (x1 - x0) * (y1 - y0);
               if (area > mainArea) { mainArea = area; main = i; }
-              // ease toward the fresh box so the outline glides instead of jittering
-              const prev = smoothBoxes[i];
-              const k = 0.35;
-              const b = prev
-                ? { x0: prev.x0 + (x0 - prev.x0) * k, y0: prev.y0 + (y0 - prev.y0) * k, x1: prev.x1 + (x1 - prev.x1) * k, y1: prev.y1 + (y1 - prev.y1) * k }
-                : { x0, y0, x1, y1 };
-              smoothBoxes[i] = b;
-              return b;
+              return { x0, y0, x1, y1 };
             });
-            smoothBoxes.length = poses.length;
             drawOverlay(v, boxes, main);
             if (main >= 0) {
               const lm = poses[main];
-              const vis = (i: number) => (lm[i].visibility ?? 1) > 0.4;
-              if (sceneRef.current === 0) {
-                // JUMP: shoulders rising sharply above their rolling standing
-                // level (shoulders, unlike hips, are practically always in
-                // frame and tracked confidently)
-                if (vis(L_SHOULDER) && vis(R_SHOULDER)) {
-                  const bodyY = (lm[L_SHOULDER].y + lm[R_SHOULDER].y) / 2;
-                  const b = hipBase.current || bodyY;
-                  hipBase.current = bodyY > b ? bodyY : b + (bodyY - b) * 0.04;
-                  const rise = hipBase.current - bodyY;
-                  if (DEBUG_POSE) drawDebug(rise);
-                  if (rise > 0.045 && Date.now() - lastJump.current > 650) {
-                    lastJump.current = Date.now();
-                    chargeRef.current(50); // two jumps clear the scene
-                  }
-                }
-              } else if (vis(NOSE) && vis(L_WRIST) && vis(R_WRIST)) {
-                const headY = lm[NOSE].y - 0.03;
-                const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
-                if (up >= 2) chargeRef.current(2.4); // hold 만세 ~1.5s at 30fps
-              }
+              const headY = lm[NOSE].y - 0.03;
+              const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
+              if (up >= STAGES[stageRef.current].hands) chargeRef.current(5);
             }
           } catch { /* one bad frame — skip */ }
         } else if (diffCtx) {
@@ -734,19 +506,17 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) chargeRef.current(0.9);
+            if (moved / (d.length / 16) > 0.04) chargeRef.current(2.5);
           }
           prev = d;
         }
       }
-      // never a dead end: per-scene trickle, hard-full within ~20s
-      // (per-frame now, so scale the per-tick amounts to ~per-90ms)
-      const held = Date.now() - sceneT0.current;
-      if (held > 10000) chargeRef.current(0.3);
-      if (held > 20000) chargeRef.current(1.5);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { stopped = true; cancelAnimationFrame(raf); };
+      // never a dead end: per-stage trickle, hard-full within ~20s
+      const held = Date.now() - stageT0.current;
+      if (held > 10000) chargeRef.current(0.8);
+      if (held > 20000) chargeRef.current(5);
+    }, 130);
+    return () => { stopped = true; clearInterval(id); };
   }, []);
 
   // glowing outline around the recognised child (thin white for the others).
@@ -770,7 +540,8 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
       const y1 = oy + Math.min(1, b.y1 + pad) * v.videoHeight * s;
       const mx0 = cw - x1, mx1 = cw - x0; // mirror to match the mirrored video
       ctx.beginPath();
-      ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, 22);
+      const r = 22;
+      ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, r);
       if (i === main) {
         const pulse = 0.75 + 0.25 * Math.sin(Date.now() / 220);
         ctx.lineWidth = 6;
@@ -791,9 +562,15 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
     });
   }
 
-  const sc = SCENES[scene];
   return (
-    <div className="dance-stage" onPointerDown={() => chargeRef.current(6)}>
+    <div className="dance-stage" onPointerDown={() => chargeRef.current(4)}>
+      <div className="dance-steps">
+        {STAGES.map((st, i) => (
+          <span key={i} className={`dance-step${i === stage ? " on" : i < stage ? " done" : ""}`}>
+            {i < stage ? "✅" : `${i + 1}.`} {st.prompt}
+          </span>
+        ))}
+      </div>
       <div className="dance-cam-box">
         {stream ? (
           <>
@@ -803,34 +580,13 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
         ) : (
           <div className="dance-cam dance-cam-ph">🥕✨</div>
         )}
-        <span className="dance-scene-no">{scene + 1} <em>/ {SCENES.length}</em></span>
-        <div className="dance-demo">
-          <span className={`demo-fig demo-${sc.demo}`} aria-hidden="true">
-            {sc.demo === "jump" ? (
-              <svg viewBox="0 0 60 80" className="fig">
-                <circle cx="30" cy="14" r="8" />
-                <path d="M30 22 V48 M30 30 L14 40 M30 30 L46 40 M30 48 L18 70 M30 48 L42 70" />
-                <path className="fig-ground" d="M8 76 H52" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 60 80" className="fig">
-                <circle cx="30" cy="14" r="8" />
-                <path d="M30 22 V50 M30 50 L18 72 M30 50 L42 72" />
-                <path className="fa" d="M30 30 L14 44 M30 30 L46 44" />
-                <path className="fb" d="M30 30 L14 10 M30 30 L46 10" />
-              </svg>
-            )}
-          </span>
-          <span className="demo-label">따라 해 보세요</span>
-        </div>
-        <span className="dance-prompt">{sc.prompt}</span>
-        {cleared && <div className="dance-clear">통과</div>}
+        <span className="dance-prompt">{STAGES[stage].prompt}</span>
       </div>
       <div className="magic-gauge" aria-hidden="true">
         <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
-        <span className="magic-gauge-label">마법가루 {Math.round(gauge)}%</span>
+        <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
       </div>
-      <p className="dance-hint">화면을 두드려도 마법가루가 모여요</p>
+      <p className="dance-hint">화면을 팡팡 눌러도 마법가루가 모여요!</p>
     </div>
   );
 }

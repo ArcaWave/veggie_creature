@@ -17,16 +17,14 @@
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  font-family: "Noto Serif KR", "Apple SD Gothic Neo", serif;
+  font-family: "Baloo 2", "Jua", system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
   color: var(--ink);
   background: linear-gradient(160deg, var(--bg1), var(--bg2));
   -webkit-font-smoothing: antialiased;
 }
 
 /* 11" tablet landscape (~1194x834) first */
-/* the cinematic stage is full-bleed; legacy screens keep their column via .screen */
-.app { min-height: 100%; }
-.screen { max-width: 1080px; margin: 0 auto; width: 100%; }
+.app { max-width: 1080px; margin: 0 auto; min-height: 100%; }
 
 .screen {
   padding: 24px 40px;
@@ -286,7 +284,7 @@ body {
 .camera-box { width: min(100%, 620px, 66vh); aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #000; }
 /* tablet landscape: the camera fills the stage — wide box, nearly full height */
 @media (orientation: landscape) {
-  .screen { max-width: 1240px; }
+  .app { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
   .camera-box { width: 100%; max-width: none; height: calc(100vh - 225px); min-height: 240px; aspect-ratio: auto; }
 }
@@ -533,26 +531,14 @@ body {
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
 /* dance mini-game: your own moves charge the magic gauge */
-.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(94vw, calc((100vh - 250px) * 16 / 9)); user-select: none; touch-action: manipulation; }
-/* the recognition view stays BIG: as tall as the room allows */
-.dance-cam-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 34px; overflow: hidden; box-shadow: var(--shadow); background: #241c10; }
+.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(94vw, 640px); user-select: none; touch-action: manipulation; }
+.dance-cam-box { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.dance-scene-no { position: absolute; top: 14px; right: 16px; background: rgba(255, 255, 255, 0.9); color: var(--green-dark); font-weight: 800; font-size: clamp(15px, 2.4vmin, 22px); padding: 8px 16px; border-radius: 999px; box-shadow: var(--shadow); }
-/* "따라 해 봐!" demo card: an animated figure showing the move to copy */
-.dance-demo { position: absolute; top: 14px; left: 16px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: rgba(255, 255, 255, 0.92); border-radius: 20px; padding: 12px 20px 10px; box-shadow: var(--shadow); }
-.demo-fig { position: relative; display: block; font-size: clamp(40px, 8vmin, 72px); line-height: 1.15; }
-.demo-jump { animation: demoJump 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
-@keyframes demoJump { 0%, 100% { transform: translateY(0) scale(1.04, 0.96); } 35% { transform: translateY(-26%) scale(0.97, 1.05); } 65% { transform: translateY(-8%); } }
-.demo-manse .fa, .demo-manse .fb { display: block; }
-.demo-manse .fb { position: absolute; inset: 0; opacity: 0; animation: demoSwap 1.4s steps(1) infinite; }
-.demo-manse .fa { animation: demoSwapA 1.4s steps(1) infinite; }
-@keyframes demoSwap { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes demoSwapA { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
-.demo-label { font-weight: 800; color: var(--green-dark); font-size: clamp(13px, 2vmin, 18px); }
-/* scene-clear splash */
-.dance-clear { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(255, 251, 235, 0.95), rgba(255, 251, 235, 0.55) 70%, transparent); font-weight: 800; font-size: clamp(44px, 9vmin, 90px); color: var(--green-dark); animation: clearPop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
-@keyframes clearPop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dance-steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.dance-step { background: rgba(255, 255, 255, 0.7); color: var(--muted); font-weight: 800; font-size: clamp(14px, 2.4vmin, 20px); padding: 8px 16px; border-radius: 999px; transition: all 0.25s ease; }
+.dance-step.on { background: #fff; color: var(--green-dark); box-shadow: var(--shadow); transform: scale(1.06); }
+.dance-step.done { background: #f8ecd2; color: var(--ink); }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
 .dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
@@ -579,148 +565,3 @@ body {
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }
-
-/* send-off: after the creature leaves, point the child at the display wall */
-.sendoff-card { display: flex; flex-direction: column; align-items: center; gap: 12px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 44px 64px; text-align: center; animation: pop 0.35s ease; }
-.sendoff-emoji { font-size: clamp(64px, 13vmin, 120px); animation: idle 3s ease-in-out infinite; }
-.sendoff-title { margin: 0; font-weight: 800; font-size: clamp(28px, 5vmin, 48px); color: var(--green-dark); }
-.sendoff-sub { margin: 0; font-weight: 800; font-size: clamp(20px, 3.6vmin, 34px); color: var(--ink); line-height: 1.5; }
-.sendoff-arrow { display: inline-block; font-size: 1.25em; animation: arrowNudge 0.9s ease-in-out infinite; }
-@keyframes arrowNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(12px); } }
-
-/* =====================================================================
-   CINEMATIC STAGE — the always-on magic-mirror exhibition look
-   ===================================================================== */
-.cine { position: relative; min-height: 100vh; overflow: hidden; color: #fff3dd; isolation: isolate; }
-.cine-bg { position: absolute; inset: 0; background: center / cover no-repeat; animation: kenburns 60s ease-in-out infinite alternate; z-index: 0; }
-@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.03); } }
-.cine-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 42%, rgba(20, 8, 2, 0) 30%, rgba(20, 8, 2, 0.45) 75%, rgba(20, 8, 2, 0.7) 100%),
-              linear-gradient(180deg, rgba(20, 8, 2, 0.35), rgba(20, 8, 2, 0) 22%, rgba(20, 8, 2, 0) 70%, rgba(20, 8, 2, 0.5)); }
-.cine.dim .cine-vignette { background: rgba(22, 10, 3, 0.5); }
-.cine.dim .cine-bg { filter: blur(2px); animation-play-state: paused; }
-.cine-particles { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
-.cine-particle { position: absolute; top: -6vh; opacity: 0.85; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25)); animation: particleFall linear infinite; will-change: transform; }
-@keyframes particleFall {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
-  8% { opacity: 0.9; }
-  92% { opacity: 0.8; }
-  100% { transform: translate(var(--drift, 0), 112vh) rotate(300deg); opacity: 0; }
-}
-.cine.dim .cine-particles { opacity: 0.35; }
-.cine-content { position: relative; z-index: 3; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 22px 40px 28px; }
-.cine-screen { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
-
-/* title */
-.cine-head { text-align: center; display: flex; flex-direction: column; gap: 6px; }
-.cine-eyebrow { margin: 0; font-family: inherit; font-size: clamp(15px, 2.2vmin, 22px); letter-spacing: 0.28em; color: #ffd98a; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
-.cine-title { margin: 0; font-family: inherit; font-weight: 800; font-size: clamp(26px, 4.2vmin, 48px); letter-spacing: 0.02em; color: #fff6e3; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 170, 70, 0.35); }
-
-/* the mirror portal — the camera IS the hero: a big 16:9 panel that shows
-   the whole feed, framed by a gold progress stroke */
-.portal { position: relative; width: min(94vw, calc((100vh - 230px) * 16 / 9)); aspect-ratio: 16 / 9; display: grid; place-items: center; filter: drop-shadow(0 24px 60px rgba(40, 15, 0, 0.6)); }
-.portal-ring { position: absolute; inset: -1.2%; width: 102.4%; height: 102.4%; z-index: 3; pointer-events: none; overflow: visible; }
-.ring-track { fill: none; stroke: rgba(255, 220, 150, 0.35); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-.ring-fill { fill: none; stroke: #ffc35a; stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset 0.15s linear; filter: drop-shadow(0 0 10px rgba(255, 190, 80, 0.9)); }
-.portal-clip { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #1a0d05;
-  box-shadow: inset 0 0 0 4px rgba(255, 214, 140, 0.5), inset 0 0 80px rgba(0, 0, 0, 0.35), 0 0 0 8px rgba(80, 40, 10, 0.3); }
-.portal::before { content: ""; position: absolute; inset: -6%; border-radius: 60px; z-index: 0; pointer-events: none;
-  background: radial-gradient(ellipse, rgba(255, 190, 90, 0.3), rgba(255, 150, 60, 0) 70%); animation: portalBreathe 3.6s ease-in-out infinite; }
-.portal.sensing::before { animation-duration: 1.6s; background: radial-gradient(ellipse, rgba(255, 205, 110, 0.5), rgba(255, 150, 60, 0) 70%); }
-.portal.armed .portal-clip { box-shadow: inset 0 0 0 6px rgba(255, 200, 90, 0.95), inset 0 0 80px rgba(0, 0, 0, 0.3), 0 0 70px rgba(255, 190, 80, 0.6); }
-@keyframes portalBreathe { 0%, 100% { transform: scale(0.985); opacity: 0.7; } 50% { transform: scale(1.01); opacity: 1; } }
-.portal-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
-.portal-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 54px; color: #ffd98a; }
-.portal-ph p { margin: 0; font-size: 18px; font-weight: 700; }
-.portal-count { position: absolute; inset: 0; display: grid; place-items: center; font-family: inherit; font-weight: 800; font-size: clamp(120px, 26vmin, 260px); color: #fff8e6; text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6); animation: countPulseC 1s ease infinite; pointer-events: none; }
-@keyframes countPulseC { 0% { transform: scale(1.2); opacity: 0.2; } 30% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.94); opacity: 0.9; } }
-.portal-flash { position: absolute; inset: 0; background: #fff; animation: flashOut 0.5s ease-out forwards; }
-@keyframes flashOut { from { opacity: 1; } to { opacity: 0; } }
-
-.cine-caption { margin: 0; font-family: inherit; font-size: clamp(22px, 3.6vmin, 38px); color: #fff3dd; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.6); text-align: center; min-height: 1.4em; }
-.cine-upload { position: absolute; bottom: 18px; right: 22px; font-size: 13px; color: rgba(255, 240, 210, 0.45); cursor: pointer; }
-.btn-glass { background: rgba(255, 244, 220, 0.14); color: #fff3dd; border: 1px solid rgba(255, 220, 160, 0.4); border-radius: 999px; padding: 14px 26px; font-family: inherit; font-weight: 800; font-size: 20px; backdrop-filter: blur(12px); cursor: pointer; }
-
-/* magic-step screens on the dimmed stage: glass panels, cream type */
-.cine .lead { color: #fff6e3; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.6); font-size: clamp(24px, 4vmin, 40px); }
-.cine .wake-frame { width: min(70vh, 80vw, 760px); height: min(70vh, 80vw, 760px); border-radius: 32px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(255, 214, 140, 0.35); background: rgba(30, 14, 4, 0.5); }
-.cine .btn-ghost { color: rgba(255, 240, 210, 0.55); }
-.cine .noshow-card, .cine .sendoff-card { background: rgba(35, 16, 5, 0.55); color: #fff3dd; backdrop-filter: blur(16px); border: 1px solid rgba(255, 220, 160, 0.3); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
-.cine .noshow-sub { color: rgba(255, 240, 210, 0.7); }
-.cine .sendoff-title { color: #ffd98a; }
-.cine .sendoff-sub { color: #fff3dd; }
-.cine .dance-cam-box { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 5px rgba(255, 214, 140, 0.3); }
-.cine .magic-gauge { background: rgba(255, 244, 220, 0.18); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px rgba(255, 220, 160, 0.35); }
-.cine .magic-gauge-label { color: #fff3dd; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
-.cine .dance-hint { color: rgba(255, 240, 210, 0.6); }
-.cine .dance-demo, .cine .dance-scene-no, .cine .dance-prompt { background: rgba(35, 16, 5, 0.62); color: #ffd98a; backdrop-filter: blur(12px); border: 1px solid rgba(255, 220, 160, 0.3); }
-.cine .demo-label { color: #ffd98a; }
-.cine .dance-clear { color: #ffd98a; background: radial-gradient(circle, rgba(35, 16, 5, 0.9), rgba(35, 16, 5, 0.5) 70%, transparent); }
-
-
-/* =====================================================================
-   CINEMATIC REFINEMENT — one serif, gold line-work, no emoji
-   ===================================================================== */
-:root { --gold: #e9b968; --gold-soft: rgba(233, 185, 104, 0.55); --cream: #fff4dc; }
-.cine { font-family: "Noto Serif KR", "Apple SD Gothic Neo", serif; }
-.cine-eyebrow { font-weight: 600; letter-spacing: 0.42em; color: var(--gold); font-size: clamp(13px, 1.7vmin, 18px); text-transform: none; }
-.cine-title { font-weight: 900; letter-spacing: -0.005em; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55); }
-.cine-caption { font-weight: 600; letter-spacing: 0.02em; font-size: clamp(20px, 3.1vmin, 34px); }
-.cine .lead { font-weight: 700; letter-spacing: 0.01em; }
-.cine-upload { font-family: inherit; letter-spacing: 0.08em; }
-.btn-glass { font-family: inherit; font-weight: 600; letter-spacing: 0.06em; border-color: var(--gold-soft); }
-
-/* particles: small gold/red leaves and soft embers */
-.cine-particle { top: -6vh; opacity: 0; }
-.cine-particle svg { width: 100%; height: 100%; display: block; }
-.cine-particle.leaf svg path { fill: #d9752f; opacity: 0.85; }
-.cine-particle.leaf svg .vein { fill: none; stroke: rgba(80, 30, 5, 0.5); stroke-width: 0.8; }
-.cine-particle:nth-child(3n+1).leaf svg path { fill: #e9b968; }
-.cine-particle:nth-child(4n+2).leaf svg path { fill: #c8402f; }
-.cine-particle.ember { border-radius: 50%; background: radial-gradient(circle, rgba(255, 220, 150, 0.95), rgba(255, 180, 80, 0.25) 60%, transparent 72%); transform: scale(0.45); }
-
-/* portal frame: hairline gold + warm inner shade */
-.portal-clip { box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), inset 0 0 120px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.3); border-radius: 28px; }
-.portal.armed .portal-clip { box-shadow: inset 0 0 0 2px rgba(233, 185, 104, 1), inset 0 0 120px rgba(0, 0, 0, 0.3), 0 0 80px rgba(233, 185, 104, 0.45); }
-.ring-track { stroke: rgba(233, 185, 104, 0.28); }
-.ring-fill { stroke: var(--gold); stroke-width: 4; }
-.portal-count { font-weight: 900; color: var(--cream); }
-.portal-ph { color: var(--gold); font-size: 20px; }
-
-/* glass panels */
-.cine .noshow-card, .cine .sendoff-card, .cine .dance-demo, .cine .dance-scene-no, .cine .dance-prompt, .cine .magic-gauge {
-  background: rgba(28, 13, 4, 0.55); border: 1px solid var(--gold-soft); backdrop-filter: blur(16px); color: var(--cream); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
-.cine .noshow-card, .cine .sendoff-card { border-radius: 26px; padding: 44px 64px; gap: 14px; }
-.cine .sendoff-title { color: var(--gold); font-weight: 900; letter-spacing: 0.02em; }
-.cine .sendoff-sub { font-weight: 600; }
-.cine .sendoff-arrow { color: var(--gold); font-weight: 400; }
-.cine .noshow-card p { font-weight: 600; }
-.cine .noshow-card b { color: var(--gold); }
-
-/* dance UI */
-.cine .dance-prompt { font-weight: 700; letter-spacing: 0.02em; color: var(--cream); border-radius: 999px; animation: none; padding: 12px 28px; }
-.cine .dance-scene-no { color: var(--cream); font-weight: 700; }
-.cine .dance-scene-no em { font-style: normal; color: var(--gold-soft); font-weight: 400; }
-.cine .dance-demo { padding: 14px 22px 12px; border-radius: 22px; }
-.cine .demo-label { color: var(--gold); font-weight: 600; letter-spacing: 0.06em; font-size: clamp(12px, 1.7vmin, 16px); }
-.demo-fig .fig { width: clamp(44px, 8vmin, 76px); height: auto; display: block; fill: none; stroke: var(--cream); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-.demo-fig .fig circle { fill: var(--cream); stroke: none; }
-.demo-fig .fig .fig-ground { stroke: var(--gold-soft); stroke-width: 2; }
-.demo-jump .fig circle, .demo-jump .fig path:not(.fig-ground) { animation: figJump 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
-@keyframes figJump { 0%, 100% { transform: translateY(0); } 35% { transform: translateY(-18%); } 65% { transform: translateY(-6%); } }
-.demo-manse .fig .fa { animation: demoSwapA 1.4s steps(1) infinite; }
-.demo-manse .fig .fb { opacity: 0; animation: demoSwap 1.4s steps(1) infinite; }
-.cine .magic-gauge { height: 38px; border-radius: 999px; }
-.cine .magic-gauge-fill { background: linear-gradient(90deg, rgba(233, 185, 104, 0.85), #ffd27a); box-shadow: 0 0 18px rgba(233, 185, 104, 0.7); }
-.cine .magic-gauge-label { font-weight: 700; letter-spacing: 0.04em; color: var(--cream); }
-.cine .dance-hint { font-weight: 400; letter-spacing: 0.04em; color: rgba(255, 244, 220, 0.55); }
-.cine .dance-clear { font-weight: 900; letter-spacing: 0.1em; color: var(--gold); }
-.cine .dance-cam-box { border-radius: 28px; box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), 0 30px 80px rgba(0, 0, 0, 0.5); }
-
-/* reveal frame + walk stage */
-.cine .wake-frame { border-radius: 28px; box-shadow: inset 0 0 0 1px rgba(233, 185, 104, 0.7), 0 30px 80px rgba(0, 0, 0, 0.55); }
-.cine .dust-shower .sparkle-msg, .cine .sparkle-overlay { color: var(--cream); font-family: inherit; }
-.cine .sparkle-overlay { background: rgba(28, 13, 4, 0.55); }
-
-/* top-bar controls become glass on the stage */
-.sound-toggle, .fs-toggle { background: rgba(28, 13, 4, 0.45); color: var(--cream); border: 1px solid var(--gold-soft); backdrop-filter: blur(12px); box-shadow: none; }
