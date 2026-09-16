@@ -394,7 +394,7 @@ async function drawCertificate(canvas: HTMLCanvasElement, monster: Monster, star
 
   // Monglekids logo as a SEAL: tilted like an approval stamp, bottom-right
   try {
-    const logo = await loadImage("/monggle-logo.png");
+    const logo = await loadImage("/monggle-logo-kr.png");
     const lh = 130, lw = logo.width * (lh / logo.height);
     ctx.save();
     ctx.translate(W - 185, 985); // seal centre, inside the border

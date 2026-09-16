@@ -1,11 +1,11 @@
 {
-  "name": "Veggie Monster — Monggle Kids",
-  "short_name": "Veggie Monster",
+  "name": "Veggie Creature — Monglekids",
+  "short_name": "Veggie Creature",
   "description": "Make a veggie monster, bring it to life, complete a quest.",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#f3fbe8",
-  "theme_color": "#7cc242",
+  "background_color": "#fdf7e7",
+  "theme_color": "#f2a537",
   "icons": []
 }
