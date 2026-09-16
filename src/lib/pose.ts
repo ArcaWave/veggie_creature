@@ -3,6 +3,7 @@ import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 // MediaPipe body-pose tracking for the dance mini-game. Assets are served
 // locally (public/mediapipe/) so the kiosk never depends on a CDN mid-session.
 // getPoseLandmarker() is memoised — the wasm+model load happens once.
+// FULL model (not lite): noticeably steadier landmarks for an exhibition wall.
 let promise: Promise<PoseLandmarker> | null = null;
 
 export function getPoseLandmarker(): Promise<PoseLandmarker> {
@@ -10,7 +11,7 @@ export function getPoseLandmarker(): Promise<PoseLandmarker> {
     promise = (async () => {
       const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
       return PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: "/mediapipe/pose_landmarker_lite.task", delegate: "GPU" },
+        baseOptions: { modelAssetPath: "/mediapipe/pose_landmarker_full.task", delegate: "GPU" },
         runningMode: "VIDEO",
         numPoses: 4, // several kids can crowd the kiosk — track them all
       });

@@ -24,7 +24,9 @@ body {
 }
 
 /* 11" tablet landscape (~1194x834) first */
-.app { max-width: 1080px; margin: 0 auto; min-height: 100%; }
+/* the cinematic stage is full-bleed; legacy screens keep their column via .screen */
+.app { min-height: 100%; }
+.screen { max-width: 1080px; margin: 0 auto; width: 100%; }
 
 .screen {
   padding: 24px 40px;
@@ -284,7 +286,7 @@ body {
 .camera-box { width: min(100%, 620px, 66vh); aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #000; }
 /* tablet landscape: the camera fills the stage — wide box, nearly full height */
 @media (orientation: landscape) {
-  .app { max-width: 1240px; }
+  .screen { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
   .camera-box { width: 100%; max-width: none; height: calc(100vh - 225px); min-height: 240px; aspect-ratio: auto; }
 }
@@ -531,9 +533,9 @@ body {
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
 /* dance mini-game: your own moves charge the magic gauge */
-.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(96vw, 1300px); user-select: none; touch-action: manipulation; }
+.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(94vw, calc((100vh - 250px) * 16 / 9)); user-select: none; touch-action: manipulation; }
 /* the recognition view stays BIG: as tall as the room allows */
-.dance-cam-box { position: relative; width: 100%; height: min(66vh, calc(100vh - 265px)); min-height: 300px; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #241c10; }
+.dance-cam-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 34px; overflow: hidden; box-shadow: var(--shadow); background: #241c10; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .dance-scene-no { position: absolute; top: 14px; right: 16px; background: rgba(255, 255, 255, 0.9); color: var(--green-dark); font-weight: 800; font-size: clamp(15px, 2.4vmin, 22px); padding: 8px 16px; border-radius: 999px; box-shadow: var(--shadow); }
@@ -590,13 +592,13 @@ body {
    CINEMATIC STAGE — the always-on magic-mirror exhibition look
    ===================================================================== */
 .cine { position: relative; min-height: 100vh; overflow: hidden; color: #fff3dd; isolation: isolate; }
-.cine-bg { position: absolute; inset: -4%; background: center / cover no-repeat; animation: kenburns 46s ease-in-out infinite alternate; z-index: 0; }
-@keyframes kenburns { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.08) translate(-1.2%, 1%); } }
+.cine-bg { position: absolute; inset: 0; background: center / cover no-repeat; animation: kenburns 60s ease-in-out infinite alternate; z-index: 0; }
+@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.03); } }
 .cine-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background: radial-gradient(ellipse at 50% 42%, rgba(20, 8, 2, 0) 30%, rgba(20, 8, 2, 0.45) 75%, rgba(20, 8, 2, 0.7) 100%),
               linear-gradient(180deg, rgba(20, 8, 2, 0.35), rgba(20, 8, 2, 0) 22%, rgba(20, 8, 2, 0) 70%, rgba(20, 8, 2, 0.5)); }
-.cine.dim .cine-vignette { background: rgba(22, 10, 3, 0.62); }
-.cine.dim .cine-bg { filter: blur(6px) saturate(0.9); animation-play-state: paused; }
+.cine.dim .cine-vignette { background: rgba(22, 10, 3, 0.5); }
+.cine.dim .cine-bg { filter: blur(2px); animation-play-state: paused; }
 .cine-particles { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .cine-particle { position: absolute; top: -6vh; opacity: 0.85; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25)); animation: particleFall linear infinite; will-change: transform; }
 @keyframes particleFall {
@@ -606,26 +608,27 @@ body {
   100% { transform: translate(var(--drift, 0), 112vh) rotate(300deg); opacity: 0; }
 }
 .cine.dim .cine-particles { opacity: 0.35; }
-.cine-content { position: relative; z-index: 3; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 28px 40px 36px; }
+.cine-content { position: relative; z-index: 3; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 22px 40px 28px; }
 .cine-screen { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
 
 /* title */
 .cine-head { text-align: center; display: flex; flex-direction: column; gap: 6px; }
 .cine-eyebrow { margin: 0; font-family: "Jua", "Baloo 2", sans-serif; font-size: clamp(15px, 2.2vmin, 22px); letter-spacing: 0.28em; color: #ffd98a; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55); }
-.cine-title { margin: 0; font-family: "Nanum Myeongjo", "Jua", serif; font-weight: 800; font-size: clamp(30px, 5.4vmin, 58px); letter-spacing: 0.02em; color: #fff6e3; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 170, 70, 0.35); }
+.cine-title { margin: 0; font-family: "Nanum Myeongjo", "Jua", serif; font-weight: 800; font-size: clamp(26px, 4.2vmin, 48px); letter-spacing: 0.02em; color: #fff6e3; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 170, 70, 0.35); }
 
-/* the mirror portal */
-.portal { position: relative; width: min(60vh, 62vw, 640px); aspect-ratio: 1; display: grid; place-items: center; filter: drop-shadow(0 20px 50px rgba(40, 15, 0, 0.55)); }
-.portal-ring { position: absolute; inset: -3.5%; width: 107%; height: 107%; transform: rotate(-90deg); z-index: 3; pointer-events: none; }
-.ring-track { fill: none; stroke: rgba(255, 220, 150, 0.35); stroke-width: 2.2; }
-.ring-fill { fill: none; stroke: #ffc35a; stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 301.6; transition: stroke-dashoffset 0.15s linear; filter: drop-shadow(0 0 8px rgba(255, 190, 80, 0.9)); }
-.portal-clip { position: relative; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; background: #1a0d05;
-  box-shadow: inset 0 0 0 6px rgba(255, 214, 140, 0.55), inset 0 0 60px rgba(0, 0, 0, 0.45), 0 0 0 10px rgba(80, 40, 10, 0.35); }
-.portal::before { content: ""; position: absolute; inset: -14%; border-radius: 50%; z-index: 0; pointer-events: none;
-  background: radial-gradient(circle, rgba(255, 190, 90, 0.35), rgba(255, 150, 60, 0) 62%); animation: portalBreathe 3.6s ease-in-out infinite; }
-.portal.sensing::before { animation-duration: 1.6s; background: radial-gradient(circle, rgba(255, 205, 110, 0.55), rgba(255, 150, 60, 0) 64%); }
-.portal.armed .portal-clip { box-shadow: inset 0 0 0 8px rgba(255, 200, 90, 0.95), inset 0 0 60px rgba(0, 0, 0, 0.35), 0 0 60px rgba(255, 190, 80, 0.6); }
-@keyframes portalBreathe { 0%, 100% { transform: scale(0.96); opacity: 0.7; } 50% { transform: scale(1.04); opacity: 1; } }
+/* the mirror portal — the camera IS the hero: a big 16:9 panel that shows
+   the whole feed, framed by a gold progress stroke */
+.portal { position: relative; width: min(94vw, calc((100vh - 230px) * 16 / 9)); aspect-ratio: 16 / 9; display: grid; place-items: center; filter: drop-shadow(0 24px 60px rgba(40, 15, 0, 0.6)); }
+.portal-ring { position: absolute; inset: -1.2%; width: 102.4%; height: 102.4%; z-index: 3; pointer-events: none; overflow: visible; }
+.ring-track { fill: none; stroke: rgba(255, 220, 150, 0.35); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.ring-fill { fill: none; stroke: #ffc35a; stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset 0.15s linear; filter: drop-shadow(0 0 10px rgba(255, 190, 80, 0.9)); }
+.portal-clip { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #1a0d05;
+  box-shadow: inset 0 0 0 4px rgba(255, 214, 140, 0.5), inset 0 0 80px rgba(0, 0, 0, 0.35), 0 0 0 8px rgba(80, 40, 10, 0.3); }
+.portal::before { content: ""; position: absolute; inset: -6%; border-radius: 60px; z-index: 0; pointer-events: none;
+  background: radial-gradient(ellipse, rgba(255, 190, 90, 0.3), rgba(255, 150, 60, 0) 70%); animation: portalBreathe 3.6s ease-in-out infinite; }
+.portal.sensing::before { animation-duration: 1.6s; background: radial-gradient(ellipse, rgba(255, 205, 110, 0.5), rgba(255, 150, 60, 0) 70%); }
+.portal.armed .portal-clip { box-shadow: inset 0 0 0 6px rgba(255, 200, 90, 0.95), inset 0 0 80px rgba(0, 0, 0, 0.3), 0 0 70px rgba(255, 190, 80, 0.6); }
+@keyframes portalBreathe { 0%, 100% { transform: scale(0.985); opacity: 0.7; } 50% { transform: scale(1.01); opacity: 1; } }
 .portal-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
 .portal-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-size: 54px; color: #ffd98a; }
 .portal-ph p { margin: 0; font-size: 18px; font-weight: 700; }

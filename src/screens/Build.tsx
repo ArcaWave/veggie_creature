@@ -22,7 +22,23 @@ type Step = "photo" | "magic";
 const COUNTDOWN_S = 3; // after presence is confirmed
 const DWELL_MS = 2200; // steady presence needed before the countdown arms
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
-const CINE_BG = "/main-bg.jpg";
+const CINE_BG = "/main-bg.png";
+
+const DEBUG_POSE = new URLSearchParams(location.search).has("posedebug");
+function debugLine(text: string, hot = false) {
+  let el = document.getElementById("posedebug");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "posedebug";
+    el.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99;background:rgba(0,0,0,0.75);color:#0f0;font:700 20px monospace;padding:8px 14px;border-radius:10px;pointer-events:none;";
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.color = hot ? "#ff0" : "#0f0";
+}
+function drawDebug(rise: number) {
+  debugLine(`rise ${(rise * 100).toFixed(1)}%  (jump at 4.5%)`, rise > 0.045);
+}
 
 // drifting leaves + embers over the courtyard (fixed at module load so the
 // attract loop never re-randomises mid-day)
@@ -166,18 +182,23 @@ export function Build({ onDone }: { onDone: () => void }) {
       .then((l) => { if (!stopped) landmarker = l; })
       .catch(() => { modelFailed = true; });
     let last = Date.now();
-    const id = setInterval(() => {
+    let lastDetect = 0;
+    let lastPresent = false;
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
       const now = Date.now();
       const dt = now - last;
       last = now;
       if (armedRef.current) return;
       const v = videoRef.current;
-      let present = false;
-      if (v && v.readyState >= 2) {
+      // inference runs at ~30fps; between runs the last verdict holds
+      if (v && v.readyState >= 2 && now - lastDetect >= 33) {
+        lastDetect = now;
         if (landmarker) {
           try {
             const res = landmarker.detectForVideo(v, performance.now());
-            present = (res.landmarks ?? []).some((lm) => {
+            lastPresent = (res.landmarks ?? []).some((lm) => {
               const shoulders = (lm[L_SHOULDER].visibility ?? 1) > 0.5 && (lm[R_SHOULDER].visibility ?? 1) > 0.5;
               let y0 = 1, y1 = 0;
               for (const q of lm) { if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
@@ -185,9 +206,10 @@ export function Build({ onDone }: { onDone: () => void }) {
             });
           } catch { /* skip frame */ }
         } else if (modelFailed || now - t0 > 8000) {
-          present = true;
+          lastPresent = true;
         }
       }
+      const present = lastPresent;
       if (needClearRef.current) {
         if (present) clearSinceRef.current = 0;
         else if (!clearSinceRef.current) clearSinceRef.current = now;
@@ -196,12 +218,14 @@ export function Build({ onDone }: { onDone: () => void }) {
       }
       dwellRef.current = Math.max(0, Math.min(1, dwellRef.current + (present ? dt / DWELL_MS : -dt / 900)));
       setDwell(dwellRef.current);
+      if (DEBUG_POSE) debugLine(`model ${landmarker ? "ok" : modelFailed ? "FAILED" : "loading"}  present ${present}  dwell ${(dwellRef.current * 100).toFixed(0)}%`);
       if (dwellRef.current >= 1) {
         armedRef.current = true;
         setArmed(true);
       }
-    }, 120);
-    return () => { stopped = true; clearInterval(id); };
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { stopped = true; cancelAnimationFrame(raf); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camOn, step, camTry]);
 
@@ -327,9 +351,9 @@ export function Build({ onDone }: { onDone: () => void }) {
       </header>
 
       <div className={`portal${dwell > 0.05 ? " sensing" : ""}${armed ? " armed" : ""}`}>
-        <svg className="portal-ring" viewBox="0 0 100 100" aria-hidden="true">
-          <circle className="ring-track" cx="50" cy="50" r="48" />
-          <circle className="ring-fill" cx="50" cy="50" r="48" style={{ strokeDashoffset: 301.6 * (1 - dwell) }} />
+        <svg className="portal-ring" viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden="true">
+          <rect className="ring-track" x="1" y="1" width="158" height="88" rx="7" pathLength="100" />
+          <rect className="ring-fill" x="1" y="1" width="158" height="88" rx="7" pathLength="100" style={{ strokeDashoffset: 100 * (1 - dwell) }} />
         </svg>
         <div className="portal-clip">
           {camOn ? (
@@ -565,19 +589,6 @@ function MagicStep({
 // Deliberately forgiving: taps charge, a trickle starts after 10s, each scene
 // hard-completes by ~20s, and plain motion detection takes over if the pose
 // model cannot load.
-const DEBUG_POSE = new URLSearchParams(location.search).has("posedebug");
-function drawDebug(rise: number) {
-  let el = document.getElementById("posedebug");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "posedebug";
-    el.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99;background:rgba(0,0,0,0.75);color:#0f0;font:700 20px monospace;padding:8px 14px;border-radius:10px;pointer-events:none;";
-    document.body.appendChild(el);
-  }
-  el.textContent = `rise ${(rise * 100).toFixed(1)}%  (jump at 4.5%)`;
-  el.style.color = rise > 0.045 ? "#ff0" : "#0f0";
-}
-
 const SCENES = [
   { prompt: "🐰 폴짝폴짝! 점프 두 번!", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
   { prompt: "🙌 두 손 번쩍! 만세~!", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
@@ -643,6 +654,7 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
   useEffect(() => {
     let landmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
     let stopped = false;
+    const smoothBoxes: { x0: number; y0: number; x1: number; y1: number }[] = [];
     getPoseLandmarker()
       .then((l) => { if (!stopped) landmarker = l; })
       .catch(() => { /* fallback below keeps working */ });
@@ -654,9 +666,14 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
     const diffCtx = diffCanvas.getContext("2d", { willReadFrequently: true });
     let prev: Uint8ClampedArray | null = null;
 
-    const id = setInterval(() => {
+    let raf = 0;
+    let lastDetect = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
       const v = vRef.current;
-      if (v && v.readyState >= 2) {
+      const now = Date.now();
+      if (v && v.readyState >= 2 && now - lastDetect >= 33) {
+        lastDetect = now;
         if (landmarker) {
           try {
             const res = landmarker.detectForVideo(v, performance.now());
@@ -673,8 +690,16 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
               }
               const area = (x1 - x0) * (y1 - y0);
               if (area > mainArea) { mainArea = area; main = i; }
-              return { x0, y0, x1, y1 };
+              // ease toward the fresh box so the outline glides instead of jittering
+              const prev = smoothBoxes[i];
+              const k = 0.35;
+              const b = prev
+                ? { x0: prev.x0 + (x0 - prev.x0) * k, y0: prev.y0 + (y0 - prev.y0) * k, x1: prev.x1 + (x1 - prev.x1) * k, y1: prev.y1 + (y1 - prev.y1) * k }
+                : { x0, y0, x1, y1 };
+              smoothBoxes[i] = b;
+              return b;
             });
+            smoothBoxes.length = poses.length;
             drawOverlay(v, boxes, main);
             if (main >= 0) {
               const lm = poses[main];
@@ -697,7 +722,7 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
               } else if (vis(NOSE) && vis(L_WRIST) && vis(R_WRIST)) {
                 const headY = lm[NOSE].y - 0.03;
                 const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
-                if (up >= 2) chargeRef.current(8); // hold 만세 ~1.5s
+                if (up >= 2) chargeRef.current(2.4); // hold 만세 ~1.5s at 30fps
               }
             }
           } catch { /* one bad frame — skip */ }
@@ -709,17 +734,19 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) chargeRef.current(3);
+            if (moved / (d.length / 16) > 0.04) chargeRef.current(0.9);
           }
           prev = d;
         }
       }
       // never a dead end: per-scene trickle, hard-full within ~20s
+      // (per-frame now, so scale the per-tick amounts to ~per-90ms)
       const held = Date.now() - sceneT0.current;
-      if (held > 10000) chargeRef.current(1);
-      if (held > 20000) chargeRef.current(5);
-    }, 90);
-    return () => { stopped = true; clearInterval(id); };
+      if (held > 10000) chargeRef.current(0.3);
+      if (held > 20000) chargeRef.current(1.5);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { stopped = true; cancelAnimationFrame(raf); };
   }, []);
 
   // glowing outline around the recognised child (thin white for the others).
