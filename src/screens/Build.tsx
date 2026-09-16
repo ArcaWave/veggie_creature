@@ -6,7 +6,7 @@ import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import { speak } from "../lib/guide";
-import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_HIP, R_HIP } from "../lib/pose";
+import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_SHOULDER, R_SHOULDER } from "../lib/pose";
 
 // "Show it to the camera and it comes alive."
 // The station runs WITHOUT staff: big on-screen guidance + spoken Korean
@@ -404,6 +404,19 @@ function MagicStep({
 // Deliberately forgiving: taps charge, a trickle starts after 10s, each scene
 // hard-completes by ~20s, and plain motion detection takes over if the pose
 // model cannot load.
+const DEBUG_POSE = new URLSearchParams(location.search).has("posedebug");
+function drawDebug(rise: number) {
+  let el = document.getElementById("posedebug");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "posedebug";
+    el.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:99;background:rgba(0,0,0,0.75);color:#0f0;font:700 20px monospace;padding:8px 14px;border-radius:10px;pointer-events:none;";
+    document.body.appendChild(el);
+  }
+  el.textContent = `rise ${(rise * 100).toFixed(1)}%  (jump at 4.5%)`;
+  el.style.color = rise > 0.045 ? "#ff0" : "#0f0";
+}
+
 const SCENES = [
   { prompt: "🐰 폴짝폴짝! 점프 두 번!", voice: "폴짝폴짝, 점프해 볼까?", demo: "jump" },
   { prompt: "🙌 두 손 번쩍! 만세~!", voice: "이번엔 두 손 다 번쩍! 만세 해 볼까?", demo: "manse" },
@@ -504,16 +517,23 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
             drawOverlay(v, boxes, main);
             if (main >= 0) {
               const lm = poses[main];
+              const vis = (i: number) => (lm[i].visibility ?? 1) > 0.4;
               if (sceneRef.current === 0) {
-                // JUMP: hips rising sharply above their rolling standing level
-                const hipY = (lm[L_HIP].y + lm[R_HIP].y) / 2;
-                const b = hipBase.current || hipY;
-                hipBase.current = hipY > b ? hipY : b + (hipY - b) * 0.04;
-                if (hipBase.current - hipY > 0.05 && Date.now() - lastJump.current > 650) {
-                  lastJump.current = Date.now();
-                  chargeRef.current(50); // two jumps clear the scene
+                // JUMP: shoulders rising sharply above their rolling standing
+                // level (shoulders, unlike hips, are practically always in
+                // frame and tracked confidently)
+                if (vis(L_SHOULDER) && vis(R_SHOULDER)) {
+                  const bodyY = (lm[L_SHOULDER].y + lm[R_SHOULDER].y) / 2;
+                  const b = hipBase.current || bodyY;
+                  hipBase.current = bodyY > b ? bodyY : b + (bodyY - b) * 0.04;
+                  const rise = hipBase.current - bodyY;
+                  if (DEBUG_POSE) drawDebug(rise);
+                  if (rise > 0.045 && Date.now() - lastJump.current > 650) {
+                    lastJump.current = Date.now();
+                    chargeRef.current(50); // two jumps clear the scene
+                  }
                 }
-              } else {
+              } else if (vis(NOSE) && vis(L_WRIST) && vis(R_WRIST)) {
                 const headY = lm[NOSE].y - 0.03;
                 const up = (lm[L_WRIST].y < headY ? 1 : 0) + (lm[R_WRIST].y < headY ? 1 : 0);
                 if (up >= 2) chargeRef.current(8); // hold 만세 ~1.5s
@@ -537,7 +557,7 @@ function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: (
       const held = Date.now() - sceneT0.current;
       if (held > 10000) chargeRef.current(1);
       if (held > 20000) chargeRef.current(5);
-    }, 130);
+    }, 90);
     return () => { stopped = true; clearInterval(id); };
   }, []);
 
