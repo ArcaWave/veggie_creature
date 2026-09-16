@@ -534,6 +534,11 @@ body {
 .dance-stage { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(94vw, 640px); user-select: none; touch-action: manipulation; }
 .dance-cam-box { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.dance-steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.dance-step { background: rgba(255, 255, 255, 0.7); color: var(--muted); font-weight: 800; font-size: clamp(14px, 2.4vmin, 20px); padding: 8px 16px; border-radius: 999px; transition: all 0.25s ease; }
+.dance-step.on { background: #fff; color: var(--green-dark); box-shadow: var(--shadow); transform: scale(1.06); }
+.dance-step.done { background: #f8ecd2; color: var(--ink); }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
 .dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
