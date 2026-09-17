@@ -77,7 +77,18 @@ const BACKDROP_D = 32;
 const DEFAULT_CAM = { pos: [0, 3.2, 12], look: [0, 1.1, -1.5] };
 const texLoader = new THREE.TextureLoader();
 const SCENES = {
-  harvest: { label: "황금 들녘", src: "/world3d-harvest.png", aspect: 1672 / 941, ground: { x: [-4.8, 4.8], xNear: [-2.6, 2.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff0d0, 0x9a6a3a, 1.0], sun: [0xffe8b8, 1.5], rim: [0xffc070, 0.7] },
+  harvest: { label: "황금 들녘", src: "/world3d-harvest.png", aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 4.8], xNear: [-2.6, 2.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff0d0, 0x9a6a3a, 1.0], sun: [0xffe8b8, 1.5], rim: [0xffc070, 0.7],
+    // the painting's own life: its clouds and loose leaves were lifted out of
+    // the art (public/fx) and drift/fall as sprites; the paddies sway in the shader
+    fx: {
+      wind: { rect: [0.28, 0.32, 0.68, 0.50], amp: 0.0016 },
+      clouds: [
+        { tex: "/fx/harvest_cloud1.png", x: 435, y: 162, speed: 5.5 },
+        { tex: "/fx/harvest_cloud2.png", x: 1210, y: 217, speed: 4.2 },
+        { tex: "/fx/harvest_cloud3.png", x: 1587, y: 230, speed: 6.5 },
+      ],
+      leaves: { sprites: ["/fx/leaf1.png", "/fx/leaf2.png", "/fx/leaf3.png"], spawn: [[30, 40, 330, 190, 7], [1500, 300, 1660, 400, 2]], fadeY: [540, 610] },
+    } },
   field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7] },
   night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8] },
   moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9] },
@@ -89,31 +100,69 @@ const ROTATE_MS = Math.max(0.5, Number(_q.get("rotate")) || 10) * 60000;
 let pickedScene = null; // set by the ◀ ▶ rehearsal control; cleared when going fullscreen
 const sceneNow = () => pickedScene || FORCED_SCENE || SCENE_ORDER[Math.floor(Date.now() / ROTATE_MS) % SCENE_ORDER.length];
 const loadBg = (src) => { const t = texLoader.load(src); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.minFilter = THREE.LinearMipmapLinearFilter; return t; };
-const bgA = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ toneMapped: false }));
-const bgB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0 }));
+// the backdrop shader: the painting as-is, except a masked band (the crops)
+// that sways gently and catches travelling gusts of light — wind over a field
+const BG_VERT = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const BG_FRAG = `
+uniform sampler2D map; uniform float opacity; uniform float time;
+uniform vec4 windRect; uniform float windAmp;
+varying vec2 vUv;
+void main() {
+  vec2 uv = vUv;
+  float m = smoothstep(windRect.x, windRect.x + 0.06, uv.x) * (1.0 - smoothstep(windRect.z - 0.06, windRect.z, uv.x))
+          * smoothstep(windRect.y, windRect.y + 0.04, uv.y) * (1.0 - smoothstep(windRect.w - 0.04, windRect.w, uv.y));
+  float w = sin(uv.x * 28.0 - time * 1.1 + uv.y * 9.0) * 0.6 + sin(uv.x * 61.0 - time * 1.9 + uv.y * 4.0) * 0.4;
+  uv += vec2(w, w * 0.35) * windAmp * m;
+  vec4 c = texture2D(map, uv);
+  float g = sin(uv.x * 9.0 - time * 0.7 + uv.y * 4.0);
+  c.rgb *= 1.0 + 0.035 * g * m;
+  gl_FragColor = vec4(c.rgb, c.a * opacity);
+  #include <colorspace_fragment>
+}`;
+const bgMaterial = (opacity) => new THREE.ShaderMaterial({
+  vertexShader: BG_VERT, fragmentShader: BG_FRAG, transparent: true, depthWrite: false,
+  uniforms: { map: { value: null }, opacity: { value: opacity }, time: { value: 0 }, windRect: { value: new THREE.Vector4() }, windAmp: { value: 0 } },
+});
+const bgA = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bgMaterial(1));
+const bgB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bgMaterial(0));
 bgA.position.set(0, 0, -BACKDROP_D); bgB.position.set(0, 0, -BACKDROP_D + 0.01);
 camera.add(bgA, bgB);
+function setBgScene(mesh, name) {
+  const sc = SCENES[name], u = mesh.material.uniforms;
+  u.map.value = loadBg(sc.src);
+  const wind = sc.fx?.wind;
+  u.windRect.value.set(...(wind ? wind.rect : [0, 0, 0, 0]));
+  u.windAmp.value = wind ? wind.amp : 0;
+  mesh.userData.scene = name;
+}
+// how a scene's painting is fitted right now (cover + lift), for placing things on it
+function fitFor(name) {
+  const sc = SCENES[name] || SCENES[SCENE_ORDER[0]];
+  const vh = 2 * BACKDROP_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const vw = vh * camera.aspect;
+  const lift = vh * (sc.lift ?? 0.06);
+  const w = Math.max(vw, (vh + lift * 2) * sc.aspect);
+  return { w, h: w / sc.aspect, lift };
+}
 scene.add(camera);
 let currentScene = null, fading = null;
 function fitBackdrop() {
-  const vh = 2 * BACKDROP_D * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const vw = vh * camera.aspect;
-  for (const [m, name] of [[bgA, bgA.userData.scene], [bgB, bgB.userData.scene]]) {
-    const sc = SCENES[name] || SCENES[SCENE_ORDER[0]];
-    const lift = vh * (sc.lift ?? 0.06);      // the painting's floor meets the 3D ground
-    const w = Math.max(vw, (vh + lift * 2) * sc.aspect); // cover, including the lifted strip
-    m.scale.set(w, w / sc.aspect, 1);
-    m.position.y = lift;
+  for (const m of [bgA, bgB]) {
+    const f = fitFor(m.userData.scene); // cover, including the lifted strip (the painting's floor meets the 3D ground)
+    m.scale.set(f.w, f.h, 1);
+    m.position.y = f.lift;
   }
 }
 function applyScene(name, instant) {
   if (name === currentScene) return;
   const sc = SCENES[name];
   if (instant || !currentScene) {
-    bgA.material.map = loadBg(sc.src); bgA.material.needsUpdate = true; bgA.userData.scene = name;
+    setBgScene(bgA, name);
+    buildAmbient(name);
   } else {
-    bgB.material.map = loadBg(sc.src); bgB.material.needsUpdate = true; bgB.userData.scene = name;
+    setBgScene(bgB, name);
     fading = { t: 0 };
+    ambient.next = name; // this scene's life fades out, the new one's fades in
   }
   currentScene = name;
   document.getElementById("bgName").textContent = `${sc.label} ${SCENE_ORDER.indexOf(name) + 1}/${SCENE_ORDER.length}`;
@@ -133,6 +182,88 @@ const groundX = (z) => { // painted floors narrow toward the viewer: x range at 
   const t = THREE.MathUtils.clamp((z - GROUND.z[0]) / (GROUND.z[1] - GROUND.z[0]), 0, 1);
   return [THREE.MathUtils.lerp(GROUND.x[0], GROUND.xNear[0], t), THREE.MathUtils.lerp(GROUND.x[1], GROUND.xNear[1], t)];
 };
+// ---- the painting's ambient life ----------------------------------------
+// Clouds and leaves are picture planes glued to the camera just in front of
+// the backdrop, placed in the painting's own pixel coordinates so they stay
+// put on the art whatever the screen size. They belong to one scene at a time
+// and fade out/in with the scene crossfade.
+const ambientGroup = new THREE.Group();
+ambientGroup.position.z = -BACKDROP_D + 0.15;
+camera.add(ambientGroup);
+const ambient = { scene: null, next: null, opacity: 1, clouds: [], leaves: [], time: 0 };
+const spriteMat = (tex) => new THREE.MeshBasicMaterial({ map: getTex(tex), transparent: true, depthWrite: false, toneMapped: false, opacity: 1 });
+function buildAmbient(name) {
+  for (const o of [...ambient.clouds, ...ambient.leaves]) ambientGroup.remove(o.mesh);
+  ambient.clouds = []; ambient.leaves = []; ambient.scene = name; ambient.opacity = 0;
+  const fx = SCENES[name]?.fx;
+  if (!fx) return;
+  for (const c of fx.clouds || []) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(c.tex));
+    ambientGroup.add(mesh);
+    ambient.clouds.push({ mesh, x: c.x, y: c.y, speed: c.speed, tex: c.tex });
+  }
+  const lv = fx.leaves;
+  if (lv) {
+    let i = 0;
+    for (const [x0, y0, x1, y1, n] of lv.spawn) for (let k = 0; k < n; k++, i++) {
+      const tex = lv.sprites[i % lv.sprites.length];
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(tex));
+      mesh.position.z = 0.02 + i * 0.001;
+      ambientGroup.add(mesh);
+      const leaf = { mesh, tex, box: [x0, y0, x1, y1], phase: rnd(0, 6.28), x: 0, y: 0, vy: 0, wait: 0, spin: rnd(0.6, 1.1), size: 1 };
+      ambient.leaves.push(leaf);
+      resetLeaf(leaf, lv, true);
+    }
+  }
+}
+function resetLeaf(l, lv, initial) {
+  const [x0, y0, x1, y1] = l.box;
+  l.x = rnd(x0, x1); l.y = rnd(y0, y1); l.vy = rnd(13, 22); l.size = rnd(0.8, 1.15);
+  l.wait = initial ? 0 : rnd(0.5, 6);
+  if (initial) l.y = rnd(y0, lv.fadeY[1]); // a first frame already mid-fall, not a burst
+}
+function ambientTick(dt) {
+  ambient.time += dt;
+  // crossfade: fade this scene's life out, then build the next scene's and fade it in
+  if (ambient.next) {
+    ambient.opacity = Math.max(0, ambient.opacity - dt / 0.8);
+    if (ambient.opacity <= 0) { const n = ambient.next; ambient.next = null; buildAmbient(n); }
+  } else if (ambient.opacity < 1) ambient.opacity = Math.min(1, ambient.opacity + dt / 0.8);
+  const sc = SCENES[ambient.scene]; const fx = sc?.fx;
+  if (!fx) return;
+  const f = fitFor(ambient.scene), [PW, PH] = sc.px;
+  const place = (mesh, x, y, tex, alpha) => {
+    const img = mesh.material.map.image;
+    if (!img?.width) { mesh.visible = false; return; }
+    mesh.visible = true;
+    mesh.scale.set(img.width / PW * f.w, img.height / PH * f.h, 1);
+    mesh.position.x = (x / PW - 0.5) * f.w;
+    mesh.position.y = (0.5 - y / PH) * f.h + f.lift;
+    mesh.material.opacity = alpha * ambient.opacity;
+  };
+  for (const c of ambient.clouds) {
+    c.x += c.speed * dt;
+    const img = c.mesh.material.map.image, half = (img?.width || 200) / 2;
+    if (c.x > PW + half + 40) c.x = -half - 40; // wraps off-screen (the painting covers the screen)
+    place(c.mesh, c.x, c.y, c.tex, 1);
+  }
+  const lv = fx.leaves;
+  for (const l of ambient.leaves) {
+    if (l.wait > 0) { l.wait -= dt; l.mesh.visible = false; continue; }
+    const t = ambient.time + l.phase;
+    l.y += l.vy * dt;
+    l.x += Math.sin(t * 1.3) * 16 * dt + 4 * dt; // sway, drifting with the wind
+    const [fy0, fy1] = lv.fadeY;
+    const fadeIn = Math.min(1, (l.y - l.box[1]) / 40 + 0.15);
+    const alpha = Math.min(fadeIn, 1 - THREE.MathUtils.clamp((l.y - fy0) / (fy1 - fy0), 0, 1));
+    place(l.mesh, l.x, l.y, l.tex, alpha);
+    l.mesh.rotation.z = Math.sin(t * l.spin) * 0.55;
+    l.mesh.scale.multiplyScalar(l.size);
+    l.mesh.scale.x *= 0.72 + 0.28 * Math.cos(t * 1.7); // a tumble, seen edge-on now and then
+    if (l.y >= fy1) resetLeaf(l, lv, false);
+  }
+}
+
 // ground: invisible except for the shadows it catches (the painting shows through)
 let GROUND = { x: [-7.5, 7.5], z: [-5.5, 4.5] };
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), new THREE.ShadowMaterial({ opacity: 0.32 }));
@@ -462,10 +593,12 @@ function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
   fxTick(dt);
+  bgA.material.uniforms.time.value = bgB.material.uniforms.time.value = clock.elapsedTime;
+  ambientTick(dt);
   if (fading) {
     fading.t = Math.min(1, fading.t + dt / 1.6);
-    bgB.material.opacity = fading.t;
-    if (fading.t >= 1) { bgA.material.map = bgB.material.map; bgA.userData.scene = bgB.userData.scene; bgA.material.needsUpdate = true; bgB.material.opacity = 0; fading = null; fitBackdrop(); }
+    bgB.material.uniforms.opacity.value = fading.t;
+    if (fading.t >= 1) { setBgScene(bgA, bgB.userData.scene); bgB.material.uniforms.opacity.value = 0; fading = null; fitBackdrop(); }
   }
   { const sc = SCENES[currentScene] || SCENES[SCENE_ORDER[0]]; const k = Math.min(1, dt * 1.5);
     hemi.color.lerp(new THREE.Color(sc.hemi[0]), k); hemi.groundColor.lerp(new THREE.Color(sc.hemi[1]), k); hemi.intensity += (sc.hemi[2] - hemi.intensity) * k;
