@@ -1,23 +1,41 @@
-// Cloud relay between the SCAN PC and the DISPLAY PC (no shared network needed).
-// The character art is PRE-MADE and shipped with the deployed site
-// (public/parts/), so only a tiny metadata record travels through Vercel Blob
-// per creature: which body and sticker parts came alive, and when — all of it
-// encoded in the blob's NAME so listing needs no downloads. Requires
-// BLOB_READ_WRITE_TOKEN; without it everything degrades to empty/false.
+// The relay between the SCAN PC and the DISPLAY PC: a tiny rolling list of the
+// latest creatures ({id, variant, at, parts}). The art itself ships with the
+// site (public/parts/), so nothing heavy ever travels.
+//
+// Sized for the exhibition (200+ children a day, the wall polling all day):
+//  1. Redis over REST (Upstash — the Vercel Marketplace "Redis/KV" integration
+//     injects KV_REST_API_URL + KV_REST_API_TOKEN): one command per poll, two
+//     per arrival. ~8k commands/day, far inside its free tier. PREFERRED.
+//  2. Vercel Blob, frugally: one put per arrival, and the list is refreshed at
+//     most every BLOB_REFRESH_MS per function instance (polls are answered
+//     from memory in between) — never a list per poll, which is what burned
+//     the Blob quota before.
+//  3. No cloud store at all: the dev / kiosk server keeps the list itself
+//     (vite.config.ts), which is all a single-venue LAN setup needs.
 import { put, list } from "@vercel/blob";
-
-const hasBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
 
 export type CreatureParts = { body: string; hat: string; arms: string; legs: string };
 export type CreatureEntry = { id: string; variant: string; at: number; parts?: CreatureParts };
 
-const clean = (v: unknown) => String(v ?? "").replace(/[^\w-]/g, "").slice(0, 40);
+const KEEP = 60;                 // the wall only ever shows the latest arrivals
+const REDIS_KEY = "vc:creatures";
+const BLOB_REFRESH_MS = 20_000;
 
-// blob name: creatures/<ts>-<body>.<hat>.<arms>.<legs>.json (parts optional)
-export function creatureBlobName(entry: CreatureEntry) {
-  const p = entry.parts;
-  return `creatures/${entry.id}${p ? `.${clean(p.hat)}.${clean(p.arms)}.${clean(p.legs)}` : ""}.json`;
-}
+const redisEnv = () => {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url: url.replace(/\/$/, ""), token } : null;
+};
+const hasBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+export const storeKind = (): "redis" | "blob" | "none" => (redisEnv() ? "redis" : hasBlob() ? "blob" : "none");
+
+// why the last upload / listing failed — surfaced by the API so a broken relay
+// (missing store, exhausted quota, suspended store…) is never silent
+export const relayStatus: { store: string; uploadError: string | null; listError: string | null } = {
+  store: "none", uploadError: null, listError: null,
+};
+const brief = (e: unknown) => String((e as Error)?.message ?? e).slice(0, 300);
+const clean = (v: unknown) => String(v ?? "").replace(/[^\w-]/g, "").slice(0, 40);
 
 export function makeEntry(variant: unknown, parts?: Partial<CreatureParts> | null): CreatureEntry | null {
   const safe = clean(variant);
@@ -30,53 +48,88 @@ export function makeEntry(variant: unknown, parts?: Partial<CreatureParts> | nul
   return entry;
 }
 
-// why the last upload / listing failed — surfaced by the API so a broken relay
-// (missing token, exhausted Blob quota, suspended store…) is never silent
-export const relayStatus: { hasToken: boolean; uploadError: string | null; listError: string | null } = {
-  hasToken: false, uploadError: null, listError: null,
-};
-const brief = (e: unknown) => String((e as Error)?.message ?? e).slice(0, 300);
+// ---- Redis (REST) -----------------------------------------------------------
+async function redis(commands: (string | number)[][]): Promise<any[]> {
+  const env = redisEnv()!;
+  const r = await fetch(`${env.url}/pipeline`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(commands),
+  });
+  if (!r.ok) throw new Error(`redis_http_${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const out = (await r.json()) as { result?: unknown; error?: string }[];
+  const bad = out.find((o) => o.error);
+  if (bad) throw new Error(`redis: ${bad.error}`);
+  return out.map((o) => o.result);
+}
 
+// ---- Blob (frugal) ------------------------------------------------------------
+// blob name: creatures/<ts>-<body>.<hat>.<arms>.<legs>.json (parts optional) —
+// everything lives in the NAME so a listing needs no downloads
+export function creatureBlobName(entry: CreatureEntry) {
+  const p = entry.parts;
+  return `creatures/${entry.id}${p ? `.${clean(p.hat)}.${clean(p.arms)}.${clean(p.legs)}` : ""}.json`;
+}
+const mem: { list: CreatureEntry[]; refreshedAt: number } = { list: [], refreshedAt: 0 };
+const remember = (entries: CreatureEntry[]) => {
+  const byId = new Map(mem.list.map((e) => [e.id, e]));
+  for (const e of entries) byId.set(e.id, e);
+  mem.list = [...byId.values()].sort((a, b) => b.at - a.at).slice(0, KEEP);
+};
+
+// ---- API ------------------------------------------------------------------------
 export async function uploadCreature(variant: unknown, parts?: Partial<CreatureParts> | null): Promise<CreatureEntry | null> {
-  relayStatus.hasToken = hasBlob();
-  if (!hasBlob()) { relayStatus.uploadError = "no_blob_token"; return null; }
+  const store = (relayStatus.store = storeKind());
+  if (store === "none") { relayStatus.uploadError = "no_store"; return null; }
   const entry = makeEntry(variant, parts);
   if (!entry) { relayStatus.uploadError = "bad_variant"; return null; }
   try {
-    await put(creatureBlobName(entry), JSON.stringify(entry), {
-      access: "public",
-      contentType: "application/json",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-    });
+    if (store === "redis") {
+      await redis([["LPUSH", REDIS_KEY, JSON.stringify(entry)], ["LTRIM", REDIS_KEY, 0, KEEP - 1]]);
+    } else {
+      await put(creatureBlobName(entry), JSON.stringify(entry), {
+        access: "public", contentType: "application/json", addRandomSuffix: false, allowOverwrite: true,
+      });
+      remember([entry]); // the same instance answers the wall at once
+    }
     relayStatus.uploadError = null;
     return entry;
   } catch (e) {
-    relayStatus.uploadError = `put_failed: ${brief(e)}`;
-    console.error("[creatures] put failed:", e);
+    relayStatus.uploadError = `${store}_put_failed: ${brief(e)}`;
+    console.error("[creatures] upload failed:", e);
     return null;
   }
 }
 
-// newest first, capped — the wall only ever shows the latest arrivals anyway
+// newest first, capped
 export async function listCreatures(): Promise<CreatureEntry[]> {
-  relayStatus.hasToken = hasBlob();
-  if (!hasBlob()) { relayStatus.listError = "no_blob_token"; return []; }
+  const store = (relayStatus.store = storeKind());
+  if (store === "none") { relayStatus.listError = "no_store"; return []; }
   try {
-    const { blobs } = await list({ prefix: "creatures/", limit: 1000 });
-    const out: CreatureEntry[] = [];
-    for (const b of blobs) {
-      const m = /creatures\/(\d+)-([\w-]+?)(?:\.(\w+)\.(\w+)\.(\w+))?\.json$/.exec(b.pathname);
-      if (!m) continue;
-      const entry: CreatureEntry = { id: `${m[1]}-${m[2]}`, variant: m[2], at: Number(m[1]) };
-      if (m[3]) entry.parts = { body: m[2], hat: m[3], arms: m[4], legs: m[5] };
-      out.push(entry);
+    if (store === "redis") {
+      const [rows] = await redis([["LRANGE", REDIS_KEY, 0, KEEP - 1]]);
+      relayStatus.listError = null;
+      return ((rows as string[]) ?? []).map((s) => { try { return JSON.parse(s) as CreatureEntry; } catch { return null; } })
+        .filter((e): e is CreatureEntry => !!e && typeof e.id === "string");
+    }
+    if (Date.now() - mem.refreshedAt > BLOB_REFRESH_MS) {
+      mem.refreshedAt = Date.now();
+      const { blobs } = await list({ prefix: "creatures/", limit: 1000 });
+      const out: CreatureEntry[] = [];
+      for (const b of blobs) {
+        const m = /creatures\/(\d+)-([\w-]+?)(?:\.(\w+)\.(\w+)\.(\w+))?\.json$/.exec(b.pathname);
+        if (!m) continue;
+        const entry: CreatureEntry = { id: `${m[1]}-${m[2]}`, variant: m[2], at: Number(m[1]) };
+        if (m[3]) entry.parts = { body: m[2], hat: m[3], arms: m[4], legs: m[5] };
+        out.push(entry);
+      }
+      remember(out);
     }
     relayStatus.listError = null;
-    return out.sort((a, b) => b.at - a.at).slice(0, 60);
+    return mem.list;
   } catch (e) {
-    relayStatus.listError = `list_failed: ${brief(e)}`;
+    relayStatus.listError = `${store}_list_failed: ${brief(e)}`;
     console.error("[creatures] list failed:", e);
-    return [];
+    return mem.list;
   }
 }

@@ -5,7 +5,7 @@ import { listCreatures, uploadCreature, relayStatus, type CreatureParts } from "
 export const maxDuration = 30;
 
 // GET  -> newest living creatures [{id, variant, at, parts?}] (polled by world.html)
-//         ?diag=1 adds the relay's health (token present? last list/upload error)
+//         ?diag=1 adds the relay's health (which store, last list/upload error)
 // POST {variant, parts?} -> the scan station announces a new arrival;
 //         {uploaded:false, reason} says WHY when the store refused it
 export default async function handler(req: VercelRequest, res: VercelResponse) {

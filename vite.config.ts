@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin, type Connect } from "vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
@@ -24,12 +24,13 @@ const send = (res: ServerResponse, code: number, obj: unknown) => {
   res.end(JSON.stringify(obj));
 };
 
-// Dev-only proxy that mirrors the Vercel serverless functions (api/*.ts) using the
-// same shared logic. In production those functions run instead; this is just for `vite dev`.
+// Local API that mirrors the Vercel serverless functions (api/*.ts) using the
+// same shared logic — for `vite dev`, and for `npm run kiosk` (build + preview),
+// the venue mode: ONE machine serves the scan station and the wall on the LAN
+// (http://<its-ip>:5180/world.html) and relays creatures itself, so the
+// exhibition does not depend on any cloud store or quota.
 function devApiPlugin(): Plugin {
-  return {
-    name: "vegiemonster-dev-api",
-    configureServer(server) {
+  const register = (server: { middlewares: Connect.Server }) => {
       const route = (p: string, name: string, fn: (body: any) => Promise<{ status: number; body: unknown }>) =>
         server.middlewares.use(p, async (req, res) => {
           if (req.method !== "POST") return send(res, 405, { error: "POST only" });
@@ -178,7 +179,11 @@ function devApiPlugin(): Plugin {
         const result = await sendKeepsakes(String(b.to ?? ""), String(b.monsterName ?? ""), b.attachments ?? []);
         return { status: 200, body: result };
       });
-    },
+  };
+  return {
+    name: "vegiemonster-dev-api",
+    configureServer(server) { register(server); },
+    configurePreviewServer(server) { register(server); },
   };
 }
 
@@ -197,5 +202,6 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), devApiPlugin()],
     server: { host: true, port: 5180 },
+    preview: { host: true, port: 5180 },
   };
 });

@@ -41,7 +41,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const DEBUG = new URLSearchParams(location.search).has("debug");
 // ?closeup=carrot,leaves,twig,carrot  -> one creature, framed close, slowly turning (asset review / reveal)
 const CLOSEUP = new URLSearchParams(location.search).get("closeup");
-const POLL_MS = 4000;
+const POLL_MS = 5000;
 const MAX_ON_STAGE = 12;
 const POP_DELAY = 5000; // a new creature POPS into the village this long after the scan station's signal
 const STAY_MS = (e) => (DEMO ? 16000 + (e.at % 8000) : 90000 + (e.at % 60000));
