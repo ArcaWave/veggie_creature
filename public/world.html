@@ -68,7 +68,7 @@ camera.lookAt(0, 1.1, -1.5);
 // painted backdrops, glued to the CAMERA at a fixed distance and sized exactly
 // like CSS `cover` (never stretched beyond what the screen needs). The scene
 // rotates every ROTATE_MS with a crossfade; the slot comes from the wall clock
-// so refreshes and both PCs agree. ?bg=harvest|field|night|moon forces one.
+// so refreshes and both PCs agree. ?bg=harvest|field|night|moon|market forces one.
 // ground: where feet may land (x range at the far z edge; xNear = the x range
 // at the near edge when the painted floor tapers). cam: this painting's eye
 // height — a diorama shot from table height needs a lower camera than the
@@ -111,8 +111,20 @@ const SCENES = {
       stars: "/fx/moon_stars.json",
       glows: [{ x: 455, y: 598, r: 34 }, { x: 665, y: 597, r: 34 }, { x: 1005, y: 603, r: 34 }, { x: 1400, y: 607, r: 34 }, { x: 118, y: 142, r: 40 }, { x: 206, y: 208, r: 36 }],
     } },
+  market: { label: "가을 장터", src: "/world3d-market.png", aspect: 1672 / 941, px: [1672, 941], ground: { x: [-1.7, 1.9], xNear: [-4.0, 3.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffe2b8, 0x8a5a30, 0.95], sun: [0xffcc88, 1.4], rim: [0xffa860, 0.85],
+    fx: { // its two clouds drift across the sunset; maple leaves fall from its trees (the near one big, the far ones small); the stall lanterns flicker and the sun breathes
+      clouds: [{ tex: "/fx/market_cloud1.png", x: 584, y: 158, speed: 4.6 }, { tex: "/fx/market_cloud2.png", x: 1314, y: 71, speed: 3.4 }],
+      floaters: [
+        { sprites: ["/fx/market_leaf1.png", "/fx/market_leaf2.png", "/fx/market_leaf3.png"], spawn: [[0, 20, 430, 130, 6]], vy: [14, 24], fade: [650, 750], sway: 18, spin: 0.55, size: [0.55, 0.85] },
+        { sprites: ["/fx/market_leaf1.png", "/fx/market_leaf3.png", "/fx/market_leaf2.png"], spawn: [[1235, 190, 1400, 300, 2], [1400, 130, 1520, 200, 2]], vy: [9, 15], fade: [480, 550], sway: 10, spin: 0.55, size: [0.26, 0.38] },
+      ],
+      glows: [
+        { x: 28, y: 337, r: 50, color: 0xffc860 }, { x: 1621, y: 368, r: 48, color: 0xffc860 }, { x: 1564, y: 394, r: 42, color: 0xff7a48 }, { x: 1313, y: 426, r: 30 }, { x: 1262, y: 434, r: 24, color: 0xffc860 },
+        { x: 1117, y: 278, r: 200, color: 0xffe2a0, calm: true, base: 0.08, amp: 0.14 },
+      ],
+    } },
 };
-const SCENE_ORDER = ["harvest", "field", "night", "moon"];
+const SCENE_ORDER = ["harvest", "field", "night", "moon", "market"];
 const _q = new URLSearchParams(location.search);
 const FORCED_SCENE = SCENE_ORDER.includes(_q.get("bg")) ? _q.get("bg") : null;
 const ROTATE_MS = Math.max(0.5, Number(_q.get("rotate")) || 10) * 60000;
@@ -273,10 +285,10 @@ function buildAmbient(name) {
     }
   }
   for (const g of fx.glows || []) {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffb060, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, color: g.color ?? 0xffb060, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, opacity: 0 }));
     mesh.position.z = 0.03 + zi++ * 0.001;
     ambientGroup.add(mesh);
-    ambient.glows.push({ mesh, x: g.x, y: g.y, r: g.r, phase: rnd(0, 6.28) });
+    ambient.glows.push({ mesh, x: g.x, y: g.y, r: g.r, calm: !!g.calm, base: g.base ?? 0.16, amp: g.amp ?? 0.14, phase: rnd(0, 6.28) });
   }
   if (fx.meteors) {
     for (let i = 0; i < 2; i++) {
@@ -376,12 +388,13 @@ function ambientTick(dt) {
   }
   for (const g of ambient.glows) {
     const t = ambient.time;
-    const flicker = 0.5 + 0.25 * Math.sin(t * 7.3 + g.phase) + 0.25 * Math.sin(t * 3.1 + g.phase * 2.0);
+    const flicker = g.calm ? 0.5 + 0.5 * Math.sin(t * 0.55 + g.phase) // a slow breath (the setting sun), not a flame
+      : 0.5 + 0.25 * Math.sin(t * 7.3 + g.phase) + 0.25 * Math.sin(t * 3.1 + g.phase * 2.0);
     g.mesh.visible = true;
     g.mesh.scale.set(g.r * 2 / PW * f.w, g.r * 2 / PH * f.h, 1);
     g.mesh.position.x = (g.x / PW - 0.5) * f.w;
     g.mesh.position.y = (0.5 - g.y / PH) * f.h + f.lift;
-    g.mesh.material.opacity = (0.16 + 0.14 * flicker) * ambient.opacity;
+    g.mesh.material.opacity = (g.base + g.amp * flicker) * ambient.opacity;
   }
 }
 
