@@ -19,6 +19,12 @@ export default function App() {
     track("app_open");
   }, []);
 
+  // the welcome screen sits on the painted key visual; every other screen
+  // keeps the plain cream so the camera and results stay the focus
+  useEffect(() => {
+    document.body.classList.toggle("stage-welcome", stage === "welcome");
+  }, [stage]);
+
   function reset(reason: string) {
     track("session_reset", { reason });
     clearProfile(); // next family starts with a fresh profile

@@ -22,6 +22,7 @@ body {
   background: linear-gradient(160deg, var(--bg1), var(--bg2));
   -webkit-font-smoothing: antialiased;
 }
+body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cover no-repeat; }
 
 /* 11" tablet landscape (~1194x834) first */
 .app { max-width: 1080px; margin: 0 auto; min-height: 100%; }
