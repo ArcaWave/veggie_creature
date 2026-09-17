@@ -3,9 +3,17 @@
 // site (public/parts/), so nothing heavy ever travels.
 //
 // Sized for the exhibition (200+ children a day, the wall polling all day):
+//  0. Supabase (Postgres over REST) when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+//     are set: one tiny row per arrival, one SELECT per poll. The free plan has
+//     no request quota, only storage/egress this data never approaches.
+//     PREFERRED. One-time setup — SQL editor:
+//       create table creatures (id text primary key, variant text not null,
+//         at bigint not null, parts jsonb, created_at timestamptz default now());
+//       alter table creatures enable row level security;  -- no policies: only
+//       the service key (server-side, never shipped to the browser) can touch it
 //  1. Redis over REST (Upstash — the Vercel Marketplace "Redis/KV" integration
 //     injects KV_REST_API_URL + KV_REST_API_TOKEN): one command per poll, two
-//     per arrival. ~8k commands/day, far inside its free tier. PREFERRED.
+//     per arrival. ~8k commands/day.
 //  2. Vercel Blob, frugally: one put per arrival, and the list is refreshed at
 //     most every BLOB_REFRESH_MS per function instance (polls are answered
 //     from memory in between) — never a list per poll, which is what burned
@@ -26,8 +34,13 @@ const redisEnv = () => {
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   return url && token ? { url: url.replace(/\/$/, ""), token } : null;
 };
+const supaEnv = () => {
+  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+  return url && key ? { url: url.replace(/\/$/, ""), key } : null;
+};
 const hasBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
-export const storeKind = (): "redis" | "blob" | "none" => (redisEnv() ? "redis" : hasBlob() ? "blob" : "none");
+export const storeKind = (): "supabase" | "redis" | "blob" | "none" =>
+  supaEnv() ? "supabase" : redisEnv() ? "redis" : hasBlob() ? "blob" : "none";
 
 // why the last upload / listing failed — surfaced by the API so a broken relay
 // (missing store, exhausted quota, suspended store…) is never silent
@@ -46,6 +59,21 @@ export function makeEntry(variant: unknown, parts?: Partial<CreatureParts> | nul
     entry.parts = { body: safe, hat: clean(parts.hat), arms: clean(parts.arms), legs: clean(parts.legs) };
   }
   return entry;
+}
+
+// ---- Supabase (PostgREST) -----------------------------------------------------
+async function supa(path: string, init: { method?: string; body?: unknown; prefer?: string } = {}): Promise<any> {
+  const env = supaEnv()!;
+  const r = await fetch(`${env.url}/rest/v1/${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      apikey: env.key, Authorization: `Bearer ${env.key}`, "Content-Type": "application/json",
+      ...(init.prefer ? { Prefer: init.prefer } : {}),
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+  if (!r.ok) throw new Error(`supabase_http_${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return r.status === 204 || init.prefer === "return=minimal" ? null : r.json();
 }
 
 // ---- Redis (REST) -----------------------------------------------------------
@@ -84,7 +112,9 @@ export async function uploadCreature(variant: unknown, parts?: Partial<CreatureP
   const entry = makeEntry(variant, parts);
   if (!entry) { relayStatus.uploadError = "bad_variant"; return null; }
   try {
-    if (store === "redis") {
+    if (store === "supabase") {
+      await supa("creatures", { method: "POST", prefer: "return=minimal", body: { id: entry.id, variant: entry.variant, at: entry.at, parts: entry.parts ?? null } });
+    } else if (store === "redis") {
       await redis([["LPUSH", REDIS_KEY, JSON.stringify(entry)], ["LTRIM", REDIS_KEY, 0, KEEP - 1]]);
     } else {
       await put(creatureBlobName(entry), JSON.stringify(entry), {
@@ -106,6 +136,11 @@ export async function listCreatures(): Promise<CreatureEntry[]> {
   const store = (relayStatus.store = storeKind());
   if (store === "none") { relayStatus.listError = "no_store"; return []; }
   try {
+    if (store === "supabase") {
+      const rows = (await supa(`creatures?select=id,variant,at,parts&order=at.desc&limit=${KEEP}`)) as any[];
+      relayStatus.listError = null;
+      return rows.map((r) => ({ id: String(r.id), variant: String(r.variant), at: Number(r.at), ...(r.parts ? { parts: r.parts as CreatureParts } : {}) }));
+    }
     if (store === "redis") {
       const [rows] = await redis([["LRANGE", REDIS_KEY, 0, KEEP - 1]]);
       relayStatus.listError = null;

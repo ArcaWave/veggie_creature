@@ -198,6 +198,10 @@ export default defineConfig(({ mode }) => {
   process.env.TYPECAST_API_KEY = env.TYPECAST_API_KEY || "";
   process.env.TYPECAST_VOICE_ID = env.TYPECAST_VOICE_ID || "";
   process.env.TYPECAST_MODEL = env.TYPECAST_MODEL || "";
+  // the relay store, if any is configured (otherwise this server relays creatures itself)
+  for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "KV_REST_API_URL", "KV_REST_API_TOKEN", "BLOB_READ_WRITE_TOKEN"]) {
+    if (env[k]) process.env[k] = env[k];
+  }
 
   return {
     plugins: [react(), devApiPlugin()],
