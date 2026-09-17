@@ -10,6 +10,10 @@
   canvas { display: block; }
   body.hide-cursor, body.hide-cursor * { cursor: none !important; }
   #fs { position: absolute; top: 14px; right: 14px; z-index: 10; width: 48px; height: 48px; border-radius: 50%; background: rgba(28, 13, 4, 0.45); color: #fff4dc; border: 1px solid rgba(233, 185, 104, 0.55); backdrop-filter: blur(12px); font-size: 22px; cursor: pointer; }
+  #snd { position: absolute; top: 14px; right: 72px; z-index: 10; height: 48px; min-width: 48px; padding: 0 13px; border-radius: 24px; background: rgba(28, 13, 4, 0.45); color: #fff4dc; border: 1px solid rgba(233, 185, 104, 0.55); backdrop-filter: blur(12px); font: 600 13px/1 "Noto Serif KR", serif; letter-spacing: 0.04em; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  #snd i { font-style: normal; font-size: 20px; }
+  #snd.blocked { animation: sndNudge 1.6s ease-in-out infinite; }
+  @keyframes sndNudge { 50% { border-color: #ffd98a; box-shadow: 0 0 18px rgba(255, 205, 110, 0.55); } }
   /* rehearsal control: step through the backdrops (hidden in fullscreen) */
   #bgnav { position: absolute; top: 14px; left: 14px; z-index: 10; display: flex; align-items: center; height: 48px; padding: 0 6px; border-radius: 24px; background: rgba(28, 13, 4, 0.45); color: #fff4dc; border: 1px solid rgba(233, 185, 104, 0.55); backdrop-filter: blur(12px); }
   #bgnav button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
@@ -20,6 +24,7 @@
 </head>
 <body>
 <button id="fs" title="전체화면">⛶</button>
+<button id="snd" title="배경음악 켜기/끄기 (M) · 볼륨 [ ]"><i>🔊</i><span></span></button>
 <div id="bgnav" title="배경 미리보기 — 전체화면에서는 숨겨지고 자동 순환으로 돌아갑니다"><button id="bgPrev">◀</button><span id="bgName"></span><button id="bgNext">▶</button></div>
 <div id="hud"></div>
 
@@ -776,6 +781,63 @@ addEventListener("resize", () => {
   fitBackdrop();
 });
 
+// BGM: the two tracks, in this order, round and round all day. One <audio>
+// at a time, each track eased in and out so the hand-over is soft; the next
+// one is preloaded so there is no gap. Browsers refuse to start sound before
+// someone has touched the page — then the first click/key anywhere (the
+// fullscreen button counts) starts it; a kiosk Chrome launched with
+// --autoplay-policy=no-user-gesture-required starts by itself.
+// M = mute, [ ] = volume (remembered on this PC). ?bgm=0 turns it off, ?vol=0.5 sets it.
+const BGM = ["/bgm/01-autumn-small-world.mp3", "/bgm/02-autumn-weather.mp3"];
+const bgm = { i: 0, el: new Audio(), next: new Audio(), vol: 0.6, muted: false, blocked: false, FADE: 2.0 };
+const sndBtn = document.getElementById("snd");
+if (_q.get("bgm") === "0") sndBtn.style.display = "none";
+else {
+  try {
+    const v = Number(_q.get("vol") ?? localStorage.getItem("vc_bgm_vol"));
+    if (Number.isFinite(v) && v > 0 && v <= 1) bgm.vol = v;
+    bgm.muted = localStorage.getItem("vc_bgm_muted") === "1";
+  } catch {}
+  const remember = () => { try { localStorage.setItem("vc_bgm_vol", String(bgm.vol)); localStorage.setItem("vc_bgm_muted", bgm.muted ? "1" : "0"); } catch {} };
+  const paint = () => {
+    sndBtn.querySelector("i").textContent = bgm.muted || bgm.blocked ? "🔇" : "🔊";
+    sndBtn.querySelector("span").textContent = bgm.blocked && !bgm.muted ? "화면을 한 번 눌러 주세요" : "";
+    sndBtn.classList.toggle("blocked", bgm.blocked && !bgm.muted);
+  };
+  const start = () => bgm.el.play().then(() => { bgm.blocked = false; paint(); }).catch((e) => {
+    if (e?.name === "NotAllowedError") { bgm.blocked = true; paint(); } // wait for the first gesture (below)
+  });
+  const load = (i) => {
+    bgm.i = (i + BGM.length) % BGM.length;
+    bgm.el.src = BGM[bgm.i];
+    bgm.el.volume = 0;
+    bgm.next.src = BGM[(bgm.i + 1) % BGM.length]; // warms the cache for the hand-over
+    bgm.next.preload = "auto";
+    start();
+  };
+  bgm.el.preload = "auto";
+  bgm.el.addEventListener("ended", () => load(bgm.i + 1));
+  // a track that won't load or stalls must not silence the wall: move on
+  bgm.el.addEventListener("error", () => setTimeout(() => load(bgm.i + 1), 3000));
+  // ease in over the first seconds of a track and out over its last
+  setInterval(() => {
+    const a = bgm.el, d = a.duration, t = a.currentTime;
+    const k = Number.isFinite(d) && d > 0 ? Math.max(0, Math.min(1, t / bgm.FADE, (d - t) / bgm.FADE)) : Math.min(1, t / bgm.FADE);
+    a.volume = bgm.muted ? 0 : bgm.vol * (0.15 + 0.85 * k);
+  }, 100);
+  const kick = () => { if (bgm.blocked || bgm.el.paused) start(); };
+  for (const ev of ["pointerdown", "keydown", "touchstart"]) window.addEventListener(ev, kick, { passive: true });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) kick(); });
+  sndBtn.addEventListener("click", () => { bgm.muted = !bgm.muted; remember(); paint(); });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "m" || e.key === "M" || e.key === "ㅡ") { bgm.muted = !bgm.muted; remember(); paint(); }
+    if (e.key === "[" || e.key === "]") { bgm.vol = Math.max(0.05, Math.min(1, bgm.vol + (e.key === "]" ? 0.1 : -0.1))); bgm.muted = false; remember(); paint(); }
+  });
+  paint();
+  load(0);
+  if (DEBUG) window.__bgm = bgm;
+}
+
 // fullscreen + auto-hiding cursor
 const fsBtn = document.getElementById("fs");
 fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen?.().catch(() => {}));
@@ -786,6 +848,7 @@ document.getElementById("bgNext").addEventListener("click", () => stepScene(1));
 document.addEventListener("fullscreenchange", () => {
   const fs = !!document.fullscreenElement;
   fsBtn.style.display = bgNav.style.display = fs ? "none" : "";
+  if (_q.get("bgm") !== "0") sndBtn.style.display = fs ? "none" : "";
   if (fs) { pickedScene = null; applyScene(sceneNow()); } // the show runs on the clock again
 });
 let cursorTimer;
