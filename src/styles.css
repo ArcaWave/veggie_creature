@@ -152,7 +152,8 @@ body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cove
 .staff-item small { display: block; color: var(--muted); font-weight: 700; }
 
 /* ---- welcome: a mirror in the clay frame, auto-start (2-column landscape) ---- */
-body.stage-welcome .app { max-width: 1560px; }
+body.stage-welcome .app { max-width: 1800px; }
+body.stage-build .app { max-width: 1840px; }
 .welcome { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 40px; }
 .welcome-left { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; flex: 0 1 400px; min-width: 0; }
 .welcome-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -173,7 +174,7 @@ body.stage-welcome .app { max-width: 1560px; }
 .mini-caption { font-weight: 800; font-size: 14px; color: #a8642a; white-space: nowrap; }
 .staff-start { opacity: 0.55; font-size: 16px; padding: 8px 18px; }
 /* the mirror */
-.mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: 1060px; min-width: min(100%, 520px); }
+.mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1280px, calc((100vh - 120px) * 1.6164)); min-width: min(100%, 520px); }
 .mirror-stage { position: relative; width: 100%; }
 .mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -182,15 +183,15 @@ body.stage-welcome .app { max-width: 1560px; }
 .mirror-ph p { margin: 0; }
 .mirror-flash { position: absolute; inset: 0; background: #fff; animation: snapFlash 0.55s ease-out forwards; }
 @keyframes snapFlash { from { opacity: 0.95; } to { opacity: 0; } }
-.mirror-pill { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); z-index: 3; background: rgba(255, 255, 255, 0.94); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 2.1vw, 30px); padding: 10px 26px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
+.mirror-pill { position: absolute; left: 50%; bottom: 1.5%; transform: translateX(-50%); z-index: 3; background: rgba(255, 255, 255, 0.94); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 2.1vw, 38px); padding: 10px 26px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 .mirror-pill.still, .mirror-pill.count { background: var(--green); color: #fff; }
 .mirror-note { margin: 0; font-size: 14px; font-weight: 700; color: var(--muted); }
 .gate-hud { position: absolute; left: 10px; top: 10px; margin: 0; z-index: 3; background: rgba(0, 0, 0, 0.55); color: #9ff; font: 600 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border-radius: 10px; white-space: pre; }
 
 /* ---- the clay veggie frame around every camera view ---- */
-.cam-frame { position: relative; width: 100%; aspect-ratio: 3 / 2; }
+.cam-frame { position: relative; width: 100%; aspect-ratio: 1458 / 902; }
 /* the art's transparent window, measured from the painting (its inner edges) */
-.cam-window { position: absolute; left: 7.6%; top: 18.1%; right: 7.5%; bottom: 13.4%; border-radius: 5% / 9.5%; overflow: hidden; background: #1d2a18; }
+.cam-window { position: absolute; left: 5%; top: 15.9%; right: 6%; bottom: 6.8%; border-radius: 5% / 9%; overflow: hidden; background: #1d2a18; }
 .cam-frame-art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; z-index: 2; }
 
 /* ---- top bar ---- */
@@ -285,12 +286,12 @@ body.stage-welcome .app { max-width: 1560px; }
 .lead small { color: var(--muted); font-weight: 700; font-size: 19px; }
 
 /* ---- camera ---- */
-.camera-box { width: min(100%, calc((100vh - 240px) * 1.5), 1100px); }
+.camera-box { width: min(100%, calc((100vh - 220px) * 1.6164), 1500px); }
 /* tablet landscape: the framed camera fills the stage */
 @media (orientation: landscape) {
   .app { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
-  .camera-box { width: min(100%, calc((100vh - 200px) * 1.5), 1200px); }
+  .camera-box { width: min(100%, calc((100vh - 190px) * 1.6164), 1500px); }
 }
 /* invitation cover — camera stays OFF until the child taps this */
 .camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #faeed3, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
@@ -535,19 +536,19 @@ video.camera { transform: scaleX(-1); }
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
 /* dance mini-game: one magic move per scene charges the magic gauge */
-.dance-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(96vw, 1500px); user-select: none; touch-action: manipulation; }
-.move-scene { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; animation: sceneIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.dance-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(96vw, 1840px); user-select: none; touch-action: manipulation; }
+.move-scene { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; animation: sceneIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 @keyframes sceneIn { from { opacity: 0; transform: translateX(60px) scale(0.96); } to { opacity: 1; transform: none; } }
 .move-head { display: flex; align-items: center; gap: 14px; }
 .move-badge { background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(14px, 2.2vmin, 20px); padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow); }
-.move-title { margin: 0; font-size: clamp(26px, 4.6vmin, 44px); font-weight: 800; color: var(--ink); }
+.move-title { margin: 0; font-size: clamp(26px, 5vmin, 54px); font-weight: 800; color: var(--ink); }
 /* the framed camera fills the stage; the guide child stands on its right edge */
-.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 300px) * 1.5)); }
+.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 215px) * 1.6164)); }
 .dance-cam-box { width: 100%; }
 .move-guide { position: absolute; right: 2%; bottom: 5%; height: 62%; z-index: 3; transform: translateX(40%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; }
 .move-guide img { height: 100%; width: auto; display: block; filter: drop-shadow(0 14px 16px rgba(120, 80, 30, 0.28)); animation: guideBob 2.2s ease-in-out infinite; transform-origin: 50% 100%; transition: filter 0.25s ease; }
 .move-guide.hit img { filter: drop-shadow(0 0 22px rgba(255, 190, 60, 0.95)) drop-shadow(0 14px 16px rgba(120, 80, 30, 0.28)); animation: guideCheer 0.5s ease-in-out infinite alternate; }
-.move-guide-label { position: absolute; bottom: 100%; margin-bottom: 8px; background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(16px, 2.4vmin, 24px); padding: 8px 18px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
+.move-guide-label { position: absolute; bottom: 100%; margin-bottom: 8px; background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(16px, 2.6vmin, 30px); padding: 8px 18px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
 .move-guide.hit .move-guide-label { background: var(--green); color: #fff; }
 @keyframes guideBob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-1.5%) rotate(1.5deg); } }
 @keyframes guideCheer { from { transform: scale(1.02) rotate(-3deg); } to { transform: scale(1.08) rotate(3deg); } }
@@ -557,12 +558,12 @@ video.camera { transform: scaleX(-1); }
 /* the beat between scenes */
 .move-cheer { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgba(253, 247, 231, 0.85); backdrop-filter: blur(6px); border-radius: var(--radius); font-size: clamp(34px, 6vmin, 64px); font-weight: 800; color: var(--green-dark); animation: pop 0.35s ease; }
 .move-cheer-star { font-size: 1.6em; animation: pictoCheer 0.4s ease-in-out infinite alternate; }
-.dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 92%; text-align: center; background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); word-break: keep-all; animation: promptBounce 0.8s ease-in-out infinite alternate; }
+.dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 92%; text-align: center; background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.6vmin, 40px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); word-break: keep-all; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
 .magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
-.magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 22px); }
-.dance-hint { color: var(--ink-soft, #a3906f); font-size: clamp(13px, 2.2vmin, 18px); }
+.magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 26px); }
+.dance-hint { margin: 0; color: var(--ink-soft, #a3906f); font-size: clamp(13px, 2vmin, 20px); }
 
 /* "couldn't see it — hold it closer" auto-retry card */
 .noshow-card { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 34px 46px; font-size: clamp(18px, 3vmin, 26px); color: var(--ink); text-align: center; }

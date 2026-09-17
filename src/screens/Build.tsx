@@ -330,7 +330,6 @@ function MagicStep({
   if (phase === "dance") {
     return (
       <div className="screen center-screen" style={{ alignItems: "center" }}>
-        <p className="lead">🕺 마법 동작으로 채소 친구를 깨워 줘!</p>
         <DanceCharge stream={stream} onFull={danceDone} />
       </div>
     );

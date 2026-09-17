@@ -22,9 +22,11 @@ export default function App() {
   }, []);
 
   // the welcome screen sits on the painted key visual; every other screen
-  // keeps the plain cream so the camera and results stay the focus
+  // keeps the plain cream so the camera and results stay the focus (and gets
+  // the full width of the 55" TV for the framed camera)
   useEffect(() => {
     document.body.classList.toggle("stage-welcome", stage === "welcome");
+    document.body.classList.toggle("stage-build", stage === "build");
   }, [stage]);
 
   function reset(reason: string) {
