@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Veggie Creature — Digital World</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Baloo 2", system-ui, sans-serif;
+    background: #f6efe2 url("/world-bg.jpg") center / cover no-repeat;
+  }
+  /* the cursor hides after a moment of stillness so it never sits on the wall;
+     any mouse movement brings it back (see script) */
+  body.hide-cursor, body.hide-cursor * { cursor: none !important; }
+
+  .creature { position: absolute; will-change: left, top; }
+  .creature .flip { transform: scaleX(var(--flip, 1)); }
+  .creature img { width: 100%; display: block; filter: drop-shadow(0 10px 12px rgba(60, 90, 30, 0.25)); }
+
+  /* movement styles per behaviour — the transition is swapped by JS */
+  .creature.walking { transition: left var(--walk-t, 4.5s) linear, top var(--walk-t, 4.5s) ease-in-out; }
+  .creature.walking img { animation: waddle 0.5s ease-in-out infinite; }
+  .creature.strolling { transition: left 10s ease-in-out, top 10s ease-in-out; }
+  .creature.hopping img { animation: hop 0.6s cubic-bezier(0.3, 0, 0.4, 1) infinite; }
+  @keyframes waddle { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-1.6vmin) rotate(3deg); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-4vmin) scale(0.98, 1.04); } 60% { transform: translateY(0) scale(1.05, 0.95); } }
+
+  /* drifting clouds in the artwork's flat style (sky layer, behind creatures) */
+  .cloud2 { position: absolute; pointer-events: none; z-index: 1; opacity: 0.9; animation: cloudDrift var(--drift) linear infinite; }
+  .cloud2 svg { display: block; width: 100%; height: 100%; }
+  @keyframes cloudDrift { from { transform: translateX(-35vw); } to { transform: translateX(135vw); } }
+
+  /* pampas-grass stalks planted over the painted clumps, swaying at the base */
+  .stalk { position: absolute; pointer-events: none; transform-origin: 50% 100%; animation: stalkSway var(--sway) ease-in-out infinite alternate; }
+  .stalk svg { display: block; width: 100%; height: 100%; }
+  @keyframes stalkSway { from { transform: rotate(-5deg); } to { transform: rotate(6deg); } }
+  body.gust .stalk { animation-duration: calc(var(--sway) * 0.45); }
+
+  /* falling autumn leaves — a breath of wind over the still artwork */
+  .leaf { position: absolute; top: -8vh; pointer-events: none; will-change: transform; animation: leafFall var(--fall) linear forwards; }
+  .leaf svg { display: block; width: 100%; height: 100%; animation: leafSway var(--sway) ease-in-out infinite alternate; }
+  @keyframes leafFall { to { transform: translateY(120vh); } }
+  @keyframes leafSway {
+    from { transform: translateX(calc(var(--amp) * -1)) rotate(-40deg); }
+    to { transform: translateX(var(--amp)) rotate(50deg); }
+  }
+  /* a gust now and then makes every leaf sway wider and drift faster */
+  body.gust .leaf svg { animation-duration: calc(var(--sway) * 0.45); }
+  body.gust .leaf { animation-duration: calc(var(--fall) * 0.7); }
+
+  /* ---- night theme (moon village) ambience ---- */
+  /* the mochi mallet, cut out of the art so the rabbit can really pound */
+  .mallet { position: absolute; pointer-events: none; z-index: 1; }
+  .mallet img { width: 100%; display: block; transform-origin: 60% 92%; animation: malletPound 8.5s ease-in-out infinite; }
+  @keyframes malletPound {
+    0%, 52% { transform: none; }
+    61% { transform: translateY(-24%) rotate(-8deg); }
+    68% { transform: translateY(-27%) rotate(-9deg); }
+    73% { transform: translateY(3%) rotate(1.5deg); }
+    78% { transform: translateY(-9%) rotate(-3.5deg); }
+    83% { transform: translateY(2%); }
+    89%, 100% { transform: none; }
+  }
+  /* caterpillar peeking out of the burrow hole on the right */
+  .caterhole { position: absolute; overflow: hidden; pointer-events: none; z-index: 1; border-radius: 48% 48% 0 0; }
+  .caterhole svg { position: absolute; bottom: 0; left: 18%; width: 56%; height: 78%; transform: translateY(112%); animation: caterPeek 14s ease-in-out infinite; }
+  @keyframes caterPeek {
+    0%, 58% { transform: translateY(112%); }
+    64% { transform: translateY(26%) rotate(0deg); }
+    69% { transform: translateY(30%) rotate(-5deg); }
+    74% { transform: translateY(26%) rotate(4deg); }
+    80% { transform: translateY(32%); }
+    88%, 100% { transform: translateY(112%); }
+  }
+  /* ---- autumn-field theme: a sparrow peeking out of the bottom bush ---- */
+  /* the svg paints its own bush mound (same green as the art) OVER the bird,
+     so the bird really disappears behind the leaves */
+  .sparrow { position: absolute; pointer-events: none; z-index: 1; }
+  .sparrow svg { display: block; width: 100%; height: 100%; }
+  .sparrow .birdg { animation: sparrowPeek 11s ease-in-out infinite; }
+  @keyframes sparrowPeek {
+    0%, 55% { transform: translateY(46px); }
+    61% { transform: translateY(7px); }
+    66% { transform: translateY(10px) translateX(-2px); }
+    72% { transform: translateY(7px) translateX(2px); }
+    79% { transform: translateY(9px); }
+    86%, 100% { transform: translateY(46px); }
+  }
+
+  /* a shooting star streaking across the night sky */
+  .shootstar { position: absolute; pointer-events: none; z-index: 1; width: 11vw; height: 3px; border-radius: 3px; background: linear-gradient(90deg, rgba(255, 251, 230, 0), #fffbe8 92%, #fff); transform: rotate(28deg); opacity: 0; animation: shoot var(--shoot, 1.3s) ease-out forwards; }
+  @keyframes shoot {
+    0% { opacity: 0; transform: rotate(28deg) translateX(0); }
+    12% { opacity: 1; }
+    100% { opacity: 0; transform: rotate(28deg) translateX(24vw); }
+  }
+
+  /* fullscreen button — hidden once fullscreen (exit with ESC) */
+  #fs { position: absolute; top: 14px; right: 14px; z-index: 10; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255, 255, 255, 0.8); box-shadow: 0 4px 12px rgba(60, 90, 30, 0.2); font-size: 22px; cursor: pointer; color: #2e5d12; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<button id="fs" title="전체화면" aria-label="전체화면">⛶</button>
+
+<script>
+// The display wall (PC #2). The hanok courtyard is a WAYPOINT on the creatures'
+// journey: each one walks in from the left, bows to the maru, plays the folk
+// games at the art's hotspots, then walks off the right edge. /api/creatures
+// is polled for new arrivals. Add ?demo to the URL for short rehearsal stays.
+//
+// EVERY position is anchored to the BACKGROUND IMAGE (fractions of the art),
+// not to the viewport — so hotspots stay glued to the toy mats and the maru on
+// any screen: a 16:10 MacBook, a 16:9 55"/60" TV, whatever `cover` crops.
+const stage = document.getElementById("stage");
+const onStage = new Map(); // id -> creature controller
+// ids that finished their visit — persisted so a refresh doesn't resurrect them
+const departed = new Set();
+try { for (const id of JSON.parse(localStorage.getItem("vc-departed") || "[]")) departed.add(id); } catch (e) {}
+function markDeparted(id) {
+  departed.add(id);
+  try {
+    const keep = [...departed].filter((d) => Number(d.split("-")[0]) > Date.now() - 6 * 3600e3);
+    localStorage.setItem("vc-departed", JSON.stringify(keep.slice(-300)));
+  } catch (e) {}
+}
+const MAX_ON_STAGE = 12;
+const POLL_MS = 4000;
+const DEMO = new URLSearchParams(location.search).has("demo");
+// each guest's stay is fixed by its record timestamp and counts from the scan
+// moment — deterministic across refreshes, so expired guests never come back
+const stayFor = (entry) => (DEMO ? 14000 + (entry.at % 6000) : 90000 + (entry.at % 60000));
+const gone = (entry) => Date.now() > entry.at + stayFor(entry);
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+// ---- rotating scenery -------------------------------------------------------
+// the wall cycles through the scenes: hanok courtyard → autumn field →
+// moon-rabbit village, switching every ROTATE_MS. The slot index comes from
+// the wall clock, so refreshes (and both PCs) always agree on the scene.
+// Force one with ?bg=day|field|night; change the pace with ?rotate=<minutes>.
+const THEMES = {
+  day: {
+    src: "/world-bg.jpg",
+    body: "#f6efe2",
+    ground: { x: [0.06, 0.84], y: [0.58, 0.84] },
+    hotspots: [
+      { kind: "spin", label: "팽이 멍석", spot: () => ({ fx: rnd(0.72, 0.82), fy: rnd(0.74, 0.84) }) },
+      { kind: "dance", label: "윷판 멍석", spot: () => ({ fx: rnd(0.4, 0.55), fy: rnd(0.66, 0.74) }) },
+      { kind: "smile", label: "복주머니", spot: () => ({ fx: rnd(0.86, 0.9), fy: rnd(0.54, 0.6) }) },
+      { kind: "bow", label: "마루 세배", spot: () => ({ fx: rnd(0.1, 0.17), fy: rnd(0.54, 0.62) }), face: -1 },
+    ],
+  },
+  field: {
+    src: "/world-bg-field.jpg",
+    body: "#f7ecd6",
+    // open harvest field — the songpyeon table / scarecrow (left) and the
+    // sheaf, arrow jar and bushes (right) stay clear
+    ground: { x: [0.26, 0.78], y: [0.66, 0.92] },
+    hotspots: [
+      { kind: "spin", label: "팽이", spot: () => ({ fx: rnd(0.66, 0.72), fy: rnd(0.83, 0.9) }) },
+      { kind: "dance", label: "들판 마당", spot: () => ({ fx: rnd(0.45, 0.6), fy: rnd(0.7, 0.8) }) },
+      { kind: "smile", label: "투호 항아리", spot: () => ({ fx: rnd(0.75, 0.79), fy: rnd(0.68, 0.74) }) },
+      { kind: "bow", label: "허수아비 인사", spot: () => ({ fx: rnd(0.27, 0.32), fy: rnd(0.68, 0.74) }), face: -1 },
+    ],
+  },
+  night: {
+    src: "/world-bg-night.jpg",
+    body: "#101c40",
+    // open moon-sand only — the mochi corner (left) and mole mound (right)
+    // stay clear of wandering feet
+    ground: { x: [0.3, 0.84], y: [0.52, 0.9] },
+    hotspots: [
+      { kind: "spin", label: "팽이", spot: () => ({ fx: rnd(0.31, 0.37), fy: rnd(0.78, 0.86) }) },
+      { kind: "dance", label: "달빛 마당", spot: () => ({ fx: rnd(0.5, 0.62), fy: rnd(0.6, 0.7) }) },
+      { kind: "smile", label: "두더지 언덕", spot: () => ({ fx: rnd(0.78, 0.83), fy: rnd(0.72, 0.8) }) },
+      { kind: "bow", label: "떡방아 토끼", spot: () => ({ fx: rnd(0.3, 0.36), fy: rnd(0.56, 0.62) }), face: -1 },
+    ],
+  },
+};
+const ROTATION = ["day", "field", "night"];
+const _params = new URLSearchParams(location.search);
+const FORCED_BG = ROTATION.includes(_params.get("bg")) ? _params.get("bg") : null;
+const ROTATE_MS = Math.max(0.5, Number(_params.get("rotate")) || 10) * 60000;
+const themeNow = () => ROTATION[Math.floor(Date.now() / ROTATE_MS) % ROTATION.length];
+let THEME = null; // set by applyTheme() below, once ambient builders exist
+
+// ---- background-image coordinate system (matches CSS `cover`) --------------
+const bg = { w: 1676, h: 944, scale: 1, ox: 0, oy: 0 };
+const bgProbe = new Image();
+bgProbe.onload = () => { bg.w = bgProbe.naturalWidth; bg.h = bgProbe.naturalHeight; layout(); };
+
+function layout() {
+  bg.scale = Math.max(innerWidth / bg.w, innerHeight / bg.h);
+  bg.ox = (innerWidth - bg.w * bg.scale) / 2;
+  bg.oy = (innerHeight - bg.h * bg.scale) / 2;
+  for (const c of onStage.values()) applyPos(c, true);
+}
+addEventListener("resize", layout);
+
+const toPx = (fx, fy) => ({ x: bg.ox + fx * bg.w * bg.scale, y: bg.oy + fy * bg.h * bg.scale });
+
+function applyPos(c, instant) {
+  const p = toPx(c.fx, c.fy);
+  const size = c.sizeFrac * bg.h * bg.scale; // proportional to the art, on every screen
+  c.el.style.zIndex = 2 + Math.round(c.fy * 20); // lower on screen = in front
+  if (instant) {
+    const mode = c.el.className;
+    c.el.className = "creature"; // don't animate a window resize
+    c.el.style.width = size + "px";
+    c.el.style.left = p.x - size / 2 + "px";
+    c.el.style.top = p.y - size + "px"; // (fx,fy) is where the FEET stand
+    void c.el.offsetWidth;
+    c.el.className = mode;
+  } else {
+    c.el.style.width = size + "px";
+    c.el.style.left = p.x - size / 2 + "px";
+    c.el.style.top = p.y - size + "px";
+  }
+}
+
+// ground area + hotspots come from the active theme (fractions of its art)
+let GROUND = THEMES.day.ground;
+let HOTSPOTS = THEMES.day.hotspots;
+const wanderSpot = () => ({ fx: rnd(...GROUND.x), fy: rnd(...GROUND.y) });
+
+// pick a spot that keeps a polite distance from everyone else's target
+function freeSpot(gen, self) {
+  for (let i = 0; i < 10; i++) {
+    const s = gen();
+    const crowded = [...onStage.values()].some(
+      (o) => o !== self && Math.hypot(o.fx - s.fx, (o.fy - s.fy) * 1.6) < 0.11
+    );
+    if (!crowded) return s;
+  }
+  return gen(); // packed courtyard — allow it rather than freeze
+}
+// which extra motion clips each variant has (bow/spin/dance) — from the build
+let KINDMAP = {};
+fetch("/variants/variants.json").then((r) => r.json()).then((j) => { KINDMAP = j.kinds || {}; }).catch(() => {});
+const hasKind = (variant, kind) => kind === "greet" || kind === "smile" || (KINDMAP[variant] || []).includes(kind);
+
+function addCreature(entry, isNew) {
+  if (departed.has(entry.id)) return;
+  const el = document.createElement("div");
+  el.className = "creature";
+  // the ?d= query desyncs gif playback between creatures (same-src <img>
+  // animations run in lockstep otherwise)
+  const clip = (kind) => `/variants/${entry.variant}.${kind}.gif?d=${encodeURIComponent(entry.id)}`;
+  const greet = clip("greet");
+  const smile = clip("smile");
+  const flip = document.createElement("div");
+  flip.className = "flip";
+  const img = document.createElement("img");
+  img.src = Math.random() < 0.5 ? greet : smile; // varied starting pose
+  flip.appendChild(img);
+  el.appendChild(flip);
+  stage.appendChild(el);
+
+  const c = { el, img, entry, fx: 0, fy: 0, sizeFrac: rnd(0.17, 0.27), timers: [], leaving: false };
+  onStage.set(entry.id, c);
+  const later = (fn, ms) => c.timers.push(setTimeout(fn, ms));
+
+  function face(dir) { el.style.setProperty("--flip", dir); } // 1 right, -1 left
+  function setMode(mode) { el.className = "creature" + (mode ? " " + mode : ""); }
+  function moveTo(spot) { c.fx = spot.fx; c.fy = spot.fy; applyPos(c); }
+  // always WALK (waddle) between spots, at a constant pace — no gliding.
+  // returns the walk duration in ms so the caller can chain the next action.
+  function walkTo(spot) {
+    const dist = Math.hypot((spot.fx - c.fx) * (bg.w / bg.h), spot.fy - c.fy);
+    const dur = Math.min(8, Math.max(1.6, dist / 0.16));
+    face(spot.fx > c.fx ? 1 : -1);
+    setMode("walking");
+    el.style.setProperty("--walk-t", dur + "s");
+    moveTo(spot);
+    return dur * 1000;
+  }
+  // a small step nearby (kept inside the courtyard) — everyday wandering
+  function nearSpot() {
+    for (let i = 0; i < 8; i++) {
+      const r = rnd(0.07, 0.16);
+      const a2 = rnd(0, Math.PI * 2);
+      const s = {
+        fx: Math.min(GROUND.x[1], Math.max(GROUND.x[0], c.fx + Math.cos(a2) * r)),
+        fy: Math.min(GROUND.y[1], Math.max(GROUND.y[0], c.fy + Math.sin(a2) * r * 0.6)),
+      };
+      const crowded = [...onStage.values()].some(
+        (o) => o !== c && Math.hypot(o.fx - s.fx, (o.fy - s.fy) * 1.6) < 0.1
+      );
+      if (!crowded) return s;
+    }
+    return { fx: c.fx, fy: c.fy };
+  }
+
+  // ---- arrival: walk in from the left edge, then bow to the maru ----
+  const spot = freeSpot(wanderSpot, c);
+  if (isNew) {
+    c.fx = -0.25; c.fy = spot.fy;
+    applyPos(c, true);
+    setMode("walking");
+    el.style.setProperty("--walk-t", "4.5s");
+    requestAnimationFrame(() => requestAnimationFrame(() => moveTo(spot)));
+    later(() => {
+      if (hasKind(entry.variant, "bow")) {
+        setMode("");
+        face(-1); // the maru sits on the left
+        img.src = clip("bow");
+        later(() => { face(1); img.src = greet; behave(); }, 4500);
+      } else {
+        behave();
+      }
+    }, 4700);
+  } else {
+    c.fx = spot.fx; c.fy = spot.fy;
+    applyPos(c, true);
+    later(() => behave(), rnd(0, 2000));
+  }
+
+  // ---- life in the courtyard: roll a new behaviour every few seconds ----
+  function behave() {
+    if (c.leaving) return;
+    const roll = Math.random();
+    if (roll < 0.3) {
+      // just play in place (sometimes swapping the clip)
+      setMode("");
+      if (Math.random() < 0.5) img.src = Math.random() < 0.5 ? greet : smile;
+      later(behave, rnd(6000, 11000));
+    } else if (roll < 0.55) {
+      // a few waddling steps to somewhere nearby
+      const dur = walkTo(nearSpot());
+      later(() => { setMode(""); later(behave, rnd(1500, 4000)); }, dur + 100);
+    } else if (roll < 0.7) {
+      // happy hopping on the spot
+      setMode("hopping");
+      img.src = smile;
+      later(behave, rnd(5000, 8000));
+    } else {
+      // visit a hotspot: stroll there, then play the matching motion.
+      // a hotspot someone else is at (or heading to) is considered taken.
+      const probe = (h) => h.spot();
+      const options = HOTSPOTS.filter((h) => {
+        if (!hasKind(entry.variant, h.kind)) return false;
+        const s0 = probe(h);
+        return ![...onStage.values()].some((o) => o !== c && Math.hypot(o.fx - s0.fx, (o.fy - s0.fy) * 1.6) < 0.13);
+      });
+      if (!options.length) { setMode(""); later(behave, rnd(3000, 6000)); return; }
+      const h = options[Math.floor(Math.random() * options.length)];
+      const dur = walkTo(freeSpot(h.spot, c));
+      later(() => {
+        if (c.leaving) return;
+        setMode("");
+        face(h.face ?? 1);
+        img.src = clip(h.kind);
+        later(() => { face(1); img.src = greet; behave(); }, rnd(7000, 9500));
+      }, dur + 150);
+    }
+  }
+
+  // ---- departure: wave goodbye, then walk off the right edge ----
+  later(() => {
+    c.leaving = true;
+    setMode("");
+    face(1);
+    img.src = greet; // the wave clip doubles as "bye-bye!"
+    later(() => {
+      setMode("walking");
+      el.style.setProperty("--walk-t", "6s");
+      img.src = smile;
+      moveTo({ fx: 1.25, fy: c.fy });
+      later(() => {
+        c.timers.forEach(clearTimeout);
+        el.remove();
+        onStage.delete(entry.id);
+        markDeparted(entry.id);
+      }, 6300);
+    }, 2600);
+  }, Math.max(entry.at + stayFor(entry) - Date.now(), DEMO ? 6000 : 15000));
+}
+
+async function poll(first) {
+  try {
+    const r = await fetch("/api/creatures", { cache: "no-store" });
+    const j = await r.json();
+    const latest = (j.creatures || []).slice(0, MAX_ON_STAGE);
+    for (const entry of [...latest].reverse()) {
+      if (!onStage.has(entry.id) && !departed.has(entry.id) && !gone(entry)) addCreature(entry, !first);
+    }
+    // safety cap: if the courtyard somehow overflows, the oldest leaves first
+    while (onStage.size > MAX_ON_STAGE) {
+      const oldest = onStage.get([...onStage.keys()][0]);
+      oldest.timers.forEach(clearTimeout);
+      oldest.el.remove();
+      onStage.delete(oldest.entry.id);
+      markDeparted(oldest.entry.id);
+    }
+  } catch (e) {
+    /* offline blip — try again next poll */
+  }
+}
+
+poll(true);
+setInterval(() => poll(false), POLL_MS);
+
+// fullscreen button: click to fill the screen, hides itself while fullscreen
+const fsBtn = document.getElementById("fs");
+fsBtn.addEventListener("click", () => document.documentElement.requestFullscreen?.().catch(() => {}));
+document.addEventListener("fullscreenchange", () => {
+  fsBtn.style.display = document.fullscreenElement ? "none" : "";
+});
+
+// ---- ambient decorations, anchored to the artwork (rebuilt per theme) -------
+const ambient = []; // {el, fx, fy, wFrac, hFrac}
+function placeAmbient() {
+  for (const m of ambient) {
+    const p = toPx(m.fx, m.fy);
+    m.el.style.left = p.x + "px";
+    m.el.style.top = p.y + "px";
+    m.el.style.width = m.wFrac * bg.h * bg.scale + "px";
+    m.el.style.height = m.hFrac * bg.h * bg.scale + "px";
+  }
+}
+const _layout = layout;
+layout = function () { _layout(); placeAmbient(); };
+addEventListener("resize", placeAmbient);
+
+function addAmbient(el, pos) {
+  document.body.appendChild(el);
+  ambient.push({ el, ...pos });
+}
+
+// soft flat-white cloud clusters drifting across the sky band
+function buildClouds(driftMin, driftMax) {
+  for (let i = 0; i < 3; i++) {
+    const el = document.createElement("div");
+    el.className = "cloud2";
+    el.style.setProperty("--drift", rnd(driftMin, driftMax) + "s");
+    el.style.animationDelay = -rnd(0, driftMax) + "s";
+    el.innerHTML = `<svg viewBox="0 0 120 44">
+      <ellipse cx="38" cy="30" rx="34" ry="13" fill="#fffdf7"/>
+      <ellipse cx="70" cy="22" rx="26" ry="14" fill="#fffdf7"/>
+      <ellipse cx="94" cy="31" rx="22" ry="10" fill="#fffdf7"/>
+    </svg>`;
+    addAmbient(el, { fx: 0, fy: rnd(0.05, 0.2), wFrac: rnd(0.14, 0.22), hFrac: rnd(0.05, 0.08) });
+  }
+}
+
+// DAY: drifting clouds + swaying pampas grass (+ falling leaves, below)
+function buildDayAmbient() {
+  buildClouds(90, 150);
+  const GRASS_SPOTS = [
+    ...Array.from({ length: 7 }, () => ({ fx: rnd(0.01, 0.14), fy: rnd(0.86, 0.99) })),
+    ...Array.from({ length: 4 }, () => ({ fx: rnd(0.9, 0.99), fy: rnd(0.9, 1.0) })),
+    ...Array.from({ length: 3 }, () => ({ fx: rnd(0.3, 0.42), fy: rnd(0.96, 1.02) })),
+  ];
+  for (const g of GRASS_SPOTS) {
+    const el = document.createElement("div");
+    el.className = "stalk";
+    el.style.setProperty("--sway", rnd(1.8, 3.2) + "s");
+    el.style.animationDelay = -rnd(0, 3) + "s";
+    el.style.zIndex = g.fy > 0.94 ? 30 : 1; // front row overlaps the creatures a touch
+    const lean = rnd(-14, 14);
+    el.innerHTML = `<svg viewBox="0 0 20 80">
+      <path d="M10 80 C ${10 + lean * 0.3} 55, ${10 + lean} 35, ${10 + lean} 22" stroke="#d9c08a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="${10 + lean}" cy="15" rx="5.5" ry="12" fill="#f4ead2"/>
+      <ellipse cx="${10 + lean}" cy="13" rx="3.6" ry="9" fill="#fdf8ea"/>
+    </svg>`;
+    const h = rnd(0.09, 0.16);
+    addAmbient(el, { fx: g.fx, fy: g.fy - h, wFrac: h * 0.25, hFrac: h });
+  }
+}
+
+// FIELD: slow clouds + a sparrow peeking out of the bottom-right bush
+// (falling leaves come from the shared leaf spawner below)
+function buildFieldAmbient() {
+  buildClouds(130, 200);
+  const sp = document.createElement("div");
+  sp.className = "sparrow";
+  sp.innerHTML = `<svg viewBox="0 0 100 80">
+    <g class="birdg">
+      <ellipse cx="50" cy="38" rx="15" ry="13" fill="#a9765a"/>
+      <ellipse cx="50" cy="44" rx="10" ry="8" fill="#f0e0c8"/>
+      <circle cx="50" cy="22" r="10" fill="#a9765a"/>
+      <path d="M40 22 l-7 3 7 3 z" fill="#3b3129"/>
+      <circle cx="46" cy="20" r="2.4" fill="#2f2a26"/>
+      <circle cx="46.8" cy="19.3" r="0.8" fill="#fff"/>
+      <path d="M58 34 q 9 2 8 12 q -8 0 -11 -7" fill="#8a5d44"/>
+      <path d="M45 13 q 4 -5 8 0" stroke="#8a5d44" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+    <path d="M0 80 L0 62 Q 14 48 30 56 Q 50 40 72 54 Q 90 50 100 60 L100 80 Z" fill="#4b8048"/>
+    <circle cx="30" cy="66" r="2.2" fill="#3d6b3b"/>
+    <circle cx="58" cy="62" r="2.2" fill="#3d6b3b"/>
+    <circle cx="80" cy="68" r="2.2" fill="#3d6b3b"/>
+  </svg>`;
+  sp.firstElementChild.querySelector(".birdg").style.animationDelay = -rnd(0, 11) + "s";
+  // sits over the art's green bush mounds, bottom-right — the drawn mound
+  // crest rides just above the painted one so the bird truly hides behind
+  // it (kept left of the berry twig)
+  addAmbient(sp, { fx: 0.81, fy: 0.74, wFrac: 0.22, hFrac: 0.194 });
+}
+
+// NIGHT: the moon-rabbit really pounds its mallet (the mallet was cut out of
+// the art into its own sprite), and a caterpillar peeks out of the burrow
+function buildNightAmbient() {
+  const mallet = document.createElement("div");
+  mallet.className = "mallet";
+  mallet.innerHTML = `<img src="/world-night-mallet.png" alt="" />`;
+  mallet.firstElementChild.style.animationDelay = -rnd(0, 8.5) + "s";
+  // sprite bbox in the night art: x 0.1352–0.1830, y 0.4633–0.6589
+  addAmbient(mallet, { fx: 0.1352, fy: 0.4633, wFrac: 0.085, hFrac: 0.1956 });
+
+  const hole = document.createElement("div");
+  hole.className = "caterhole";
+  hole.innerHTML = `<svg viewBox="0 0 40 60">
+    <line x1="14" y1="14" x2="9" y2="4" stroke="#5d8f3c" stroke-width="2" stroke-linecap="round"/>
+    <line x1="26" y1="14" x2="31" y2="4" stroke="#5d8f3c" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="9" cy="3" r="2.6" fill="#8fc45e"/><circle cx="31" cy="3" r="2.6" fill="#8fc45e"/>
+    <circle cx="20" cy="52" r="11" fill="#7ab54a"/>
+    <circle cx="20" cy="38" r="12" fill="#8fc45e"/>
+    <circle cx="20" cy="22" r="13" fill="#a3d66f"/>
+    <circle cx="15" cy="20" r="2.6" fill="#2f2a26"/><circle cx="25" cy="20" r="2.6" fill="#2f2a26"/>
+    <circle cx="16" cy="19" r="0.9" fill="#fff"/><circle cx="26" cy="19" r="0.9" fill="#fff"/>
+    <path d="M16 26 Q 20 30 24 26" stroke="#4a6b2a" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <circle cx="11" cy="24" r="2.2" fill="#f2a2ac" opacity="0.8"/><circle cx="29" cy="24" r="2.2" fill="#f2a2ac" opacity="0.8"/>
+  </svg>`;
+  hole.firstElementChild.style.animationDelay = -rnd(0, 14) + "s";
+  // burrow hole in the night art: x 0.915–0.972, y 0.590–0.691
+  addAmbient(hole, { fx: 0.9155, fy: 0.592, wFrac: 0.1, hFrac: 0.099 });
+}
+
+function clearAmbient() {
+  for (const m of ambient) m.el.remove();
+  ambient.length = 0;
+}
+
+// shooting stars: brief streaks across the night sky
+function spawnStar() {
+  if (THEME !== "night") return;
+  const el = document.createElement("div");
+  el.className = "shootstar";
+  const p = toPx(rnd(0.12, 0.75), rnd(0.04, 0.26));
+  el.style.left = p.x + "px";
+  el.style.top = p.y + "px";
+  el.style.setProperty("--shoot", rnd(0.9, 1.6) + "s");
+  document.body.appendChild(el);
+  el.addEventListener("animationend", () => el.remove());
+}
+setInterval(() => { if (Math.random() < 0.55) spawnStar(); }, 7000);
+setTimeout(spawnStar, 2500);
+
+// ---- theme switching --------------------------------------------------------
+const AMBIENT_BUILDERS = { day: buildDayAmbient, field: buildFieldAmbient, night: buildNightAmbient };
+
+// gentle 1.2s crossfade into the next scene (skipped on the very first paint)
+function fadeToBackground(css) {
+  const veil = document.createElement("div");
+  veil.style.cssText = `position:fixed;inset:0;z-index:0;pointer-events:none;background:${css};opacity:0;transition:opacity 1.2s ease;`;
+  document.body.prepend(veil);
+  requestAnimationFrame(() => requestAnimationFrame(() => { veil.style.opacity = "1"; }));
+  setTimeout(() => { document.body.style.background = css; veil.remove(); }, 1400);
+}
+
+function applyTheme(name) {
+  if (name === THEME) return;
+  const first = THEME === null;
+  THEME = name;
+  const t = THEMES[name];
+  const css = `${t.body} url("${t.src}") center / cover no-repeat`;
+  if (first) document.body.style.background = css;
+  else fadeToBackground(css);
+  GROUND = t.ground;
+  HOTSPOTS = t.hotspots;
+  bgProbe.src = t.src; // onload refreshes bg dims + full layout
+  clearAmbient();
+  AMBIENT_BUILDERS[name]();
+  placeAmbient();
+}
+applyTheme(FORCED_BG || themeNow());
+setInterval(() => { if (!FORCED_BG) applyTheme(themeNow()); }, 10000);
+
+// ---- ambient wind: autumn leaves drifting across the scene -----------------
+// day + field scenes only (no leaves on the moon). small leaves in the art's
+// palette; some fall BEHIND the creatures and some in front, for depth.
+// every so often a gust makes everything flutter harder.
+const LEAF_COLORS = ["#e8862e", "#d8433b", "#e6b93f", "#c96a2d", "#a8552b"];
+const MAX_LEAVES = 14;
+let leafCount = 0;
+
+function spawnLeaf() {
+  if (THEME !== "day" && THEME !== "field") return;
+  if (leafCount >= MAX_LEAVES) return;
+  leafCount++;
+  const leaf = document.createElement("div");
+  leaf.className = "leaf";
+  const size = rnd(1.6, 3.2); // vmin
+  leaf.style.width = size + "vmin";
+  leaf.style.height = size + "vmin";
+  leaf.style.left = rnd(-5, 100) + "vw";
+  leaf.style.setProperty("--fall", rnd(9, 17) + "s");
+  leaf.style.setProperty("--sway", rnd(1.6, 3) + "s");
+  leaf.style.setProperty("--amp", rnd(2.5, 6) + "vw");
+  leaf.style.zIndex = Math.random() < 0.5 ? 1 : 30; // behind or in front of creatures
+  const color = LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
+  leaf.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2 C
+    18 6, 20 12, 12 22 C 4 12, 6 6, 12 2 Z" fill="${color}" opacity="0.9"/>
+    <path d="M12 5 L 12 19" stroke="${color === "#e6b93f" ? "#c96a2d" : "#7a3416"}" stroke-width="0.8" opacity="0.5"/></svg>`;
+  document.body.appendChild(leaf);
+  leaf.addEventListener("animationend", () => { leaf.remove(); leafCount--; });
+}
+setInterval(spawnLeaf, 1400);
+for (let i = 0; i < 5; i++) setTimeout(spawnLeaf, i * 500);
+
+// occasional gust of wind
+setInterval(() => {
+  document.body.classList.add("gust");
+  setTimeout(() => document.body.classList.remove("gust"), 3500);
+}, 14000 + Math.random() * 8000);
+
+// auto-hiding cursor: visible while moving, gone after 2.5s of stillness
+let cursorTimer;
+function wakeCursor() {
+  document.body.classList.remove("hide-cursor");
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.add("hide-cursor"), 2500);
+}
+document.addEventListener("mousemove", wakeCursor);
+wakeCursor();
+</script>
+</body>
+</html>
