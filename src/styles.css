@@ -174,9 +174,7 @@ body.stage-welcome .app { max-width: 1560px; }
 .staff-start { opacity: 0.55; font-size: 16px; padding: 8px 18px; }
 /* the mirror */
 .mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: 1060px; min-width: min(100%, 520px); }
-.mirror-stage { position: relative; width: 100%; aspect-ratio: 3 / 2; }
-/* the frame art's window, measured from the painting (its inner edges) */
-.mirror-window { position: absolute; left: 7.81%; top: 17.09%; right: 6.45%; bottom: 13.67%; border-radius: 5.3% / 9.9%; overflow: hidden; background: #1d2a18; }
+.mirror-stage { position: relative; width: 100%; }
 .mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .mirror-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff4dc; font-weight: 800; background: #2c3627; }
@@ -184,11 +182,16 @@ body.stage-welcome .app { max-width: 1560px; }
 .mirror-ph p { margin: 0; }
 .mirror-flash { position: absolute; inset: 0; background: #fff; animation: snapFlash 0.55s ease-out forwards; }
 @keyframes snapFlash { from { opacity: 0.95; } to { opacity: 0; } }
-.mirror-frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; z-index: 2; }
 .mirror-pill { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); z-index: 3; background: rgba(255, 255, 255, 0.94); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 2.1vw, 30px); padding: 10px 26px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 .mirror-pill.still, .mirror-pill.count { background: var(--green); color: #fff; }
 .mirror-note { margin: 0; font-size: 14px; font-weight: 700; color: var(--muted); }
 .gate-hud { position: absolute; left: 10px; top: 10px; margin: 0; z-index: 3; background: rgba(0, 0, 0, 0.55); color: #9ff; font: 600 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border-radius: 10px; white-space: pre; }
+
+/* ---- the clay veggie frame around every camera view ---- */
+.cam-frame { position: relative; width: 100%; aspect-ratio: 3 / 2; }
+/* the art's transparent window, measured from the painting (its inner edges) */
+.cam-window { position: absolute; left: 7.6%; top: 18.1%; right: 7.5%; bottom: 13.4%; border-radius: 5% / 9.5%; overflow: hidden; background: #1d2a18; }
+.cam-frame-art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; z-index: 2; }
 
 /* ---- top bar ---- */
 .topbar { display: flex; align-items: center; justify-content: center; gap: 12px; }
@@ -282,14 +285,14 @@ body.stage-welcome .app { max-width: 1560px; }
 .lead small { color: var(--muted); font-weight: 700; font-size: 19px; }
 
 /* ---- camera ---- */
-.camera-box { width: min(100%, 620px, 66vh); aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #000; }
-/* tablet landscape: the camera fills the stage — wide box, nearly full height */
+.camera-box { width: min(100%, calc((100vh - 240px) * 1.5), 1100px); }
+/* tablet landscape: the framed camera fills the stage */
 @media (orientation: landscape) {
   .app { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
-  .camera-box { width: 100%; max-width: none; height: calc(100vh - 225px); min-height: 240px; aspect-ratio: auto; }
-  /* dance: the camera fills what's left beside the pictogram */
-  .dance-cam-box { aspect-ratio: auto; height: min(calc(100vh - 330px), 620px); width: min(100%, calc((100vh - 330px) * 1.6)); }
+  .camera-box { width: min(100%, calc((100vh - 200px) * 1.5), 1200px); }
+  /* dance: the framed camera fills what's left beside the pictogram */
+  .dance-cam-box { width: min(100%, calc((100vh - 300px) * 1.5), 960px); }
 }
 /* invitation cover — camera stays OFF until the child taps this */
 .camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #faeed3, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
@@ -523,7 +526,6 @@ video.camera { transform: scaleX(-1); }
 .cert-title-field input { text-transform: uppercase; font-weight: 800; letter-spacing: 0.04em; }
 
 /* auto-snap countdown */
-.camera-box { position: relative; }
 .count-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(255, 255, 255, 0.85); color: var(--green-dark); font-size: 74px; font-weight: 800; animation: countPulse 1s ease infinite; pointer-events: none; }
 @keyframes countPulse { 0% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.4; } 30% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(0.96); opacity: 0.9; } }
 .camera.placeholder { position: relative; }
@@ -554,7 +556,7 @@ video.camera { transform: scaleX(-1); }
 @keyframes whoosh { from { opacity: 0.3; transform: translateX(-3px); } to { opacity: 1; transform: translateX(3px); } }
 .picto-heart { transform-origin: 70px 46px; animation: heartBeat 0.9s ease-in-out infinite; }
 @keyframes heartBeat { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.18); } }
-.dance-cam-box { position: relative; flex: 0 1 780px; min-width: 0; aspect-ratio: 16 / 10; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
+.dance-cam-box { flex: 0 1 900px; min-width: 0; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
@@ -574,15 +576,26 @@ video.camera { transform: scaleX(-1); }
 .noshow-sub { color: var(--ink-soft, #a3906f); font-size: 0.75em; }
 @keyframes guidePop { from { transform: scale(1) rotate(-3deg); } to { transform: scale(1.12) rotate(3deg); } }
 
+/* ---------- the composed figure (the same character the wall shows) ---------- */
+.figure { position: relative; width: 100%; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+/* the body is 80% of the box so the hat has headroom above it */
+.figure-body { position: relative; height: 80%; margin-bottom: 4%; filter: drop-shadow(0 12px 14px rgba(150, 100, 40, 0.25)); transform-origin: 50% 100%; }
+.figure-body > img:first-child { height: 100%; width: auto; display: block; }
+.figure-hat { position: absolute; display: block; }
+/* the reveal: a happy wiggle-wave, like the wall's */
+.figure.wave .figure-body { animation: figWave 1.1s ease-in-out infinite; }
+@keyframes figWave { 0%, 100% { transform: rotate(-5deg) translateY(0); } 25% { transform: rotate(0deg) translateY(-2.5%) scaleY(1.03); } 50% { transform: rotate(5deg) translateY(0); } 75% { transform: rotate(0deg) translateY(-2.5%) scaleY(1.03); } }
+
 /* ---------- the creature stomps off the right edge into the Digital World ---------- */
 .walk-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
 /* starts exactly where the reveal showed it — screen centre — then strolls right */
-.walker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(52vmin, 480px); animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
-.walker img { width: 100%; display: block; animation: waddleStep 0.48s ease-in-out infinite; filter: drop-shadow(0 12px 14px rgba(150, 100, 40, 0.25)); }
+.walker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(52vmin, 480px); height: min(70vmin, 640px); animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
+.walker .figure-body { animation: waddleStep 0.48s ease-in-out infinite; }
 @keyframes walkAcross { to { left: 140%; } }
 @keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }
 /* square variant clips in the wide reveal frame: show the whole creature */
 .wake-media.fit { object-fit: contain; }
+.wake-figure { display: flex; align-items: center; justify-content: center; }
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }

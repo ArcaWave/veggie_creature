@@ -1,21 +1,41 @@
 // Cloud relay between the SCAN PC and the DISPLAY PC (no shared network needed).
-// The clips themselves are PRE-MADE and shipped with the deployed site
-// (public/variants/), so only a tiny metadata record travels through Vercel
-// Blob per creature: which variant came alive, and when. Requires
+// The character art is PRE-MADE and shipped with the deployed site
+// (public/parts/), so only a tiny metadata record travels through Vercel Blob
+// per creature: which body and sticker parts came alive, and when — all of it
+// encoded in the blob's NAME so listing needs no downloads. Requires
 // BLOB_READ_WRITE_TOKEN; without it everything degrades to empty/false.
 import { put, list } from "@vercel/blob";
 
 const hasBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
 
-export type CreatureEntry = { id: string; variant: string; at: number };
+export type CreatureParts = { body: string; hat: string; arms: string; legs: string };
+export type CreatureEntry = { id: string; variant: string; at: number; parts?: CreatureParts };
 
-export async function uploadCreature(variant: string): Promise<CreatureEntry | null> {
-  if (!hasBlob()) return null;
-  const safe = variant.replace(/[^\w-]/g, "").slice(0, 40);
+const clean = (v: unknown) => String(v ?? "").replace(/[^\w-]/g, "").slice(0, 40);
+
+// blob name: creatures/<ts>-<body>.<hat>.<arms>.<legs>.json (parts optional)
+export function creatureBlobName(entry: CreatureEntry) {
+  const p = entry.parts;
+  return `creatures/${entry.id}${p ? `.${clean(p.hat)}.${clean(p.arms)}.${clean(p.legs)}` : ""}.json`;
+}
+
+export function makeEntry(variant: unknown, parts?: Partial<CreatureParts> | null): CreatureEntry | null {
+  const safe = clean(variant);
   if (!safe) return null;
-  const entry: CreatureEntry = { id: `${Date.now()}-${safe}`, variant: safe, at: Date.now() };
+  const at = Date.now();
+  const entry: CreatureEntry = { id: `${at}-${safe}`, variant: safe, at };
+  if (parts && clean(parts.hat) && clean(parts.arms) && clean(parts.legs)) {
+    entry.parts = { body: safe, hat: clean(parts.hat), arms: clean(parts.arms), legs: clean(parts.legs) };
+  }
+  return entry;
+}
+
+export async function uploadCreature(variant: unknown, parts?: Partial<CreatureParts> | null): Promise<CreatureEntry | null> {
+  if (!hasBlob()) return null;
+  const entry = makeEntry(variant, parts);
+  if (!entry) return null;
   try {
-    await put(`creatures/${entry.id}.json`, JSON.stringify(entry), {
+    await put(creatureBlobName(entry), JSON.stringify(entry), {
       access: "public",
       contentType: "application/json",
       addRandomSuffix: false,
@@ -34,8 +54,11 @@ export async function listCreatures(): Promise<CreatureEntry[]> {
     const { blobs } = await list({ prefix: "creatures/", limit: 1000 });
     const out: CreatureEntry[] = [];
     for (const b of blobs) {
-      const m = /creatures\/(\d+)-([\w-]+)\.json$/.exec(b.pathname);
-      if (m) out.push({ id: `${m[1]}-${m[2]}`, variant: m[2], at: Number(m[1]) });
+      const m = /creatures\/(\d+)-([\w-]+?)(?:\.(\w+)\.(\w+)\.(\w+))?\.json$/.exec(b.pathname);
+      if (!m) continue;
+      const entry: CreatureEntry = { id: `${m[1]}-${m[2]}`, variant: m[2], at: Number(m[1]) };
+      if (m[3]) entry.parts = { body: m[2], hat: m[3], arms: m[4], legs: m[5] };
+      out.push(entry);
     }
     return out.sort((a, b) => b.at - a.at).slice(0, 60);
   } catch {

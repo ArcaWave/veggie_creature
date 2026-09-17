@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { checkLimit, limitKey } from "./_ratelimit.js";
-import { listCreatures, uploadCreature } from "./_creaturestore.js";
+import { listCreatures, uploadCreature, type CreatureParts } from "./_creaturestore.js";
 
 export const maxDuration = 30;
 
-// GET  -> newest living creatures [{id, variant, at}] (polled by world.html)
-// POST {variant} -> the scan station announces a new arrival
+// GET  -> newest living creatures [{id, variant, at, parts?}] (polled by world.html)
+// POST {variant, parts?} -> the scan station announces a new arrival
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     res.setHeader("Cache-Control", "no-store");
@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = limitKey(req.headers["x-mk-profile"], req.headers["x-forwarded-for"], req.socket?.remoteAddress);
   if (!checkLimit("save", key)) return res.status(429).json({ error: "rate_limited" });
 
-  const { variant } = (req.body ?? {}) as { variant?: string };
-  const entry = await uploadCreature(String(variant ?? ""));
+  const { variant, parts } = (req.body ?? {}) as { variant?: string; parts?: Partial<CreatureParts> };
+  const entry = await uploadCreature(variant, parts);
   res.status(200).json({ uploaded: !!entry, entry });
 }

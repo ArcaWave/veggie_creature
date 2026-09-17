@@ -3,6 +3,7 @@ import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { pop, sparkle } from "../lib/sfx";
 import { speak } from "../lib/guide";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_SHOULDER, R_SHOULDER } from "../lib/pose";
+import { CamFrame } from "./CamFrame";
 
 // The dance mini-game: two "magic moves", ONE PER SCENE — the scene changes
 // after each move, so the child only ever has one thing to do. The moves are
@@ -219,7 +220,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
             <Picto move={move.key} />
             <span className="move-picto-label">{hit ? "좋아요! 그대로~ ✨" : "이렇게!"}</span>
           </div>
-          <div className="dance-cam-box">
+          <CamFrame className="dance-cam-box">
             {stream ? (
               <>
                 <video ref={vRef} autoPlay playsInline muted className="dance-cam" />
@@ -229,7 +230,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
               <div className="dance-cam dance-cam-ph">🥕✨</div>
             )}
             <span className="dance-prompt">{move.prompt}</span>
-          </div>
+          </CamFrame>
         </div>
         <div className="magic-gauge" aria-hidden="true">
           <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />

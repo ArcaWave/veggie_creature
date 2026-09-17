@@ -174,28 +174,18 @@ scene.add(rim);
 // the figure always faces the camera. A body x arms x legs render is one PNG
 // listed in /parts/figures.json; hats are PNGs too — that is the whole cost
 // of a new variant.
-const BODIES = {
-  carrot:      { h: 2.3,  hatY: 0.13 },
-  eggplant:    { h: 2.2,  hatY: 0.11 },
-  tomato:      { h: 1.9,  hatY: 0.13 },
-  potato:      { h: 2.0,  hatY: 0.09 },
-  cucumber:    { h: 2.25, hatY: 0.08 },
-  corn:        { h: 2.1,  hatY: 0.11 },
-  broccoli:    { h: 2.1,  hatY: 0.09 },
-  cauliflower: { h: 1.8,  hatY: 0.10 },
-};
-const PARTS = {
-  hats: {
-    none: null,
-    leaves:  { tex: "/parts/cute_hat_leaves.png",  h: 0.5,  aspect: 518 / 416, ax: 0.5, ay: 0.96 },
-    acorn:   { tex: "/parts/cute_hat_acorn.png",   h: 0.62, aspect: 545 / 604, ax: 0.5, ay: 0.95 },
-    straw:   { tex: "/parts/cute_hat_straw.png",   h: 0.4,  aspect: 719 / 367, ax: 0.5, ay: 0.82 },
-  },
-  arms: { twig: 1, cucumber: 1, carrot: 1 },
-  legs: { twig: 1, cucumber: 1, carrot: 1 },
-};
+// the character rig (body heights, hat sockets, part names) is shared with the
+// scan station: public/parts/rig.json is the one source of truth
+let BODIES = {};
+const PARTS = { hats: { none: null }, arms: {}, legs: {} };
+const rigReady = fetch("/parts/rig.json").then((r) => r.json()).then((rig) => {
+  BODIES = rig.bodies;
+  Object.assign(PARTS.hats, rig.hats);
+  for (const k of rig.arms) PARTS.arms[k] = 1;
+  for (const k of rig.legs) PARTS.legs[k] = 1;
+}).catch(() => {});
 let FIGURES = {}; // "carrot_twig_carrot" -> { aspect }
-const figuresReady = fetch("/parts/figures.json").then((r) => r.json()).then((j) => { FIGURES = j; }).catch(() => {});
+const figuresReady = Promise.all([rigReady, fetch("/parts/figures.json").then((r) => r.json()).then((j) => { FIGURES = j; })]).catch(() => {});
 const RIG = new URLSearchParams(location.search).has("rig");
 const stickerTex = {};
 function getTex(url) {
@@ -358,7 +348,10 @@ const gone = (e) => Date.now() > e.at + STAY_MS(e);
 
 // until the matcher returns parts, derive hat/limbs from the record id
 function partsFor(entry) {
-  if (entry.parts) return entry.parts;
+  // the scan station sends the exact part set the matcher saw; anything it
+  // doesn't know (older records, a bad field) falls back to the hash pick
+  const p = entry.parts;
+  if (p && BODIES[p.body] && p.hat in PARTS.hats && PARTS.arms[p.arms] && PARTS.legs[p.legs]) return p;
   const h = hash(entry.id);
   const keys = (o) => Object.keys(o);
   return {

@@ -88,23 +88,36 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
   }
 }
 
-// Photo of the child's real veggie creation -> which pre-made variant character
-// resembles it most. Accuracy setup: gemini-2.5-flash vision, a reason-first
-// JSON answer whose `variant` field is ENUM-constrained to the library, and
-// THREE parallel judgements combined by majority vote. On any failure the
-// caller falls back to a random variant so the show always goes on.
+// Photo of the child's real veggie creation -> which pre-made character it
+// is: the MAIN BODY vegetable plus the sticker parts stuck on it (hat, arms,
+// legs), so the wall can assemble the very same figure. Accuracy setup:
+// gemini-2.5-flash vision, a reason-first JSON answer whose fields are
+// ENUM-constrained to the part library, and THREE parallel judgements
+// combined by majority vote per field. On any failure the caller falls back
+// to a random pick so the show always goes on.
+export const HAT_IDS = ["none", "leaves", "acorn", "straw"] as const;
+export const LIMB_IDS = ["twig", "cucumber", "carrot"] as const;
+export type Parts = { body: string; hat: string; arms: string; legs: string };
+
 const MATCH_PROMPT =
-  "A child built a little creature out of real vegetables (photo attached). " +
-  "The creature is assembled as: a hat/head piece, a MAIN BODY vegetable (the torso — the " +
-  "biggest central piece), and small arms/legs. Identify the MAIN BODY vegetable only — its " +
-  "kind and color. Ignore hats, googly eyes, toothpicks, arms, legs, hands holding it, the " +
-  "table and other decorations. First describe the main body briefly in `reason`, then pick " +
-  "the closest matching character type in `variant`. " +
+  "A child built a little creature out of a real vegetable plus printed STICKER parts (photo " +
+  "attached). The creature is assembled as: a MAIN BODY vegetable (the torso — the biggest " +
+  "central piece), one optional HAT sticker on top, two ARM stickers and two LEG stickers. " +
+  "Identify each: " +
+  "`variant` = the kind of the main body vegetable (by its shape and color). " +
+  "`hat` = the hat sticker: leaves = a green leafy sprout hat, acorn = a brown acorn cap, " +
+  "straw = a yellow woven straw hat, none = no hat at all. " +
+  "`arms` and `legs` = the sticker style of the limbs: twig = brown wooden twigs/branches, " +
+  "cucumber = green cucumber slices or pieces, carrot = orange carrot sticks. " +
+  "Ignore googly eyes, toothpicks, the hands holding it, the table and other decorations. " +
+  "First describe what you see briefly in `reason`, then fill every field. " +
   "IMPORTANT: if NO vegetable creation is visible at all — an empty scene, only a person or " +
   "face with nothing held up, or the creation is too far away or fully hidden — answer " +
   '`variant` "none" instead of guessing.';
 
-async function matchOnce(img: { mimeType: string; data: string }): Promise<string | null> {
+type Vote = { variant: string; hat: string; arms: string; legs: string };
+
+async function matchOnce(img: { mimeType: string; data: string }): Promise<Vote | null> {
   const r = await fetch(`${GEMINI}/models/${matchModel()}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key() },
@@ -116,14 +129,20 @@ async function matchOnce(img: { mimeType: string; data: string }): Promise<strin
         ],
       }],
       generationConfig: {
+        // a classification, not a puzzle: no thinking budget keeps the answer
+        // in a few seconds (with thinking on, the multi-field schema ran ~40s)
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
           properties: {
             reason: { type: "STRING" },
             variant: { type: "STRING", enum: [...VARIANT_IDS, "none"] },
+            hat: { type: "STRING", enum: [...HAT_IDS] },
+            arms: { type: "STRING", enum: [...LIMB_IDS] },
+            legs: { type: "STRING", enum: [...LIMB_IDS] },
           },
-          required: ["reason", "variant"],
+          required: ["reason", "variant", "hat", "arms", "legs"],
         },
       },
     }),
@@ -131,35 +150,51 @@ async function matchOnce(img: { mimeType: string; data: string }): Promise<strin
   if (!r.ok) return null;
   const j = (await r.json()) as any;
   try {
-    const parsed = JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
-    return parsed.variant === "none" || VARIANT_IDS.includes(parsed.variant) ? parsed.variant : null;
+    const p = JSON.parse(j?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}");
+    if (!(p.variant === "none" || VARIANT_IDS.includes(p.variant))) return null;
+    const pick = (v: unknown, ids: readonly string[]) => (typeof v === "string" && ids.includes(v) ? v : ids[0]);
+    return { variant: p.variant, hat: pick(p.hat, HAT_IDS), arms: pick(p.arms, LIMB_IDS), legs: pick(p.legs, LIMB_IDS) };
   } catch {
     return null;
   }
 }
 
+const majority = (xs: string[]) => {
+  const tally = new Map<string, number>();
+  for (const x of xs) tally.set(x, (tally.get(x) ?? 0) + 1);
+  return [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+};
+const randomParts = (body: string): Parts => ({
+  body,
+  hat: HAT_IDS[Math.floor(Math.random() * HAT_IDS.length)],
+  arms: LIMB_IDS[Math.floor(Math.random() * LIMB_IDS.length)],
+  legs: LIMB_IDS[Math.floor(Math.random() * LIMB_IDS.length)],
+});
+
 export async function matchVariant(image: string): Promise<Result> {
   const fallback = VARIANT_IDS[Math.floor(Math.random() * VARIANT_IDS.length)];
-  if (!key()) return { status: 200, body: { variant: fallback, reason: "no_key" } };
+  if (!key()) return { status: 200, body: { variant: fallback, parts: randomParts(fallback), reason: "no_key" } };
   const img = parseDataUrl(image);
   if (!img) return { status: 400, body: { error: "bad_image" } };
   try {
     const votes = (await Promise.all([matchOnce(img), matchOnce(img), matchOnce(img)]))
-      .filter((v): v is string => !!v);
-    if (!votes.length) return { status: 200, body: { variant: fallback, reason: "no_votes" } };
-    const real = votes.filter((v) => v !== "none");
-    const tally = new Map<string, number>();
-    for (const v of real) tally.set(v, (tally.get(v) ?? 0) + 1);
-    const best = real.length ? [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+      .filter((v): v is Vote => !!v);
+    if (!votes.length) return { status: 200, body: { variant: fallback, parts: randomParts(fallback), reason: "no_votes" } };
+    const real = votes.filter((v) => v.variant !== "none");
+    const best = majority(real.map((v) => v.variant));
+    // the sticker parts: majority per field among the votes that saw a creation
+    const parts: Parts | null = best
+      ? { body: best, hat: majority(real.map((v) => v.hat))!, arms: majority(real.map((v) => v.arms))!, legs: majority(real.map((v) => v.legs))! }
+      : null;
     // a "none" majority means no creation was visible — let the kiosk ask the
     // child to hold it closer, with `best` as a last-resort guess
     if (votes.length - real.length >= 2) {
-      return { status: 200, body: { variant: null, none: true, best, votes } };
+      return { status: 200, body: { variant: null, none: true, best, parts, votes: votes.map((v) => v.variant) } };
     }
-    if (!best) return { status: 200, body: { variant: fallback, reason: "no_votes" } };
-    return { status: 200, body: { variant: best, matched: real.length === votes.length, votes } };
+    if (!best || !parts) return { status: 200, body: { variant: fallback, parts: randomParts(fallback), reason: "no_votes" } };
+    return { status: 200, body: { variant: best, parts, matched: real.length === votes.length, votes: votes.map((v) => v.variant) } };
   } catch (e: any) {
-    return { status: 200, body: { variant: fallback, reason: "server_error", detail: String(e?.message || e) } };
+    return { status: 200, body: { variant: fallback, parts: randomParts(fallback), reason: "server_error", detail: String(e?.message || e) } };
   }
 }
 

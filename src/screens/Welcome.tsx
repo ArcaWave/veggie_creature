@@ -5,6 +5,7 @@ import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
 import { pop, sparkle } from "../lib/sfx";
 import { speak } from "../lib/guide";
 import { track } from "../lib/analytics";
+import { CamFrame } from "../components/CamFrame";
 
 // The always-on welcome screen is a MIRROR in a clay picture frame. A child
 // who walks up close, stands in the middle and holds their creation in front
@@ -302,7 +303,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
 
       <div className="mirror">
         <div className={`mirror-stage${count !== null ? " counting" : ""}`}>
-          <div className="mirror-window">
+          <CamFrame>
             <video ref={videoRef} autoPlay playsInline muted className="mirror-cam" />
             <canvas ref={overlayRef} className="mirror-overlay" />
             {!camOn && (
@@ -321,8 +322,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
                 {`어깨 ${report.width.toFixed(2)} / ${params.near} ${report.near ? "✓" : "✗"}\n가운데 ${report.centered ? "✓" : "✗"}  손 ${report.holding ? "✓" : "✗"}  정지 ${report.still ? "✓" : "✗"}\n유지 ${(report.dwell / 1000).toFixed(1)}s / ${params.hold / 1000}s  ${armedRef.current ? "준비됨" : "쿨다운"}`}
               </pre>
             )}
-          </div>
-          <img src="/camera-frame.png" className="mirror-frame" alt="" draggable={false} />
+          </CamFrame>
           <span className={`mirror-pill ${hint}`}>{stageHint}</span>
         </div>
         <p className="mirror-note">📷 카메라 화면은 사진 찍기에만 쓰여요</p>

@@ -6,7 +6,7 @@ import path from "node:path";
 import { stylize, startAnimate, animateStatus, matchVariant } from "./api/_gemini";
 import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
-import { listCreatures, uploadCreature } from "./api/_creaturestore";
+import { listCreatures, uploadCreature, makeEntry, type CreatureEntry } from "./api/_creaturestore";
 import { checkLimit, limitKey } from "./api/_ratelimit";
 
 const ANIMATOR = () => process.env.ANIMATOR_URL || "http://127.0.0.1:8765";
@@ -80,20 +80,21 @@ function devApiPlugin(): Plugin {
         }
       });
       route("/api/match", "stylize", (b) => matchVariant(b.image));
-      // creature relay (scan PC -> Blob -> display PC). Only tiny {variant}
-      // records travel — the clips are pre-made static files. Without a Blob
-      // token in dev, an in-memory list keeps the one-machine demo working.
-      const devCreatures: { id: string; variant: string; at: number }[] = [];
+      // creature relay (scan PC -> Blob -> display PC). Only tiny {variant,
+      // parts} records travel — the character art is pre-made static files.
+      // Without a Blob token in dev, an in-memory list keeps the one-machine
+      // demo working.
+      const devCreatures: CreatureEntry[] = [];
       server.middlewares.use("/api/creatures", async (req, res) => {
         if (req.method === "POST") {
           const key = limitKey(req.headers["x-mk-profile"], req.headers["x-forwarded-for"], req.socket?.remoteAddress);
           if (!checkLimit("save", key)) return send(res, 429, { error: "rate_limited" });
           try {
             const b = JSON.parse((await readBody(req)) || "{}");
-            let entry = await uploadCreature(String(b.variant ?? ""));
+            let entry = await uploadCreature(b.variant, b.parts);
             if (!entry) {
-              entry = { id: `${Date.now()}-${b.variant}`, variant: String(b.variant ?? ""), at: Date.now() };
-              devCreatures.unshift(entry);
+              entry = makeEntry(b.variant, b.parts);
+              if (entry) devCreatures.unshift(entry);
             }
             return send(res, 200, { uploaded: true, entry });
           } catch (e: any) {

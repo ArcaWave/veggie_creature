@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { SparkleLoading } from "../components/SparkleLoading";
-import { Clip } from "../components/Clip";
 import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
@@ -8,6 +7,8 @@ import { keepAsset } from "../lib/keep";
 import { speak } from "../lib/guide";
 import { getCamera, releaseCamera, cameraErrorText, snapshot } from "../lib/camera";
 import { DanceCharge } from "../components/DanceCharge";
+import { Figure, randomParts, type Parts } from "../components/Figure";
+import { CamFrame } from "../components/CamFrame";
 
 // "Show it to the camera and it comes alive."
 // The station runs WITHOUT staff: the welcome mirror usually takes the photo
@@ -21,6 +22,7 @@ type Step = "photo" | "magic";
 
 const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
+const MATCH_TIMEOUT_MS = 20000; // matcher deadline before the show goes on regardless
 
 export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initialPhoto?: string }) {
   const [step, setStep] = useState<Step>(initialPhoto ? "magic" : "photo");
@@ -159,7 +161,7 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
         <p className="lead">
           {tries > 0 ? "🥕 조금만 더 가까이 보여줄래요?" : "📸 내가 만든 채소 친구를 카메라에 보여주세요!"}
         </p>
-        <div className="camera-box">
+        <CamFrame className="camera-box">
           {camOn ? (
             <>
               <video ref={videoRef} autoPlay playsInline muted className="camera" />
@@ -175,7 +177,7 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
               <p>{camError ?? "카메라 켜는 중…"}</p>
             </div>
           )}
-        </div>
+        </CamFrame>
         {!camOn && camError && (
           <button className="btn-secondary" onClick={() => setCamTry((t) => t + 1)}>
             📷 다시 시도
@@ -192,9 +194,10 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
 
 // -------- the automated magic: photo -> match -> dust -> ALIVE -> walk off ---
 // No runtime generation: the scan photo is matched (one cheap vision call, ~2s)
-// against the PRE-MADE variant library, dust falls for a moment of theatre, the
-// creature bursts alive, waves for a beat — then stomps off the RIGHT edge of
-// the screen into the Digital World, and the station resets.
+// to a body vegetable AND the sticker parts on it; the PRE-MADE figure for
+// that part set (the same art the Digital Village uses) bursts alive, waves
+// for a beat — then stomps off the RIGHT edge of the screen into the Digital
+// World with its part set, and the station resets.
 function MagicStep({
   photo,
   stream,
@@ -213,6 +216,7 @@ function MagicStep({
   type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk";
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
+  const [parts, setParts] = useState<Parts | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const aliveRef = useRef(true);
   const timersRef = useRef<number[]>([]);
@@ -231,11 +235,15 @@ function MagicStep({
       track("match_start");
       const RANDOM = ["carrot", "broccoli", "tomato", "potato", "cucumber", "eggplant", "corn", "cauliflower"];
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
+      let p: Parts | null = null;
       try {
+        // a slow answer must never strand a child: past the deadline the show
+        // goes on with a random creature
         const r = await fetch("/api/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: photo }),
+          signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
         });
         const j = await r.json();
         // nothing visible in the shot? ask the child to hold it closer and
@@ -250,12 +258,16 @@ function MagicStep({
         }
         if (typeof j.variant === "string" && j.variant) v = j.variant;
         else if (typeof j.best === "string" && j.best) v = j.best;
-        track("match_done", { variant: v, matched: j.matched ?? false });
+        if (j.parts && j.parts.body === v) p = j.parts;
+        track("match_done", { variant: v, matched: j.matched ?? false, parts: p });
       } catch {
         track("match_fail");
       }
       if (!aliveRef.current) return;
+      if (!p) p = await randomParts(v).catch(() => ({ body: v, hat: "none", arms: "twig", legs: "twig" }));
+      if (!aliveRef.current) return;
       setVariant(v);
+      setParts(p);
       // 2) the dance mini-game: the child's own moves charge the magic
       setPhase("dance");
     })();
@@ -265,6 +277,8 @@ function MagicStep({
   // 3) gauge full -> dust -> 4) ALIVE -> 5) walks off right
   const variantRef = useRef<string | null>(null);
   variantRef.current = variant;
+  const partsRef = useRef<Parts | null>(null);
+  partsRef.current = parts;
   const danceDoneRef = useRef(false);
   function danceDone() {
     if (!aliveRef.current || danceDoneRef.current) return;
@@ -286,7 +300,7 @@ function MagicStep({
         fetch("/api/creatures", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ variant: v }),
+          body: JSON.stringify({ variant: v, parts: partsRef.current }),
         }).catch(() => {});
         later(() => {
           track("build_done", { variant: v });
@@ -318,13 +332,13 @@ function MagicStep({
     );
   }
 
-  if (phase === "walk" && variant) {
+  if (phase === "walk" && variant && parts) {
     return (
       <div className="screen center-screen" style={{ alignItems: "center" }}>
         <p className="lead">🌏 디지털 세계로 출발!</p>
         <div className="walk-stage">
           <div className="walker">
-            <img src={`/variants/${variant}.smile.gif`} alt="" />
+            <Figure parts={parts} />
           </div>
         </div>
       </div>
@@ -338,10 +352,11 @@ function MagicStep({
       </p>
 
       <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
-        {phase === "alive" && variant ? (
-          // fit (not cover): the square clip must show the WHOLE creature —
-          // sprout hat to feet — inside the wide reveal frame
-          <Clip src={`/variants/${variant}.greet.gif`} className="wake-media fit" />
+        {phase === "alive" && variant && parts ? (
+          // the whole figure — hat to feet — inside the wide reveal frame
+          <div className="wake-media wake-figure">
+            <Figure parts={parts} className="wave" />
+          </div>
         ) : (
           <img
             src={photo}
