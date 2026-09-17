@@ -7,21 +7,24 @@ import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import { speak } from "../lib/guide";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST } from "../lib/pose";
+import { getCamera, releaseCamera, cameraErrorText, snapshot } from "../lib/camera";
 
 // "Show it to the camera and it comes alive."
-// The station runs WITHOUT staff: big on-screen guidance + spoken Korean
-// prompts, the camera counts down and snaps by itself, and if the AI can't
-// see a creation in the shot it kindly asks the child to hold it closer and
-// retries on its own (never a dead end — after 2 retries the show goes on
-// with the best guess). Small Retake escape hatch only.
+// The station runs WITHOUT staff: the welcome mirror usually takes the photo
+// by itself (initialPhoto), so this screen starts straight at the magic. The
+// photo step remains for the "hold it closer" reshoot and the staff fallback:
+// big on-screen guidance, the camera counts down and snaps by itself, and if
+// the AI can't see a creation in the shot it kindly asks the child to hold it
+// closer and retries on its own (never a dead end — after 2 retries the show
+// goes on with the best guess). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
 const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
 
-export function Build({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState<Step>("photo");
-  const [photo, setPhoto] = useState("");
+export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initialPhoto?: string }) {
+  const [step, setStep] = useState<Step>(initialPhoto ? "magic" : "photo");
+  const [photo, setPhoto] = useState(initialPhoto);
   const [tries, setTries] = useState(0);
 
   // -------- camera with auto countdown snap --------
@@ -32,42 +35,28 @@ export function Build({ onDone }: { onDone: () => void }) {
   const [camTry, setCamTry] = useState(0);
   const [count, setCount] = useState<number | null>(null);
 
-  // the stream is kept alive through the magic step too — the dance mini-game
-  // watches the child move — and only stops on unmount / retake
+  // the shared kiosk stream: the dance mini-game watches the child through it
+  // too, and the welcome mirror takes it back afterwards — so it is never
+  // stopped here, only re-acquired on an explicit retry
   useEffect(() => {
     let cancelled = false;
     setCamError(null);
-
-    const md = navigator.mediaDevices;
-    if (!md?.getUserMedia) {
-      setCamError(window.isSecureContext ? "카메라가 없어요 — 사진을 업로드해 주세요!" : "카메라는 https 주소에서 열 수 있어요.");
-      return;
-    }
-
-    md.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    if (camTry > 0) releaseCamera();
+    getCamera()
       .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
+        if (cancelled) return;
         streamRef.current = stream;
         setCamOn(true);
       })
-      .catch((err: DOMException) => {
-        const byName: Record<string, string> = {
-          NotAllowedError: "카메라가 막혀 있어요 — 허용 후 다시 시도!",
-          NotFoundError: "카메라가 없어요 — 사진을 업로드해 주세요!",
-          NotReadableError: "다른 앱이 카메라를 쓰고 있어요.",
-        };
-        setCamError(byName[err?.name] || "카메라가 잠깐 말썽이에요 — 다시 시도!");
+      .catch((err) => {
+        if (cancelled) return;
+        setCamError(cameraErrorText(err));
         setCamOn(false);
       });
-
     return () => {
       cancelled = true;
-      stopCam();
+      streamRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camTry]);
 
   // bind the stream after the <video> renders (prevents a black screen).
@@ -106,12 +95,6 @@ export function Build({ onDone }: { onDone: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camOn, step, camTry]);
 
-  function stopCam() {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setCamOn(false);
-  }
-
   function capture() {
     const v = videoRef.current;
     if (!v || v.readyState < 2) {
@@ -120,18 +103,7 @@ export function Build({ onDone }: { onDone: () => void }) {
       return;
     }
     sparkle();
-    // WYSIWYG: crop what the (object-fit: cover) preview shows
-    const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
-    let cw = v.videoWidth, ch = v.videoHeight;
-    if (cw / ch > ratio) cw = Math.round(ch * ratio);
-    else ch = Math.round(cw / ratio);
-    const scale = Math.min(1, 960 / Math.max(cw, ch));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(cw * scale);
-    canvas.height = Math.round(ch * scale);
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(v, (v.videoWidth - cw) / 2, (v.videoHeight - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
-    const url = canvas.toDataURL("image/jpeg", 0.8);
+    const url = snapshot(v);
     setPhoto(url);
     track("photo_captured");
     keepAsset("original", url);
@@ -205,7 +177,7 @@ export function Build({ onDone }: { onDone: () => void }) {
           )}
         </div>
         {!camOn && camError && (
-          <button className="btn-secondary" onClick={() => { stopCam(); setCamTry((t) => t + 1); }}>
+          <button className="btn-secondary" onClick={() => setCamTry((t) => t + 1)}>
             📷 다시 시도
           </button>
         )}

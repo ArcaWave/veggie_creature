@@ -151,44 +151,44 @@ body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cove
 .staff-item figcaption { font-weight: 800; font-size: 14px; margin-top: 6px; }
 .staff-item small { display: block; color: var(--muted); font-weight: 700; }
 
-/* ---- welcome (2-column landscape) ---- */
-.welcome { flex-direction: row; align-items: center; justify-content: center; gap: 56px; }
-.welcome-left { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px; flex: 0 1 420px; }
+/* ---- welcome: a mirror in the clay frame, auto-start (2-column landscape) ---- */
+body.stage-welcome .app { max-width: 1560px; }
+.welcome { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 40px; }
+.welcome-left { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; flex: 0 1 400px; min-width: 0; }
 .welcome-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.welcome-emoji { font-size: 92px; line-height: 1; animation: idle 3.6s ease-in-out infinite; }
-.welcome-logo { width: 100%; max-width: 400px; height: auto; animation: idle 4.2s ease-in-out infinite; }
-.welcome h1 { font-size: 48px; font-weight: 800; margin: 4px 0 0; color: var(--green-dark); }
+.welcome-logo { width: 100%; max-width: 360px; height: auto; animation: idle 4.2s ease-in-out infinite; }
 .welcome-strap { margin: 8px 0 0; font-size: 18px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
-.welcome-tag { font-size: 36px; font-weight: 800; color: var(--ink); max-width: 440px; line-height: 1.4; margin: 6px 0 0; word-break: keep-all; }
-.welcome-left .btn-primary { width: 100%; }
-/* scattered polaroid collage (right side) */
-.collage { position: relative; width: 560px; height: 640px; flex: none; }
-.snapshot { position: absolute; opacity: 0; animation: dropIn 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.25) forwards; }
+.welcome-tag { font-size: 32px; font-weight: 800; color: var(--ink); max-width: 440px; line-height: 1.4; margin: 6px 0 0; word-break: keep-all; }
+/* the four steps as a strip of mini polaroids */
+.mini-steps { display: flex; gap: 10px; align-items: flex-start; }
+.mini-step { display: flex; flex-direction: column; align-items: center; gap: 5px; opacity: 0; animation: dropIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.25) forwards; --rot: -4deg; }
+.mini-step.m2 { --rot: 3deg; } .mini-step.m3 { --rot: -2deg; } .mini-step.m4 { --rot: 4deg; }
 @keyframes dropIn {
   from { opacity: 0; transform: translateY(-70px) rotate(var(--rot)) scale(0.92); }
   to { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); }
 }
-.polaroid { background: #fff; padding: 10px 10px 30px; border-radius: 6px; box-shadow: 0 12px 26px rgba(60, 80, 40, 0.22); }
+.mini-polaroid { width: 88px; background: #fff; padding: 5px 5px 12px; border-radius: 4px; box-shadow: 0 6px 14px rgba(60, 80, 40, 0.2); }
 .photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 2px; }
-.photo-ph { display: flex; align-items: center; justify-content: center; font-size: 64px; background: linear-gradient(150deg, #faeed3, #d9ecf7); }
-/* per-snapshot placement (top-to-bottom appearance order) */
-/* earlier snapshots stack above later ones so their doodles never get clipped */
-.s1 { top: 0; left: 10px; width: 250px; --rot: -5deg; z-index: 4; }
-.s2 { top: 60px; left: 300px; width: 230px; --rot: 6deg; z-index: 3; }
-.s3 { top: 280px; left: 40px; width: 250px; --rot: -7deg; z-index: 2; }
-.s4 { top: 350px; left: 310px; width: 235px; --rot: 4deg; z-index: 1; }
-/* handwritten doodle caption + pig-tail squiggle, outside the frame.
-   The arrow art points up-right; .ul/.dr/.dl mirror it so every tip aims at its photo. */
-.doodle { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; font-family: inherit; font-weight: 800; font-size: 27px; color: #a8642a; white-space: nowrap; }
-.pigtail { width: 52px; height: 34px; flex: none; }
-.pigtail.ul { transform: scaleX(-1); }
-.pigtail.dr { transform: scaleY(-1); }
-.pigtail.dl { transform: scale(-1, -1); }
-.s1 .doodle { top: -46px; left: 26px; transform: rotate(-3deg); }
-.s2 .doodle { bottom: -46px; left: 14px; transform: rotate(-4deg); }
-.s3 .doodle { bottom: -46px; left: 24px; transform: rotate(3deg); }
-.s4 .doodle { bottom: -46px; right: 14px; transform: rotate(-5deg); }
-.collage-tagline { position: absolute; bottom: -18px; right: 0; margin: 0; font-family: inherit; font-weight: 800; font-size: 24px; color: var(--ink); opacity: 0; animation: dropIn 0.7s ease 2.4s forwards; --rot: -2deg; }
+.photo-ph { display: flex; align-items: center; justify-content: center; font-size: 30px; background: linear-gradient(150deg, #faeed3, #d9ecf7); }
+.mini-caption { font-weight: 800; font-size: 14px; color: #a8642a; white-space: nowrap; }
+.staff-start { opacity: 0.55; font-size: 16px; padding: 8px 18px; }
+/* the mirror */
+.mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: 1060px; min-width: min(100%, 520px); }
+.mirror-stage { position: relative; width: 100%; aspect-ratio: 3 / 2; }
+/* the frame art's window, measured from the painting (its inner edges) */
+.mirror-window { position: absolute; left: 7.81%; top: 17.09%; right: 6.45%; bottom: 13.67%; border-radius: 5.3% / 9.9%; overflow: hidden; background: #1d2a18; }
+.mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mirror-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff4dc; font-weight: 800; background: #2c3627; }
+.mirror-ph span { font-size: 56px; }
+.mirror-ph p { margin: 0; }
+.mirror-flash { position: absolute; inset: 0; background: #fff; animation: snapFlash 0.55s ease-out forwards; }
+@keyframes snapFlash { from { opacity: 0.95; } to { opacity: 0; } }
+.mirror-frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; user-select: none; z-index: 2; }
+.mirror-pill { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); z-index: 3; background: rgba(255, 255, 255, 0.94); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 2.1vw, 30px); padding: 10px 26px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
+.mirror-pill.still, .mirror-pill.count { background: var(--green); color: #fff; }
+.mirror-note { margin: 0; font-size: 14px; font-weight: 700; color: var(--muted); }
+.gate-hud { position: absolute; left: 10px; top: 10px; margin: 0; z-index: 3; background: rgba(0, 0, 0, 0.55); color: #9ff; font: 600 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border-radius: 10px; white-space: pre; }
 
 /* ---- top bar ---- */
 .topbar { display: flex; align-items: center; justify-content: center; gap: 12px; }
@@ -301,6 +301,7 @@ body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cove
 .modal-card h3 { margin: 0; font-size: 26px; }
 .modal-card .row { justify-content: flex-end; margin-top: 4px; }
 .camera { width: 100%; height: 100%; object-fit: cover; }
+video.camera { transform: scaleX(-1); }
 .camera.placeholder { background: #eef6e2; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-weight: 700; }
 .camera.placeholder span { font-size: 56px; }
 

@@ -5,6 +5,7 @@ import { Staff } from "./screens/Staff";
 import { TopBar } from "./components/TopBar";
 import { clearProfile, ensureProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
+import { keepAsset } from "./lib/keep";
 
 // Scan station: welcome -> scan -> the matched creature comes alive, walks off
 // the right edge of the screen (into the Digital World / the display PC), and
@@ -13,6 +14,7 @@ type Stage = "welcome" | "build";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("welcome");
+  const [photo, setPhoto] = useState(""); // the welcome mirror's own snapshot, when it took one
   const [staffOpen, setStaffOpen] = useState(false);
 
   useEffect(() => {
@@ -29,7 +31,24 @@ export default function App() {
     track("session_reset", { reason });
     clearProfile(); // next family starts with a fresh profile
     setStaffOpen(false);
+    setPhoto("");
     setStage("welcome");
+  }
+
+  // the mirror saw a child showing their creation (photo) — or staff pressed
+  // start without a usable camera (no photo: the photo step takes over)
+  function begin(snap: string) {
+    ensureProfile(); // silent session profile keys rate limits & saves
+    // kiosk nicety: a real tap doubles as the fullscreen gesture (an auto
+    // start has no gesture — the ⛶ button covers that once per day)
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    track("build_start", { auto: !!snap });
+    if (snap) {
+      track("photo_captured", { auto: true });
+      keepAsset("original", snap);
+    }
+    setPhoto(snap);
+    setStage("build");
   }
 
   return (
@@ -37,19 +56,9 @@ export default function App() {
       <TopBar onStaff={() => setStaffOpen(true)} />
       {staffOpen && <Staff onClose={() => setStaffOpen(false)} onReset={() => reset("staff")} />}
 
-      {stage === "welcome" && (
-        <Welcome
-          onStart={() => {
-            ensureProfile(); // silent session profile keys rate limits & saves
-            // kiosk nicety: the start tap doubles as the fullscreen gesture
-            document.documentElement.requestFullscreen?.().catch(() => {});
-            track("build_start");
-            setStage("build");
-          }}
-        />
-      )}
+      {stage === "welcome" && <Welcome onCaptured={begin} onStart={() => begin("")} />}
 
-      {stage === "build" && <Build onDone={() => reset("done")} />}
+      {stage === "build" && <Build initialPhoto={photo} onDone={() => reset("done")} />}
     </div>
   );
 }
