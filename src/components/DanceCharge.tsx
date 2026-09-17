@@ -44,8 +44,8 @@ export function isHeart(lm: LM): boolean {
 // each move comes with a photo of a child doing it (public/dance/), shown
 // standing on the frame's edge — a real kid to copy beats a diagram
 export const MOVES = [
-  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", guide: "/dance/guide_airplane.png", check: isAirplane },
-  { key: "heart", title: "머리 위로 하트!", prompt: "두 손을 머리 위에서 모아 하트!", voice: "우와, 잘했어! 이번엔 두 손을 머리 위에서 모아서 하트를 만들어 봐!", guide: "/dance/guide_heart.png", check: isHeart },
+  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑤욱! ✈️", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", guide: "/dance/guide_airplane.png", check: isAirplane },
+  { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑이 가득! 생명이 깨어나요 💖", voice: "이번엔 두 손을 머리 위에서 모아 하트를 만들어 봐! 사랑을 주면 생명이 깨어나!", guide: "/dance/guide_heart.png", check: isHeart },
 ] as const;
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes
@@ -242,7 +242,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
       {cheer && (
         <div className="move-cheer">
           <span className="move-cheer-star">⭐</span>
-          <span>참 잘했어요!</span>
+          <span>{move.cheer}</span>
         </div>
       )}
     </div>

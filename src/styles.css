@@ -42,7 +42,7 @@ body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cove
 
 /* ---- top bar (brand + sound) ---- */
 .brand { position: fixed; top: 10px; left: 18px; z-index: 50; display: flex; align-items: center; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
-.brand-logo { height: 84px; width: auto; display: block; filter: drop-shadow(0 3px 8px rgba(170, 115, 40, 0.18)); }
+.brand-logo { height: 74px; width: auto; display: block; filter: drop-shadow(0 3px 8px rgba(170, 115, 40, 0.18)); }
 .sound-toggle { position: fixed; top: 14px; right: 18px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; }
 
 /* ---- profile gate ---- */
@@ -160,18 +160,18 @@ body.stage-build .app { max-width: 1880px; }
 .welcome-logo { width: 100%; max-width: 320px; height: auto; animation: idle 4.2s ease-in-out infinite; }
 .welcome-strap { margin: 8px 0 0; font-size: 18px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
 .welcome-tag { font-size: 32px; font-weight: 800; color: var(--ink); max-width: 440px; line-height: 1.4; margin: 6px 0 0; word-break: keep-all; }
-/* the four steps as a strip of mini polaroids */
-.mini-steps { display: flex; gap: 10px; align-items: flex-start; }
+/* the four steps as a 2x2 of mini polaroids */
+.mini-steps { display: grid; grid-template-columns: repeat(2, auto); justify-content: center; gap: 14px 18px; }
 .mini-step { display: flex; flex-direction: column; align-items: center; gap: 5px; opacity: 0; animation: dropIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.25) forwards; --rot: -4deg; }
 .mini-step.m2 { --rot: 3deg; } .mini-step.m3 { --rot: -2deg; } .mini-step.m4 { --rot: 4deg; }
 @keyframes dropIn {
   from { opacity: 0; transform: translateY(-70px) rotate(var(--rot)) scale(0.92); }
   to { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); }
 }
-.mini-polaroid { width: 88px; background: #fff; padding: 5px 5px 12px; border-radius: 4px; box-shadow: 0 6px 14px rgba(60, 80, 40, 0.2); }
+.mini-polaroid { width: 118px; background: #fff; padding: 6px 6px 14px; border-radius: 4px; box-shadow: 0 6px 14px rgba(60, 80, 40, 0.2); }
 .photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border-radius: 2px; }
 .photo-ph { display: flex; align-items: center; justify-content: center; font-size: 30px; background: linear-gradient(150deg, #faeed3, #d9ecf7); }
-.mini-caption { font-weight: 800; font-size: 14px; color: #a8642a; white-space: nowrap; }
+.mini-caption { font-weight: 800; font-size: 15px; color: #a8642a; white-space: nowrap; text-shadow: 0 1px 8px rgba(255, 255, 255, 0.95), 0 0 2px rgba(255, 255, 255, 0.9); }
 .staff-start { opacity: 0.55; font-size: 16px; padding: 8px 18px; }
 /* the mirror */
 .mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1520px, calc((100vh - 100px) * 1.6164)); min-width: min(100%, 520px); }
@@ -621,6 +621,17 @@ video.camera { transform: scaleX(-1); }
 .birth-egg img { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.3); }
 @keyframes eggHover { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -54%) scale(1.04); } }
 .birth-dust { position: absolute; inset: 0; pointer-events: none; }
+/* after the walk-off: "look at the wall next to you" for a few seconds */
+.sendoff { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; animation: pop 0.5s ease; }
+.sendoff-title { margin: 0; font-size: clamp(28px, 4.6vmin, 52px); font-weight: 800; color: var(--green-dark); text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95); }
+.sendoff-cue { margin: 0; display: flex; align-items: center; gap: 0.35em; font-size: clamp(36px, 7vmin, 84px); font-weight: 800; color: var(--ink); text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95); background: rgba(255, 255, 255, 0.72); padding: 0.35em 0.8em; border-radius: 999px; box-shadow: var(--shadow); }
+.sendoff-arrow { display: inline-block; animation: nudgeRight 0.9s ease-in-out infinite; }
+.sendoff-tv { display: inline-block; animation: tvWiggle 1.2s ease-in-out infinite; }
+@keyframes nudgeRight { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(0.35em); } }
+@keyframes tvWiggle { 0%, 100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.1); } }
+.sendoff-timer { width: min(60vw, 520px); height: 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); overflow: hidden; box-shadow: inset 0 1px 3px rgba(120, 90, 30, 0.2); }
+.sendoff-timer-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ffd54d, #f2a537); transform-origin: left; animation: drain linear forwards; }
+@keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 .birth-dust .dust-fleck { font-size: 30px; }
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */

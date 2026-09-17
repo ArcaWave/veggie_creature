@@ -225,7 +225,8 @@ function MagicStep({
   onRetryCloser: () => void;
   onDone: () => void;
 }) {
-  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk";
+  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk" | "sendoff";
+  const SENDOFF_MS = 5000; // "look at the wall next to you" before the station resets
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const [parts, setParts] = useState<Parts | null>(null);
@@ -315,11 +316,31 @@ function MagicStep({
           body: JSON.stringify({ variant: v, parts: partsRef.current }),
         }).catch(() => {});
         later(() => {
-          track("build_done", { variant: v });
-          onDone();
+          // it has arrived on the wall: point the child at it for a moment
+          setPhase("sendoff");
+          speak("옆 화면에서 채소 친구를 확인해 봐!");
+          later(() => {
+            track("build_done", { variant: v });
+            onDone();
+          }, SENDOFF_MS);
         }, 5200); // walk duration + a breath
       }, 3200);
     }, 1600);
+  }
+
+  if (phase === "sendoff") {
+    return (
+      <div className="birth-stage is-sendoff">
+        <div className="birth-glow" />
+        <div className="sendoff">
+          <p className="sendoff-title">🌏 디지털 세계에 도착했어요!</p>
+          <p className="sendoff-cue">
+            <span className="sendoff-arrow">👉</span> 옆 화면에서 확인해 봐요! <span className="sendoff-tv">📺</span>
+          </p>
+          <div className="sendoff-timer"><div className="sendoff-timer-fill" style={{ animationDuration: `${SENDOFF_MS}ms` }} /></div>
+        </div>
+      </div>
+    );
   }
 
   if (phase === "noshow") {
