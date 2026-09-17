@@ -84,7 +84,15 @@ function devApiPlugin(): Plugin {
       // parts} records travel — the character art is pre-made static files.
       // Without a Blob token in dev, an in-memory list keeps the one-machine
       // demo working.
-      const devCreatures: CreatureEntry[] = [];
+      const devFile = path.join(process.cwd(), ".data", "creatures.json");
+      let devCreatures: CreatureEntry[] = [];
+      try { devCreatures = JSON.parse(fs.readFileSync(devFile, "utf8")); } catch { /* first run */ }
+      const saveDev = () => {
+        try {
+          fs.mkdirSync(path.dirname(devFile), { recursive: true });
+          fs.writeFileSync(devFile, JSON.stringify(devCreatures.slice(0, 60)));
+        } catch { /* best effort */ }
+      };
       server.middlewares.use("/api/creatures", async (req, res) => {
         if (req.method === "POST") {
           const key = limitKey(req.headers["x-mk-profile"], req.headers["x-forwarded-for"], req.socket?.remoteAddress);
@@ -94,7 +102,7 @@ function devApiPlugin(): Plugin {
             let entry = await uploadCreature(b.variant, b.parts);
             if (!entry) {
               entry = makeEntry(b.variant, b.parts);
-              if (entry) devCreatures.unshift(entry);
+              if (entry) { devCreatures.unshift(entry); saveDev(); }
             }
             return send(res, 200, { uploaded: true, entry });
           } catch (e: any) {

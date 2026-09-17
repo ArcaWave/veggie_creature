@@ -702,11 +702,13 @@ if (CLOSEUP) {
   window.__vc = c; // asset review: poke the creature from the console
   let turn = 0;
   if (!RIG) setInterval(() => { c.mode = pick(["wave", "jump", "dance", "idle"]); c.modeT = 0; }, 4200);
-} else if (DEMO && location.search.includes("seed")) {
-  // local rehearsal without a server: a small crowd of mixed builds
-  const bodies = Object.keys(BODIES);
-  for (let i = 0; i < 6; i++) addCreature({ id: `${Date.now() - i * 777}-${bodies[i % bodies.length]}`, variant: bodies[i % bodies.length], at: Date.now() - i * 777 }, i < 2);
 } else {
+  if (DEMO && location.search.includes("seed")) {
+    // rehearsal: a small crowd of mixed builds to look at…
+    const bodies = Object.keys(BODIES);
+    for (let i = 0; i < 6; i++) addCreature({ id: `${Date.now() - i * 777}-${bodies[i % bodies.length]}`, variant: bodies[i % bodies.length], at: Date.now() - i * 777 }, i < 2);
+  }
+  // …and real arrivals from the scan station always come through, demo or not
   poll(true);
   setInterval(() => poll(false), POLL_MS);
 }
