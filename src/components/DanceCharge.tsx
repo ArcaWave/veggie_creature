@@ -41,9 +41,11 @@ export function isHeart(lm: LM): boolean {
   return up && close && centred;
 }
 
+// each move comes with a photo of a child doing it (public/dance/), shown
+// standing on the frame's edge — a real kid to copy beats a diagram
 export const MOVES = [
-  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", check: isAirplane },
-  { key: "heart", title: "머리 위로 하트!", prompt: "두 손을 머리 위에서 모아 하트!", voice: "우와, 잘했어! 이번엔 두 손을 머리 위에서 모아서 하트를 만들어 봐!", check: isHeart },
+  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", guide: "/dance/guide_airplane.png", check: isAirplane },
+  { key: "heart", title: "머리 위로 하트!", prompt: "두 손을 머리 위에서 모아 하트!", voice: "우와, 잘했어! 이번엔 두 손을 머리 위에서 모아서 하트를 만들어 봐!", guide: "/dance/guide_heart.png", check: isHeart },
 ] as const;
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes
@@ -215,11 +217,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
           <span className="move-badge">{stage + 1} / {MOVES.length}</span>
           <h2 className="move-title">{move.title}</h2>
         </div>
-        <div className="move-body">
-          <div className={`move-picto${hit ? " hit" : ""}`}>
-            <Picto move={move.key} />
-            <span className="move-picto-label">{hit ? "좋아요! 그대로~ ✨" : "이렇게!"}</span>
-          </div>
+        <div className="dance-cam-wrap">
           <CamFrame className="dance-cam-box">
             {stream ? (
               <>
@@ -231,6 +229,10 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
             )}
             <span className="dance-prompt">{move.prompt}</span>
           </CamFrame>
+          <div className={`move-guide${hit ? " hit" : ""}`}>
+            <span className="move-guide-label">{hit ? "좋아요! 그대로~ ✨" : "이렇게 해 봐!"}</span>
+            <img src={move.guide} alt="" draggable={false} />
+          </div>
         </div>
         <div className="magic-gauge" aria-hidden="true">
           <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
@@ -245,32 +247,5 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
         </div>
       )}
     </div>
-  );
-}
-
-// stick-figure pictograms of the two moves (mirrors what the child should do)
-function Picto({ move }: { move: (typeof MOVES)[number]["key"] }) {
-  const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  return (
-    <svg viewBox="0 0 140 150" className="picto" aria-hidden="true">
-      {move === "airplane" ? (
-        <>
-          <circle cx="70" cy="34" r="15" {...stroke} />
-          <path d="M70 49 V102 M70 102 L52 138 M70 102 L88 138" {...stroke} />
-          {/* arms straight out, wing tips */}
-          <path d="M70 60 H16 M70 60 H124" {...stroke} />
-          <path d="M16 60 l-6 -8 M16 60 l-6 8 M124 60 l6 -8 M124 60 l6 8" {...stroke} strokeWidth={5} />
-          <path className="picto-whoosh" d="M6 84 h16 M4 96 h22 M118 84 h16 M114 96 h22" {...stroke} strokeWidth={4} />
-        </>
-      ) : (
-        <>
-          <circle cx="70" cy="58" r="15" {...stroke} />
-          <path d="M70 73 V118 M70 118 L54 146 M70 118 L86 146" {...stroke} />
-          {/* arms up, hands meeting above the head */}
-          <path d="M70 84 L38 60 L52 30 M70 84 L102 60 L88 30" {...stroke} />
-          <path className="picto-heart" d="M70 40 C 66 30, 52 30, 52 40 C 52 48, 62 54, 70 62 C 78 54, 88 48, 88 40 C 88 30, 74 30, 70 40 Z" fill="#ff6b8a" stroke="#c8375a" strokeWidth={4} />
-        </>
-      )}
-    </svg>
   );
 }
