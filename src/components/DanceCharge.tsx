@@ -5,6 +5,7 @@ import { speak } from "../lib/guide";
 import { magicDustBurst } from "../lib/dust";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_INDEX, R_INDEX, L_SHOULDER, R_SHOULDER } from "../lib/pose";
 import { StirDetector } from "../lib/stir";
+import { coverFit } from "../lib/camera";
 import { CamFrame } from "./CamFrame";
 
 // The dance mini-game: three "magic moves", ONE PER SCENE — the scene changes
@@ -307,8 +308,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
       const ctx = c.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, cw, ch);
-      const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
-      const ox = (cw - v.videoWidth * s) / 2, oy = (ch - v.videoHeight * s) / 2;
+      const { s, ox, oy } = coverFit(v, cw, ch);
       const toX = (nx: number) => cw - (ox + nx * v.videoWidth * s);
       const toY = (ny: number) => oy + ny * v.videoHeight * s;
       const { boxes, main, hand, handAt, turningAt, burstAt } = view.current;

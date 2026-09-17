@@ -176,7 +176,8 @@ body.stage-build .app { max-width: 1880px; }
 /* the mirror */
 .mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1520px, calc((100vh - 100px) * 1.6164)); min-width: min(100%, 520px); }
 .mirror-stage { position: relative; width: 100%; }
-.mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+/* (object-position = CAM_FOCUS in lib/camera.ts: a 4:3 stream is trimmed top/bottom by the wide window — keep the head room, lose floor) */
+.mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .mirror-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff4dc; font-weight: 800; background: #2c3627; }
 .mirror-ph span { font-size: 56px; }
@@ -555,7 +556,7 @@ body.stage-dance .brand { display: none; }
 .move-guide.hit .move-guide-label { background: var(--green); color: #fff; }
 @keyframes guideBob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-1.5%) rotate(1.5deg); } }
 @keyframes guideCheer { from { transform: scale(1.02) rotate(-3deg); } to { transform: scale(1.08) rotate(3deg); } }
-.dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.dance-cam { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
 /* the beat between scenes */

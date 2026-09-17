@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCamera, releaseCamera, cameraErrorText, snapshot } from "../lib/camera";
+import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit } from "../lib/camera";
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
 import { pop, sparkle } from "../lib/sfx";
@@ -200,8 +200,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     const ctx = c.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, cw, ch);
-    const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
-    const ox = (cw - v.videoWidth * s) / 2, oy = (ch - v.videoHeight * s) / 2;
+    const { s, ox, oy } = coverFit(v, cw, ch);
     const X = (x: number) => cw - (ox + x * v.videoWidth * s); // mirrored
     const Y = (y: number) => oy + y * v.videoHeight * s;
 
@@ -319,7 +318,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
             {count !== null && count > 0 && <span className="count-badge">{count}</span>}
             {DEBUG && report && (
               <pre className="gate-hud">
-                {`어깨 ${report.width.toFixed(2)} / ${params.near} ${report.near ? "✓" : "✗"}\n가운데 ${report.centered ? "✓" : "✗"}  손 ${report.holding ? "✓" : "✗"}  정지 ${report.still ? "✓" : "✗"}\n유지 ${(report.dwell / 1000).toFixed(1)}s / ${params.hold / 1000}s  ${armedRef.current ? "준비됨" : "쿨다운"}`}
+                {`어깨 ${report.width.toFixed(2)} / ${params.near} ${report.near ? "✓" : "✗"}\n가운데 ${report.centered ? "✓" : "✗"}  손 ${report.holding ? "✓" : "✗"}  정지 ${report.still ? "✓" : "✗"}\n유지 ${(report.dwell / 1000).toFixed(1)}s / ${params.hold / 1000}s  ${armedRef.current ? "준비됨" : "쿨다운"}\n카메라 ${cameraInfo.width}×${cameraInfo.height} ${cameraInfo.mode}${cameraInfo.zoom !== null ? ` zoom ${cameraInfo.zoom}` : ""}`}
               </pre>
             )}
           </CamFrame>

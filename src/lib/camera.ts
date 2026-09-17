@@ -18,7 +18,7 @@ function fakeStream(src: string): Promise<MediaStream> {
     img.onload = () => {
       const c = document.createElement("canvas");
       c.width = 1280;
-      c.height = 720;
+      c.height = QUERY.has("cam43") ? 960 : 720; // &cam43: rehearse the wide 4:3 stream
       const ctx = c.getContext("2d")!;
       const draw = () => { // cover-fit, redrawn so the stream keeps producing frames
         const k = Math.max(c.width / img.width, c.height / img.height) * (ORBIT ? 1.25 : 1);
@@ -32,6 +32,40 @@ function fakeStream(src: string): Promise<MediaStream> {
     img.onerror = () => reject(new DOMException("fake camera image missing", "NotFoundError"));
     img.src = src;
   });
+}
+
+// The webcam's WIDEST view. On most webcams the 16:9 stream is the 4:3 sensor
+// with its top and bottom cut off, and some cameras start zoomed in. So once
+// the stream is up: if the camera natively offers 4:3, switch to it (room above
+// the child's head, and the frame no longer trims the sides); if it has a zoom
+// control, open it all the way. Only when the camera SAYS it can — a 16:9-only
+// camera forced to 4:3 would be cropped at the sides by the browser, the
+// opposite of what we want. ?cam=169 keeps the plain 16:9 stream.
+export const cameraInfo = { width: 0, height: 0, zoom: null as number | null, mode: "" };
+async function widen(stream: MediaStream) {
+  const track = stream.getVideoTracks()[0];
+  if (!track?.getCapabilities) return;
+  const caps = track.getCapabilities() as MediaTrackCapabilities & { zoom?: { min: number; max: number } };
+  const note: string[] = [];
+  try {
+    if (QUERY.get("cam") !== "169" && (caps.aspectRatio?.min ?? 9) <= 1.36) {
+      await track.applyConstraints({ width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } });
+      const got = track.getSettings();
+      if ((got.width ?? 0) < 960) { // only a tiny 4:3 mode: back to 16:9
+        await track.applyConstraints({ width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } });
+        note.push("4:3 too small");
+      } else note.push("4:3");
+    }
+    if (caps.zoom && typeof caps.zoom.min === "number") {
+      await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min } as MediaTrackConstraintSet] });
+      note.push("zoom min");
+    }
+  } catch (e) { note.push(`(${(e as Error)?.name || "constraint failed"})`); }
+  const s = track.getSettings() as MediaTrackSettings & { zoom?: number };
+  cameraInfo.width = s.width ?? 0;
+  cameraInfo.height = s.height ?? 0;
+  cameraInfo.zoom = s.zoom ?? null;
+  cameraInfo.mode = note.join(" ") || "16:9";
 }
 
 export function getCamera(): Promise<MediaStream> {
@@ -50,6 +84,7 @@ export function getCamera(): Promise<MediaStream> {
   pending = (FAKE
     ? fakeStream(FAKE)
     : md.getUserMedia({ video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+        .then(async (s) => { await widen(s); return s; })
   ).catch((err) => {
       pending = null;
       throw err;
@@ -75,6 +110,18 @@ export function cameraErrorText(err: unknown): string {
   return byName[name ?? ""] || "카메라가 잠깐 말썽이에요 — 다시 시도!";
 }
 
+// Where the preview's cover-fit crop sits (CSS object-position of the camera
+// <video>s): centred sideways, biased UP — with a 4:3 stream in the wide clay
+// window it is the floor that gets trimmed, not the head room. Everything that
+// maps video coordinates onto the screen (overlays, the snapshot) uses this.
+export const CAM_FOCUS = { x: 0.5, y: 0.3 };
+
+// the cover-fit placement of the video inside its box: scale and offsets
+export function coverFit(v: HTMLVideoElement, cw: number, ch: number) {
+  const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
+  return { s, ox: (cw - v.videoWidth * s) * CAM_FOCUS.x, oy: (ch - v.videoHeight * s) * CAM_FOCUS.y };
+}
+
 // WYSIWYG snapshot: exactly the region the (object-fit: cover) preview shows,
 // scaled to at most `max` px, as a JPEG data URL for the matcher
 export function snapshot(v: HTMLVideoElement, max = 960): string {
@@ -87,6 +134,6 @@ export function snapshot(v: HTMLVideoElement, max = 960): string {
   canvas.width = Math.round(cw * scale);
   canvas.height = Math.round(ch * scale);
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(v, (v.videoWidth - cw) / 2, (v.videoHeight - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(v, (v.videoWidth - cw) * CAM_FOCUS.x, (v.videoHeight - ch) * CAM_FOCUS.y, cw, ch, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", 0.8);
 }
