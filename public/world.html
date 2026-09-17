@@ -95,6 +95,7 @@ const SCENES = {
       floaters: [{ sprites: ["/fx/field_leaf1.png", "/fx/field_leaf2.png", "/fx/field_leaf3.png", "/fx/field_leaf4.png"], spawn: [[10, 170, 230, 400, 5], [1500, 220, 1672, 470, 3]], vy: [12, 20], fade: [480, 560], sway: 16, spin: 0.55, size: [0.8, 1.15] }],
     } },
   night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8],
+    gravity: 0.38, // it's the moon: jumps go higher and hang longer, the walk becomes a slow lope
     fx: { // the night cloud drifts; the painted stars twinkle
       clouds: [{ tex: "/fx/night_cloud1.png", x: 108, y: 169, speed: 2.8 }],
       stars: "/fx/night_stars.json",
@@ -482,11 +483,13 @@ function assemble(parts) {
 function animate(c, dt) {
   c.t += dt; c.modeT += dt;
   const t = c.t, bp = c.bodyPivot;
+  // scene gravity: lower g = higher arcs (h ~ 1/g^0.6, capped) and longer air time (T ~ 1/sqrt(g))
+  const g = SCENES[currentScene]?.gravity ?? 1, gs = Math.sqrt(g), gh = Math.min(2, Math.pow(1 / g, 0.6));
   const rest = () => { bp.rotation.set(0, 0, 0); bp.scale.set(1, 1, 1); bp.position.y = 0; };
   switch (c.mode) {
     case "walk": {           // bouncy hop-walk, leaning into the direction
-      const s = Math.sin(t * 9);
-      bp.position.y = Math.abs(s) * 0.11;
+      const s = Math.sin(t * 9 * gs);
+      bp.position.y = Math.abs(s) * 0.11 * gh;
       bp.rotation.z = -c.dir * 0.07 + s * 0.05;
       bp.scale.set(1 - Math.abs(s) * 0.03, 1 + Math.abs(s) * 0.04, 1);
       break;
@@ -498,13 +501,14 @@ function animate(c, dt) {
       break;
     }
     case "jump": {
-      const p = Math.min(1, c.modeT / 0.75);
+      const T = 0.75 / gs;
+      const p = Math.min(1, c.modeT / T);
       const arc = Math.sin(p * Math.PI);
-      bp.position.y = arc * 1.1;
+      bp.position.y = arc * 1.1 * gh;
       const sq = p < 0.12 ? 1 - (0.12 - p) * 2 : 1 + arc * 0.08;
       bp.scale.set(1 / sq, sq, 1);
-      bp.rotation.z = 0;
-      if (c.modeT >= 0.75) { c.modeT = 0; c.jumps = (c.jumps || 0) + 1; if (c.jumps >= 3) { c.jumps = 0; c.mode = "idle"; } }
+      bp.rotation.z = g < 1 ? Math.sin(p * Math.PI) * 0.06 : 0; // a lazy lean at the top of a moon hop
+      if (c.modeT >= T) { c.modeT = 0; c.jumps = (c.jumps || 0) + 1; if (c.jumps >= 3) { c.jumps = 0; c.mode = "idle"; } }
       break;
     }
     case "dance": {          // side-to-side sway with a bounce
