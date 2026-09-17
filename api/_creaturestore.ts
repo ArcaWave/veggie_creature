@@ -36,7 +36,8 @@ const redisEnv = () => {
 };
 const supaEnv = () => {
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
-  return url && key ? { url: url.replace(/\/$/, ""), key } : null;
+  // accept the bare project URL or the "Data API" form the dashboard also shows (…/rest/v1/)
+  return url && key ? { url: url.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, ""), key: key.trim() } : null;
 };
 const hasBlob = () => !!process.env.BLOB_READ_WRITE_TOKEN;
 export const storeKind = (): "supabase" | "redis" | "blob" | "none" =>
