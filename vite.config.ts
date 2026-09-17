@@ -6,7 +6,7 @@ import path from "node:path";
 import { stylize, startAnimate, animateStatus, matchVariant } from "./api/_gemini";
 import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
-import { listCreatures, uploadCreature, makeEntry, type CreatureEntry } from "./api/_creaturestore";
+import { listCreatures, uploadCreature, makeEntry, relayStatus, type CreatureEntry } from "./api/_creaturestore";
 import { checkLimit, limitKey } from "./api/_ratelimit";
 
 const ANIMATOR = () => process.env.ANIMATOR_URL || "http://127.0.0.1:8765";
@@ -110,7 +110,10 @@ function devApiPlugin(): Plugin {
           }
         }
         const cloud = await listCreatures();
-        send(res, 200, { creatures: cloud.length ? cloud : devCreatures.slice(0, 60) });
+        const creatures = cloud.length ? cloud : devCreatures.slice(0, 60);
+        // same health report as production (?diag=1); here the in-memory/disk relay stands in without a token
+        const diag = /[?&]diag\b/.test(req.url || "") ? { ...relayStatus, listed: creatures.length, now: Date.now(), devRelay: !cloud.length } : undefined;
+        send(res, 200, { creatures, diag });
       });
       route("/api/speak", "speak", (b) => speak(b.text, b.seed));
       // setup helper: GET-style voice catalog (POST {} works too) to pick TYPECAST_VOICE_ID

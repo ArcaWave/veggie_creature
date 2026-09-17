@@ -1,15 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { checkLimit, limitKey } from "./_ratelimit.js";
-import { listCreatures, uploadCreature, type CreatureParts } from "./_creaturestore.js";
+import { listCreatures, uploadCreature, relayStatus, type CreatureParts } from "./_creaturestore.js";
 
 export const maxDuration = 30;
 
 // GET  -> newest living creatures [{id, variant, at, parts?}] (polled by world.html)
-// POST {variant, parts?} -> the scan station announces a new arrival
+//         ?diag=1 adds the relay's health (token present? last list/upload error)
+// POST {variant, parts?} -> the scan station announces a new arrival;
+//         {uploaded:false, reason} says WHY when the store refused it
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     res.setHeader("Cache-Control", "no-store");
-    return res.status(200).json({ creatures: await listCreatures() });
+    const creatures = await listCreatures();
+    const diag = "diag" in (req.query ?? {}) ? { ...relayStatus, listed: creatures.length, now: Date.now() } : undefined;
+    return res.status(200).json({ creatures, diag });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "GET or POST" });
 
@@ -18,5 +22,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { variant, parts } = (req.body ?? {}) as { variant?: string; parts?: Partial<CreatureParts> };
   const entry = await uploadCreature(variant, parts);
-  res.status(200).json({ uploaded: !!entry, entry });
+  res.status(200).json({ uploaded: !!entry, entry, reason: entry ? undefined : relayStatus.uploadError });
 }

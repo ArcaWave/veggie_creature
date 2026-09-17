@@ -230,6 +230,7 @@ function MagicStep({
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const [parts, setParts] = useState<Parts | null>(null);
+  const [relayFail, setRelayFail] = useState<string | null>(null); // why the wall did not get it (shown small on the send-off)
   const frameRef = useRef<HTMLDivElement>(null);
   const aliveRef = useRef(true);
   const timersRef = useRef<number[]>([]);
@@ -314,7 +315,16 @@ function MagicStep({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ variant: v, parts: partsRef.current }),
-        }).catch(() => {});
+        })
+          .then(async (r) => {
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.uploaded) throw new Error(j.reason || j.error || `http_${r.status}`);
+          })
+          .catch((e) => {
+            const reason = String(e?.message || e);
+            track("relay_fail", { reason });
+            if (aliveRef.current) setRelayFail(reason);
+          });
         later(() => {
           // it has arrived on the wall: point the child at it for a moment
           setPhase("sendoff");
@@ -338,6 +348,7 @@ function MagicStep({
             <span className="sendoff-arrow">👉</span> 옆 화면에서 확인해 봐요! <span className="sendoff-tv">📺</span>
           </p>
           <div className="sendoff-timer"><div className="sendoff-timer-fill" style={{ animationDuration: `${SENDOFF_MS}ms` }} /></div>
+          {relayFail && <p className="sendoff-warn">⚠️ 옆 화면으로 전송하지 못했어요 ({relayFail})</p>}
         </div>
       </div>
     );

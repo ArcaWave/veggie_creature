@@ -30,10 +30,18 @@ export function makeEntry(variant: unknown, parts?: Partial<CreatureParts> | nul
   return entry;
 }
 
+// why the last upload / listing failed — surfaced by the API so a broken relay
+// (missing token, exhausted Blob quota, suspended store…) is never silent
+export const relayStatus: { hasToken: boolean; uploadError: string | null; listError: string | null } = {
+  hasToken: false, uploadError: null, listError: null,
+};
+const brief = (e: unknown) => String((e as Error)?.message ?? e).slice(0, 300);
+
 export async function uploadCreature(variant: unknown, parts?: Partial<CreatureParts> | null): Promise<CreatureEntry | null> {
-  if (!hasBlob()) return null;
+  relayStatus.hasToken = hasBlob();
+  if (!hasBlob()) { relayStatus.uploadError = "no_blob_token"; return null; }
   const entry = makeEntry(variant, parts);
-  if (!entry) return null;
+  if (!entry) { relayStatus.uploadError = "bad_variant"; return null; }
   try {
     await put(creatureBlobName(entry), JSON.stringify(entry), {
       access: "public",
@@ -41,15 +49,19 @@ export async function uploadCreature(variant: unknown, parts?: Partial<CreatureP
       addRandomSuffix: false,
       allowOverwrite: true,
     });
+    relayStatus.uploadError = null;
     return entry;
-  } catch {
+  } catch (e) {
+    relayStatus.uploadError = `put_failed: ${brief(e)}`;
+    console.error("[creatures] put failed:", e);
     return null;
   }
 }
 
 // newest first, capped — the wall only ever shows the latest arrivals anyway
 export async function listCreatures(): Promise<CreatureEntry[]> {
-  if (!hasBlob()) return [];
+  relayStatus.hasToken = hasBlob();
+  if (!hasBlob()) { relayStatus.listError = "no_blob_token"; return []; }
   try {
     const { blobs } = await list({ prefix: "creatures/", limit: 1000 });
     const out: CreatureEntry[] = [];
@@ -60,8 +72,11 @@ export async function listCreatures(): Promise<CreatureEntry[]> {
       if (m[3]) entry.parts = { body: m[2], hat: m[3], arms: m[4], legs: m[5] };
       out.push(entry);
     }
+    relayStatus.listError = null;
     return out.sort((a, b) => b.at - a.at).slice(0, 60);
-  } catch {
+  } catch (e) {
+    relayStatus.listError = `list_failed: ${brief(e)}`;
+    console.error("[creatures] list failed:", e);
     return [];
   }
 }
