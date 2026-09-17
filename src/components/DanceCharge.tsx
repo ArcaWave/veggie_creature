@@ -236,9 +236,8 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
         </div>
         <div className="magic-gauge" aria-hidden="true">
           <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
-          <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
+          <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}% <small>화면을 팡팡 눌러도 모여요!</small></span>
         </div>
-        <p className="dance-hint">화면을 팡팡 눌러도 마법가루가 모여요!</p>
       </div>
       {cheer && (
         <div className="move-cheer">

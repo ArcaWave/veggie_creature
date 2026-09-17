@@ -24,6 +24,14 @@ const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
 const MATCH_TIMEOUT_MS = 20000; // matcher deadline before the show goes on regardless
 
+// the floating life of the magic meadow (birth scene): leaves, stars,
+// sparkles and petals drifting up around the light — a deterministic scatter
+const PARTICLES = Array.from({ length: 24 }, (_, i) => {
+  const kinds = [["leaf", "🍃"], ["star", "⭐"], ["spark", "✨"], ["petal", "🌼"], ["star", "🌟"]] as const;
+  const [kind, glyph] = kinds[i % kinds.length];
+  return { kind, glyph, left: 6 + ((i * 37) % 88), top: 8 + ((i * 53) % 66), delay: (i % 8) * 0.55, dur: 4.5 + (i % 5) * 0.9, size: 18 + (i % 4) * 9 };
+});
+
 export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initialPhoto?: string }) {
   const [step, setStep] = useState<Step>(initialPhoto ? "magic" : "photo");
   const [photo, setPhoto] = useState(initialPhoto);
@@ -335,53 +343,68 @@ function MagicStep({
     );
   }
 
-  if (phase === "walk" && variant && parts) {
+  // dust -> ALIVE -> walk: one continuous scene on the magic meadow stage.
+  // The photo hovers in the light while the dust falls; a flash and a ring
+  // of light, and the figure bursts onto the grassy podium; then it strolls
+  // off to the right. (birth-origin marks the podium for the confetti burst.)
+  if ((phase === "dust" || phase === "alive" || phase === "walk") && parts) {
     return (
-      <div className="screen center-screen" style={{ alignItems: "center" }}>
-        <p className="lead">🌏 디지털 세계로 출발!</p>
-        <div className="walk-stage">
-          <div className="walker">
-            <Figure parts={parts} />
-          </div>
+      <div className={`birth-stage ${phase}`}>
+        <div className="birth-rays" />
+        <div className="birth-glow" />
+        <div className="birth-particles" aria-hidden="true">
+          {PARTICLES.map((p, i) => (
+            <span
+              key={i}
+              className={`birth-p ${p.kind}`}
+              style={{ left: `${p.left}%`, top: `${p.top}%`, fontSize: p.size, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` }}
+            >
+              {p.glyph}
+            </span>
+          ))}
         </div>
+        <div className="birth-origin" ref={frameRef} />
+        {phase === "dust" && (
+          <>
+            <div className="birth-egg"><img src={photo} alt="" /></div>
+            <div className="birth-dust" aria-hidden="true">
+              {Array.from({ length: 16 }).map((_, k) => (
+                <span key={k} className="dust-fleck" style={{ left: `${30 + k * 2.6}%`, animationDelay: `${(k % 8) * 0.16}s` }}>✨</span>
+              ))}
+            </div>
+          </>
+        )}
+        {phase === "alive" && (
+          <>
+            <div className="birth-flash" />
+            <div className="birth-ring" />
+            <div className="birth-figure">
+              <Figure parts={parts} className="wave" />
+            </div>
+          </>
+        )}
+        {phase === "walk" && (
+          <div className="walk-stage">
+            <div className="walker">
+              <Figure parts={parts} />
+            </div>
+          </div>
+        )}
+        <p className="birth-title" key={phase}>
+          {phase === "dust" ? "✨ 마법가루가 내려와요…" : phase === "alive" ? "🎉 살아났다!" : "🌏 디지털 세계로 출발!"}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="screen center-screen" style={{ alignItems: "center" }}>
-      <p className="lead">
-        {phase === "match" ? "✨ 마법을 읽는 중…" : phase === "dust" ? "✨ 마법가루를 뿌리는 중…" : "🎉 살아났다!"}
-      </p>
-
-      <div className={`wake-frame${phase === "alive" && variant ? " reveal-pop" : ""}`} ref={frameRef}>
-        {phase === "alive" && variant && parts ? (
-          // the whole figure — hat to feet — inside the wide reveal frame
-          <div className="wake-media wake-figure">
-            <Figure parts={parts} className="wave" />
-          </div>
-        ) : (
-          <img
-            src={photo}
-            className="wake-media"
-            alt=""
-            style={phase === "match" ? { filter: "saturate(1.4) blur(1.2px)" } : undefined}
-          />
-        )}
-        {phase === "match" && <SparkleLoading messages={["넌 누구니…?", "마법을 느끼는 중…"]} />}
-        {phase === "dust" && (
-          <div className="dust-shower">
-            {Array.from({ length: 14 }).map((_, k) => (
-              <span key={k} className="dust-fleck" style={{ left: `${5 + k * 6.5}%`, animationDelay: `${(k % 7) * 0.18}s` }}>✨</span>
-            ))}
-            <span className="sparkle-msg">마법가루가 내려와요…</span>
-          </div>
-        )}
+      <p className="lead">✨ 마법을 읽는 중…</p>
+      <div className="wake-frame" ref={frameRef}>
+        <img src={photo} className="wake-media" alt="" style={{ filter: "saturate(1.4) blur(1.2px)" }} />
+        <SparkleLoading messages={["넌 누구니…?", "마법을 느끼는 중…"]} />
       </div>
-
-      {phase !== "alive" && (
-        <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
-      )}
+      <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
     </div>
   );
 }

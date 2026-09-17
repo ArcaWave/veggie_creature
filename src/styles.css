@@ -152,12 +152,12 @@ body.stage-welcome { background: var(--bg1) url("/welcome-bg.jpg") center / cove
 .staff-item small { display: block; color: var(--muted); font-weight: 700; }
 
 /* ---- welcome: a mirror in the clay frame, auto-start (2-column landscape) ---- */
-body.stage-welcome .app { max-width: 1800px; }
-body.stage-build .app { max-width: 1840px; }
-.welcome { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 40px; }
-.welcome-left { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; flex: 0 1 400px; min-width: 0; }
+body.stage-welcome .app { max-width: 1900px; }
+body.stage-build .app { max-width: 1880px; }
+.welcome { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: center; gap: 32px; }
+.welcome-left { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; flex: 0 1 340px; min-width: 0; }
 .welcome-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.welcome-logo { width: 100%; max-width: 360px; height: auto; animation: idle 4.2s ease-in-out infinite; }
+.welcome-logo { width: 100%; max-width: 320px; height: auto; animation: idle 4.2s ease-in-out infinite; }
 .welcome-strap { margin: 8px 0 0; font-size: 18px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
 .welcome-tag { font-size: 32px; font-weight: 800; color: var(--ink); max-width: 440px; line-height: 1.4; margin: 6px 0 0; word-break: keep-all; }
 /* the four steps as a strip of mini polaroids */
@@ -174,7 +174,7 @@ body.stage-build .app { max-width: 1840px; }
 .mini-caption { font-weight: 800; font-size: 14px; color: #a8642a; white-space: nowrap; }
 .staff-start { opacity: 0.55; font-size: 16px; padding: 8px 18px; }
 /* the mirror */
-.mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1280px, calc((100vh - 120px) * 1.6164)); min-width: min(100%, 520px); }
+.mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1520px, calc((100vh - 100px) * 1.6164)); min-width: min(100%, 520px); }
 .mirror-stage { position: relative; width: 100%; }
 .mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -286,12 +286,12 @@ body.stage-build .app { max-width: 1840px; }
 .lead small { color: var(--muted); font-weight: 700; font-size: 19px; }
 
 /* ---- camera ---- */
-.camera-box { width: min(100%, calc((100vh - 220px) * 1.6164), 1500px); }
+.camera-box { width: min(100%, calc((100vh - 200px) * 1.6164), 1600px); }
 /* tablet landscape: the framed camera fills the stage */
 @media (orientation: landscape) {
   .app { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
-  .camera-box { width: min(100%, calc((100vh - 190px) * 1.6164), 1500px); }
+  .camera-box { width: min(100%, calc((100vh - 165px) * 1.6164), 1600px); }
 }
 /* invitation cover — camera stays OFF until the child taps this */
 .camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #faeed3, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
@@ -543,7 +543,7 @@ video.camera { transform: scaleX(-1); }
 .move-badge { background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(14px, 2.2vmin, 20px); padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow); }
 .move-title { margin: 0; font-size: clamp(26px, 5vmin, 54px); font-weight: 800; color: var(--ink); }
 /* the framed camera fills the stage; the guide child stands on its right edge */
-.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 215px) * 1.6164)); }
+.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 180px) * 1.6164)); }
 .dance-cam-box { width: 100%; }
 .move-guide { position: absolute; right: 2%; bottom: 5%; height: 62%; z-index: 3; transform: translateX(40%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; }
 .move-guide img { height: 100%; width: auto; display: block; filter: drop-shadow(0 14px 16px rgba(120, 80, 30, 0.28)); animation: guideBob 2.2s ease-in-out infinite; transform-origin: 50% 100%; transition: filter 0.25s ease; }
@@ -562,8 +562,8 @@ video.camera { transform: scaleX(-1); }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
 .magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
-.magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 26px); }
-.dance-hint { margin: 0; color: var(--ink-soft, #a3906f); font-size: clamp(13px, 2vmin, 20px); }
+.magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 26px); }
+.magic-gauge-label small { font-weight: 700; font-size: 0.72em; color: rgba(122, 84, 16, 0.7); }
 
 /* "couldn't see it — hold it closer" auto-retry card */
 .noshow-card { display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 34px 46px; font-size: clamp(18px, 3vmin, 26px); color: var(--ink); text-align: center; }
@@ -584,13 +584,44 @@ video.camera { transform: scaleX(-1); }
 /* ---------- the creature stomps off the right edge into the Digital World ---------- */
 .walk-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 40; }
 /* starts exactly where the reveal showed it — screen centre — then strolls right */
-.walker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(52vmin, 480px); height: min(70vmin, 640px); animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
+.walker { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); width: 50%; height: 60%; animation: walkAcross 4.6s cubic-bezier(0.45, 0, 0.9, 1) forwards; }
 .walker .figure-body { animation: waddleStep 0.48s ease-in-out infinite; }
 @keyframes walkAcross { to { left: 140%; } }
 @keyframes waddleStep { 0%, 100% { transform: translateY(0) rotate(-3.5deg); } 50% { transform: translateY(-2.4vmin) rotate(3.5deg); } }
-/* square variant clips in the wide reveal frame: show the whole creature */
-.wake-media.fit { object-fit: contain; }
-.wake-figure { display: flex; align-items: center; justify-content: center; }
+/* ---------- the birth scene: the magic meadow stage (dust -> alive -> walk) ---------- */
+.birth-stage { position: fixed; inset: 0; overflow: hidden; z-index: 30; background: #fbf3d8 url("/birth-stage.jpg") center / cover no-repeat; }
+.birth-title { position: absolute; left: 50%; top: 5%; transform: translateX(-50%); margin: 0; font-size: clamp(30px, 5.2vmin, 60px); font-weight: 800; color: var(--ink); text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95); white-space: nowrap; animation: pop 0.5s ease; }
+.birth-stage.alive .birth-title { color: var(--green-dark); animation: titleBounce 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+@keyframes titleBounce { from { opacity: 0; transform: translateX(-50%) scale(0.4); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+/* the light behind the podium: a breathing glow and slowly turning rays */
+.birth-glow { position: absolute; left: 50%; top: 45%; width: 58vmin; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(255, 252, 214, 0.95) 0%, rgba(232, 246, 178, 0.55) 40%, rgba(232, 246, 178, 0) 70%); mix-blend-mode: screen; animation: glowBreathe 2.6s ease-in-out infinite; pointer-events: none; }
+.birth-stage.alive .birth-glow { animation: glowFlare 1.2s ease-out both, glowBreathe 2.6s ease-in-out 1.2s infinite; }
+@keyframes glowBreathe { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.85; } 50% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; } }
+@keyframes glowFlare { 0% { transform: translate(-50%, -50%) scale(0.6); opacity: 1; } 40% { transform: translate(-50%, -50%) scale(1.6); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.85; } }
+.birth-rays { position: absolute; left: 50%; top: 45%; width: 130vmin; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 9deg, rgba(255, 255, 230, 0.5) 9deg 14deg, rgba(255, 255, 255, 0) 14deg 24deg); -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%); mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%); animation: raysTurn 48s linear infinite; mix-blend-mode: screen; pointer-events: none; }
+@keyframes raysTurn { to { transform: translate(-50%, -50%) rotate(360deg); } }
+/* drifting leaves, stars, sparkles and petals */
+.birth-particles { position: absolute; inset: 0; pointer-events: none; }
+.birth-p { position: absolute; opacity: 0; animation: birthFloat 6s ease-in-out infinite; filter: drop-shadow(0 4px 6px rgba(120, 100, 40, 0.18)); }
+.birth-p.star, .birth-p.spark { animation-name: birthTwinkle; }
+@keyframes birthFloat { 0% { opacity: 0; transform: translateY(24px) rotate(-8deg); } 20% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-110px) rotate(12deg); } }
+@keyframes birthTwinkle { 0%, 100% { opacity: 0; transform: scale(0.5) rotate(0deg); } 30% { opacity: 1; transform: scale(1.15) rotate(20deg); } 60% { opacity: 0.8; transform: scale(0.9) rotate(-10deg) translateY(-14px); } }
+/* the podium: the figure's feet land on the grass (~y 78% of the art) */
+.birth-origin { position: absolute; left: 50%; top: 62%; width: 1px; height: 1px; }
+.birth-figure { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); height: 60%; width: 50%; transform-origin: 50% 100%; animation: birthPop 1s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
+.birth-figure::before { content: ""; position: absolute; left: 50%; bottom: 2.5%; width: 46%; height: 6%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(90, 70, 30, 0.3), rgba(90, 70, 30, 0) 70%); }
+@keyframes birthPop { 0% { opacity: 0; transform: translateX(-50%) scale(0.2); filter: brightness(2.5) blur(6px); } 55% { opacity: 1; transform: translateX(-50%) scale(1.12); filter: brightness(1.3) blur(0); } 100% { opacity: 1; transform: translateX(-50%) scale(1); filter: none; } }
+/* the moment of life: a white flash and a ring of light rolling outward */
+.birth-flash { position: absolute; inset: 0; background: #fffbe6; animation: birthFlash 0.9s ease-out both; pointer-events: none; }
+@keyframes birthFlash { 0% { opacity: 0; } 12% { opacity: 0.95; } 100% { opacity: 0; } }
+.birth-ring { position: absolute; left: 50%; top: 62%; width: 30vmin; aspect-ratio: 1; border-radius: 50%; border: 6px solid rgba(255, 236, 150, 0.95); box-shadow: 0 0 40px rgba(255, 220, 120, 0.9), inset 0 0 30px rgba(255, 240, 180, 0.8); animation: birthRing 1.3s ease-out both; pointer-events: none; }
+@keyframes birthRing { 0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0; } }
+/* while the dust falls, the photo hovers in the light like an egg */
+.birth-egg { position: absolute; left: 50%; top: 45%; width: 34vmin; aspect-ratio: 1; border-radius: 50%; overflow: hidden; border: 8px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 60px rgba(255, 235, 150, 0.9); animation: eggHover 1.6s ease-in-out infinite; }
+.birth-egg img { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.3); }
+@keyframes eggHover { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -54%) scale(1.04); } }
+.birth-dust { position: absolute; inset: 0; pointer-events: none; }
+.birth-dust .dust-fleck { font-size: 30px; }
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }
