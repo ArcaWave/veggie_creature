@@ -98,6 +98,7 @@ const SCENES = {
     fx: { // the night cloud drifts; the painted stars twinkle
       clouds: [{ tex: "/fx/night_cloud1.png", x: 108, y: 169, speed: 2.8 }],
       stars: "/fx/night_stars.json",
+      meteors: { area: [250, 20, 1250, 160], every: [10, 25], len: [180, 260], thick: 9, dist: [220, 360], dur: [0.7, 1.0] },
     } },
   moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9],
     fx: { // sky lanterns rise from behind the ridge, the lake shimmers, wall lanterns flicker, maple leaves fall
@@ -217,9 +218,38 @@ const glowTex = (() => {
   g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
+// a shooting star: a warm-white head with a tail fading behind it (the head
+// sits at the right edge of the texture; the mesh's origin is the head)
+const meteorTex = (() => {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 32;
+  const g = c.getContext("2d");
+  const tail = g.createLinearGradient(0, 0, 256, 0);
+  tail.addColorStop(0, "rgba(255,246,210,0)"); tail.addColorStop(0.7, "rgba(255,246,210,0.55)"); tail.addColorStop(1, "rgba(255,252,235,1)");
+  g.fillStyle = tail; g.fillRect(0, 10, 256, 12);
+  const soft = g.createLinearGradient(0, 0, 0, 32); // feather the streak's edges
+  soft.addColorStop(0, "rgba(0,0,0,1)"); soft.addColorStop(0.3, "rgba(0,0,0,0)"); soft.addColorStop(0.7, "rgba(0,0,0,0)"); soft.addColorStop(1, "rgba(0,0,0,1)");
+  g.globalCompositeOperation = "destination-out"; g.fillStyle = soft; g.fillRect(0, 0, 256, 32);
+  g.globalCompositeOperation = "source-over";
+  const head = g.createRadialGradient(240, 16, 0, 240, 16, 16);
+  head.addColorStop(0, "rgba(255,255,245,1)"); head.addColorStop(0.4, "rgba(255,248,210,0.8)"); head.addColorStop(1, "rgba(255,246,210,0)");
+  g.fillStyle = head; g.fillRect(224, 0, 32, 32);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const meteorGeo = new THREE.PlaneGeometry(1, 1).translate(-0.5, 0, 0); // origin = the head
+ambient.meteors = []; ambient.meteorNext = Infinity;
+function launchMeteor(offset = 0) {
+  const m = SCENES[ambient.scene]?.fx?.meteors, free = ambient.meteors.find((o) => !o.active);
+  if (!m || !free) return;
+  const [x0, y0, x1, y1] = m.area, ang = rnd(0.42, 0.62) * (Math.random() < 0.5 ? 1 : -1); // ~25-35° down, either way
+  free.active = true; free.t0 = ambient.time + offset; free.dur = rnd(...m.dur);
+  free.x = rnd(x0, x1); free.y = rnd(y0, y1); free.len = rnd(...m.len);
+  const d = rnd(...m.dist);
+  free.dx = Math.cos(Math.abs(ang)) * d * Math.sign(ang); free.dy = Math.sin(Math.abs(ang)) * d;
+}
 function buildAmbient(name) {
-  for (const o of [...ambient.clouds, ...ambient.floaters, ...ambient.stars, ...ambient.glows]) ambientGroup.remove(o.mesh);
-  ambient.clouds = []; ambient.floaters = []; ambient.stars = []; ambient.glows = []; ambient.scene = name; ambient.opacity = 0;
+  for (const o of [...ambient.clouds, ...ambient.floaters, ...ambient.stars, ...ambient.glows, ...ambient.meteors]) ambientGroup.remove(o.mesh);
+  ambient.clouds = []; ambient.floaters = []; ambient.stars = []; ambient.glows = []; ambient.meteors = []; ambient.scene = name; ambient.opacity = 0;
+  ambient.meteorNext = Infinity;
   const build = ++ambient.build;
   const fx = SCENES[name]?.fx;
   if (!fx) return;
@@ -246,6 +276,15 @@ function buildAmbient(name) {
     mesh.position.z = 0.03 + zi++ * 0.001;
     ambientGroup.add(mesh);
     ambient.glows.push({ mesh, x: g.x, y: g.y, r: g.r, phase: rnd(0, 6.28) });
+  }
+  if (fx.meteors) {
+    for (let i = 0; i < 2; i++) {
+      const mesh = new THREE.Mesh(meteorGeo, new THREE.MeshBasicMaterial({ map: meteorTex, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      mesh.position.z = 0.04 + zi++ * 0.001; mesh.visible = false;
+      ambientGroup.add(mesh);
+      ambient.meteors.push({ mesh, active: false });
+    }
+    ambient.meteorNext = ambient.time + rnd(...fx.meteors.every);
   }
   if (fx.stars) fetch(fx.stars).then((r) => r.json()).then((list) => {
     if (build !== ambient.build) return; // the scene moved on meanwhile
@@ -314,6 +353,25 @@ function ambientTick(dt) {
     const t = ambient.time * st.w + st.phase;
     place(st.mesh, st.x, st.y, null, 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(t)));
     st.mesh.scale.multiplyScalar(1 + 0.12 * Math.sin(t * 0.7 + 1.3));
+  }
+  if (fx.meteors && ambient.time >= ambient.meteorNext) {
+    launchMeteor(0);
+    if (Math.random() < 0.3) launchMeteor(rnd(0.3, 0.7)); // now and then a pair
+    ambient.meteorNext = ambient.time + rnd(...fx.meteors.every);
+  }
+  for (const mt of ambient.meteors) {
+    if (!mt.active) { mt.mesh.visible = false; continue; }
+    const p = (ambient.time - mt.t0) / mt.dur;
+    if (p < 0) { mt.mesh.visible = false; continue; }
+    if (p >= 1) { mt.active = false; mt.mesh.visible = false; continue; }
+    const hx = mt.x + mt.dx * p, hy = mt.y + mt.dy * p;
+    const env = Math.pow(Math.sin(p * Math.PI), 0.6);
+    mt.mesh.visible = true;
+    mt.mesh.position.x = (hx / PW - 0.5) * f.w;
+    mt.mesh.position.y = (0.5 - hy / PH) * f.h + f.lift;
+    mt.mesh.rotation.z = Math.atan2(-mt.dy, mt.dx);
+    mt.mesh.scale.set(mt.len * Math.min(1, p * 3) / PW * f.w, fx.meteors.thick / PH * f.h, 1);
+    mt.mesh.material.opacity = env * ambient.opacity;
   }
   for (const g of ambient.glows) {
     const t = ambient.time;
@@ -689,7 +747,7 @@ function frame() {
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
 setInterval(() => applyScene(sceneNow()), 10000);
-if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES }; // rehearse scene changes from the console
+if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor }; // rehearse scene changes / a shooting star from the console
 frame();
 
 addEventListener("resize", () => {
