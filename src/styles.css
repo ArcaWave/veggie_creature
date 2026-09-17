@@ -288,6 +288,8 @@ body.stage-welcome .app { max-width: 1560px; }
   .app { max-width: 1240px; }
   .screen { padding: 14px 28px; gap: 14px; }
   .camera-box { width: 100%; max-width: none; height: calc(100vh - 225px); min-height: 240px; aspect-ratio: auto; }
+  /* dance: the camera fills what's left beside the pictogram */
+  .dance-cam-box { aspect-ratio: auto; height: min(calc(100vh - 330px), 620px); width: min(100%, calc((100vh - 330px) * 1.6)); }
 }
 /* invitation cover — camera stays OFF until the child taps this */
 .camera-cover { position: relative; width: 100%; height: 100%; border: none; cursor: pointer; font-family: inherit; background: linear-gradient(160deg, #faeed3, #d9ecf7); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; overflow: hidden; }
@@ -532,17 +534,34 @@ video.camera { transform: scaleX(-1); }
 .guide-label { position: absolute; left: 50%; bottom: -2px; transform: translate(-50%, 50%); background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(16px, 2.6vmin, 24px); padding: 8px 18px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
-/* dance mini-game: your own moves charge the magic gauge */
-.dance-stage { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(94vw, 640px); user-select: none; touch-action: manipulation; }
-.dance-cam-box { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
+/* dance mini-game: one magic move per scene charges the magic gauge */
+.dance-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(96vw, 1180px); user-select: none; touch-action: manipulation; }
+.move-scene { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; animation: sceneIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+@keyframes sceneIn { from { opacity: 0; transform: translateX(60px) scale(0.96); } to { opacity: 1; transform: none; } }
+.move-head { display: flex; align-items: center; gap: 14px; }
+.move-badge { background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(14px, 2.2vmin, 20px); padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow); }
+.move-title { margin: 0; font-size: clamp(26px, 4.6vmin, 44px); font-weight: 800; color: var(--ink); }
+.move-body { display: flex; align-items: center; justify-content: center; gap: 22px; width: 100%; }
+.move-picto { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 auto; width: clamp(150px, 22vmin, 240px); color: var(--green-dark); transition: color 0.2s ease, transform 0.2s ease; }
+.move-picto .picto { width: 100%; height: auto; animation: pictoBob 1.6s ease-in-out infinite; }
+.move-picto.hit { color: var(--green); transform: scale(1.06); }
+.move-picto.hit .picto { animation: pictoCheer 0.5s ease-in-out infinite alternate; }
+.move-picto-label { background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(14px, 2.4vmin, 20px); padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
+.move-picto.hit .move-picto-label { background: var(--green); color: #fff; }
+@keyframes pictoBob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+@keyframes pictoCheer { from { transform: scale(1) rotate(-4deg); } to { transform: scale(1.08) rotate(4deg); } }
+.picto-whoosh { animation: whoosh 0.7s ease-in-out infinite alternate; }
+@keyframes whoosh { from { opacity: 0.3; transform: translateX(-3px); } to { opacity: 1; transform: translateX(3px); } }
+.picto-heart { transform-origin: 70px 46px; animation: heartBeat 0.9s ease-in-out infinite; }
+@keyframes heartBeat { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.18); } }
+.dance-cam-box { position: relative; flex: 0 1 780px; min-width: 0; aspect-ratio: 16 / 10; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: #1d2a18; }
 .dance-cam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .dance-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.dance-steps { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.dance-step { background: rgba(255, 255, 255, 0.7); color: var(--muted); font-weight: 800; font-size: clamp(14px, 2.4vmin, 20px); padding: 8px 16px; border-radius: 999px; transition: all 0.25s ease; }
-.dance-step.on { background: #fff; color: var(--green-dark); box-shadow: var(--shadow); transform: scale(1.06); }
-.dance-step.done { background: #f8ecd2; color: var(--ink); }
 .dance-cam-ph { display: flex; align-items: center; justify-content: center; font-size: 12vmin; }
-.dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
+/* the beat between scenes */
+.move-cheer { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgba(253, 247, 231, 0.85); backdrop-filter: blur(6px); border-radius: var(--radius); font-size: clamp(34px, 6vmin, 64px); font-weight: 800; color: var(--green-dark); animation: pop 0.35s ease; }
+.move-cheer-star { font-size: 1.6em; animation: pictoCheer 0.4s ease-in-out infinite alternate; }
+.dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 92%; text-align: center; background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.4vmin, 30px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); word-break: keep-all; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
 .magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
