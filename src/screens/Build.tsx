@@ -39,11 +39,15 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
 
   // the shared kiosk stream: the dance mini-game watches the child through it
   // too, and the welcome mirror takes it back afterwards — so it is never
-  // stopped here, only re-acquired on an explicit retry
+  // stopped here, only re-acquired when the camera itself failed (camTry).
+  // camOn drops to false meanwhile so the <video> re-binds when it returns.
   useEffect(() => {
     let cancelled = false;
     setCamError(null);
-    if (camTry > 0) releaseCamera();
+    if (camTry > 0) {
+      releaseCamera();
+      setCamOn(false);
+    }
     getCamera()
       .then((stream) => {
         if (cancelled) return;
@@ -125,12 +129,13 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
     reader.readAsDataURL(file);
   }
 
+  // (back to the photo step re-mounts the <video>; the bind effect above
+  // attaches the still-running stream — no camera restart needed)
   function retake() {
     track("photo_retake");
     setPhoto("");
     setTries(0);
     setStep("photo");
-    setCamTry((t) => t + 1);
   }
 
   // the AI saw no creation in the shot — ask (with a voice) and reshoot
@@ -139,7 +144,6 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
     setPhoto("");
     setTries((t) => t + 1);
     setStep("photo");
-    setCamTry((t) => t + 1);
   }
 
   if (step === "magic") {
