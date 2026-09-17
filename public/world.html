@@ -87,11 +87,28 @@ const SCENES = {
         { tex: "/fx/harvest_cloud2.png", x: 1210, y: 217, speed: 4.2 },
         { tex: "/fx/harvest_cloud3.png", x: 1587, y: 230, speed: 6.5 },
       ],
-      leaves: { sprites: ["/fx/leaf1.png", "/fx/leaf2.png", "/fx/leaf3.png"], spawn: [[30, 40, 330, 190, 7], [1500, 300, 1660, 400, 2]], fadeY: [540, 610] },
+      floaters: [{ sprites: ["/fx/leaf1.png", "/fx/leaf2.png", "/fx/leaf3.png"], spawn: [[30, 40, 330, 190, 7], [1500, 300, 1660, 400, 2]], vy: [13, 22], fade: [540, 610], sway: 16, spin: 0.55, size: [0.8, 1.15] }],
     } },
-  field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7] },
-  night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8] },
-  moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9] },
+  field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7],
+    fx: { // its three clouds drift; its four loose leaves fall from the two trees
+      clouds: [{ tex: "/fx/field_cloud1.png", x: 422, y: 251, speed: 4.5 }, { tex: "/fx/field_cloud2.png", x: 1104, y: 150, speed: 3.6 }, { tex: "/fx/field_cloud3.png", x: 1324, y: 296, speed: 5.2 }],
+      floaters: [{ sprites: ["/fx/field_leaf1.png", "/fx/field_leaf2.png", "/fx/field_leaf3.png", "/fx/field_leaf4.png"], spawn: [[10, 170, 230, 400, 5], [1500, 220, 1672, 470, 3]], vy: [12, 20], fade: [480, 560], sway: 16, spin: 0.55, size: [0.8, 1.15] }],
+    } },
+  night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8],
+    fx: { // the night cloud drifts; the painted stars twinkle
+      clouds: [{ tex: "/fx/night_cloud1.png", x: 108, y: 169, speed: 2.8 }],
+      stars: "/fx/night_stars.json",
+    } },
+  moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9],
+    fx: { // sky lanterns rise from behind the ridge, the lake shimmers, wall lanterns flicker, maple leaves fall
+      wind: { rect: [0.52, 0.462, 0.87, 0.50], amp: 0.0012 },
+      floaters: [
+        { sprites: ["/fx/moon_lantern1.png", "/fx/moon_lantern2.png", "/fx/moon_lantern3.png", "/fx/moon_lantern4.png", "/fx/moon_lantern5.png"], spawn: [[560, 430, 1500, 470, 5]], start: [[682, 144], [790, 90], [870, 206], [964, 298], [1456, 260]], vy: [-8, -4.5], fade: [140, 40], sway: 5, spin: 0, size: [1, 1], wait: [4, 16] },
+        { sprites: ["/fx/field_leaf1.png", "/fx/leaf3.png", "/fx/leaf1.png"], spawn: [[220, 200, 500, 400, 4], [1260, 40, 1640, 180, 2]], vy: [10, 18], fade: [560, 620], sway: 14, spin: 0.55, size: [0.45, 0.65] },
+      ],
+      stars: "/fx/moon_stars.json",
+      glows: [{ x: 455, y: 598, r: 34 }, { x: 665, y: 597, r: 34 }, { x: 1005, y: 603, r: 34 }, { x: 1400, y: 607, r: 34 }, { x: 118, y: 142, r: 40 }, { x: 206, y: 208, r: 36 }],
+    } },
 };
 const SCENE_ORDER = ["harvest", "field", "night", "moon"];
 const _q = new URLSearchParams(location.search);
@@ -190,37 +207,68 @@ const groundX = (z) => { // painted floors narrow toward the viewer: x range at 
 const ambientGroup = new THREE.Group();
 ambientGroup.position.z = -BACKDROP_D + 0.15;
 camera.add(ambientGroup);
-const ambient = { scene: null, next: null, opacity: 1, clouds: [], leaves: [], time: 0 };
+const ambient = { scene: null, next: null, opacity: 1, build: 0, clouds: [], floaters: [], stars: [], glows: [], time: 0 };
 const spriteMat = (tex) => new THREE.MeshBasicMaterial({ map: getTex(tex), transparent: true, depthWrite: false, toneMapped: false, opacity: 1 });
+// a soft round glow (for lantern flicker), drawn once
+const glowTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"), grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.35, "rgba(255,255,255,0.45)"); grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 function buildAmbient(name) {
-  for (const o of [...ambient.clouds, ...ambient.leaves]) ambientGroup.remove(o.mesh);
-  ambient.clouds = []; ambient.leaves = []; ambient.scene = name; ambient.opacity = 0;
+  for (const o of [...ambient.clouds, ...ambient.floaters, ...ambient.stars, ...ambient.glows]) ambientGroup.remove(o.mesh);
+  ambient.clouds = []; ambient.floaters = []; ambient.stars = []; ambient.glows = []; ambient.scene = name; ambient.opacity = 0;
+  const build = ++ambient.build;
   const fx = SCENES[name]?.fx;
   if (!fx) return;
+  let zi = 0;
   for (const c of fx.clouds || []) {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(c.tex));
+    mesh.position.z = 0.01 + zi++ * 0.001;
     ambientGroup.add(mesh);
-    ambient.clouds.push({ mesh, x: c.x, y: c.y, speed: c.speed, tex: c.tex });
+    ambient.clouds.push({ mesh, x: c.x, y: c.y, speed: c.speed });
   }
-  const lv = fx.leaves;
-  if (lv) {
+  for (const set of fx.floaters || []) {
     let i = 0;
-    for (const [x0, y0, x1, y1, n] of lv.spawn) for (let k = 0; k < n; k++, i++) {
-      const tex = lv.sprites[i % lv.sprites.length];
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(tex));
-      mesh.position.z = 0.02 + i * 0.001;
+    for (const [x0, y0, x1, y1, n] of set.spawn) for (let k = 0; k < n; k++, i++) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(set.sprites[i % set.sprites.length]));
+      mesh.position.z = 0.05 + zi++ * 0.001;
       ambientGroup.add(mesh);
-      const leaf = { mesh, tex, box: [x0, y0, x1, y1], phase: rnd(0, 6.28), x: 0, y: 0, vy: 0, wait: 0, spin: rnd(0.6, 1.1), size: 1 };
-      ambient.leaves.push(leaf);
-      resetLeaf(leaf, lv, true);
+      const f = { mesh, set, box: [x0, y0, x1, y1], phase: rnd(0, 6.28), x: 0, y: 0, vy: 0, wait: 0, spin: rnd(0.6, 1.1), size: 1 };
+      ambient.floaters.push(f);
+      resetFloater(f, set.start?.[i] ?? null);
     }
   }
+  for (const g of fx.glows || []) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffb060, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+    mesh.position.z = 0.03 + zi++ * 0.001;
+    ambientGroup.add(mesh);
+    ambient.glows.push({ mesh, x: g.x, y: g.y, r: g.r, phase: rnd(0, 6.28) });
+  }
+  if (fx.stars) fetch(fx.stars).then((r) => r.json()).then((list) => {
+    if (build !== ambient.build) return; // the scene moved on meanwhile
+    for (const st of list) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), spriteMat(st.tex));
+      mesh.position.z = 0.02 + zi++ * 0.001;
+      ambientGroup.add(mesh);
+      ambient.stars.push({ mesh, x: st.x, y: st.y, phase: rnd(0, 6.28), w: rnd(1.2, 3.0) });
+    }
+  }).catch(() => {});
 }
-function resetLeaf(l, lv, initial) {
-  const [x0, y0, x1, y1] = l.box;
-  l.x = rnd(x0, x1); l.y = rnd(y0, y1); l.vy = rnd(13, 22); l.size = rnd(0.8, 1.15);
-  l.wait = initial ? 0 : rnd(0.5, 6);
-  if (initial) l.y = rnd(y0, lv.fadeY[1]); // a first frame already mid-fall, not a burst
+// a floater goes down (leaves) or up (sky lanterns); `start` = its painted
+// position for the very first pass, so the scene opens exactly as painted
+function resetFloater(f, start) {
+  const set = f.set, [x0, y0, x1, y1] = f.box, up = set.vy[0] < 0;
+  f.x = rnd(x0, x1); f.y = rnd(y0, y1); f.vy = rnd(set.vy[0], set.vy[1]); f.size = rnd(set.size[0], set.size[1]);
+  f.wait = rnd(set.wait?.[0] ?? 0.5, set.wait?.[1] ?? 6);
+  f.born = f.y;
+  if (start) { f.x = start[0]; f.y = start[1]; f.wait = 0; f.born = up ? f.y + 60 : f.y - 60; }
+  else if (f.fresh === undefined) { // first frame: already mid-way, not a burst
+    f.wait = 0; f.y = rnd(Math.min(y0, set.fade[1]), Math.max(y0, set.fade[1])); f.born = up ? f.y + 60 : f.y - 60;
+  }
+  f.fresh = false;
 }
 function ambientTick(dt) {
   ambient.time += dt;
@@ -232,7 +280,7 @@ function ambientTick(dt) {
   const sc = SCENES[ambient.scene]; const fx = sc?.fx;
   if (!fx) return;
   const f = fitFor(ambient.scene), [PW, PH] = sc.px;
-  const place = (mesh, x, y, tex, alpha) => {
+  const place = (mesh, x, y, _tex, alpha) => {
     const img = mesh.material.map.image;
     if (!img?.width) { mesh.visible = false; return; }
     mesh.visible = true;
@@ -245,22 +293,36 @@ function ambientTick(dt) {
     c.x += c.speed * dt;
     const img = c.mesh.material.map.image, half = (img?.width || 200) / 2;
     if (c.x > PW + half + 40) c.x = -half - 40; // wraps off-screen (the painting covers the screen)
-    place(c.mesh, c.x, c.y, c.tex, 1);
+    place(c.mesh, c.x, c.y, null, 1);
   }
-  const lv = fx.leaves;
-  for (const l of ambient.leaves) {
-    if (l.wait > 0) { l.wait -= dt; l.mesh.visible = false; continue; }
-    const t = ambient.time + l.phase;
-    l.y += l.vy * dt;
-    l.x += Math.sin(t * 1.3) * 16 * dt + 4 * dt; // sway, drifting with the wind
-    const [fy0, fy1] = lv.fadeY;
-    const fadeIn = Math.min(1, (l.y - l.box[1]) / 40 + 0.15);
-    const alpha = Math.min(fadeIn, 1 - THREE.MathUtils.clamp((l.y - fy0) / (fy1 - fy0), 0, 1));
-    place(l.mesh, l.x, l.y, l.tex, alpha);
-    l.mesh.rotation.z = Math.sin(t * l.spin) * 0.55;
-    l.mesh.scale.multiplyScalar(l.size);
-    l.mesh.scale.x *= 0.72 + 0.28 * Math.cos(t * 1.7); // a tumble, seen edge-on now and then
-    if (l.y >= fy1) resetLeaf(l, lv, false);
+  for (const f of ambient.floaters) {
+    const set = f.set, up = set.vy[0] < 0;
+    if (f.wait > 0) { f.wait -= dt; f.mesh.visible = false; continue; }
+    const t = ambient.time + f.phase;
+    f.y += f.vy * dt;
+    f.x += Math.sin(t * 1.3) * set.sway * dt + (up ? 1.5 : 4) * dt; // sway, drifting with the wind
+    const [fy0, fy1] = set.fade;
+    const fadeIn = Math.min(1, Math.abs(f.y - f.born) / 40 + 0.15);
+    const alpha = Math.min(fadeIn, 1 - THREE.MathUtils.clamp((f.y - fy0) / (fy1 - fy0), 0, 1));
+    place(f.mesh, f.x, f.y, null, alpha);
+    f.mesh.rotation.z = set.spin ? Math.sin(t * f.spin) * set.spin : Math.sin(t * 0.7) * 0.04;
+    f.mesh.scale.multiplyScalar(f.size);
+    if (set.spin) f.mesh.scale.x *= 0.72 + 0.28 * Math.cos(t * 1.7); // a tumble, seen edge-on now and then
+    if (up ? f.y <= fy1 : f.y >= fy1) resetFloater(f, null);
+  }
+  for (const st of ambient.stars) {
+    const t = ambient.time * st.w + st.phase;
+    place(st.mesh, st.x, st.y, null, 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(t)));
+    st.mesh.scale.multiplyScalar(1 + 0.12 * Math.sin(t * 0.7 + 1.3));
+  }
+  for (const g of ambient.glows) {
+    const t = ambient.time;
+    const flicker = 0.5 + 0.25 * Math.sin(t * 7.3 + g.phase) + 0.25 * Math.sin(t * 3.1 + g.phase * 2.0);
+    g.mesh.visible = true;
+    g.mesh.scale.set(g.r * 2 / PW * f.w, g.r * 2 / PH * f.h, 1);
+    g.mesh.position.x = (g.x / PW - 0.5) * f.w;
+    g.mesh.position.y = (0.5 - g.y / PH) * f.h + f.lift;
+    g.mesh.material.opacity = (0.16 + 0.14 * flicker) * ambient.opacity;
   }
 }
 
