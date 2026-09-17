@@ -68,7 +68,7 @@ camera.lookAt(0, 1.1, -1.5);
 // painted backdrops, glued to the CAMERA at a fixed distance and sized exactly
 // like CSS `cover` (never stretched beyond what the screen needs). The scene
 // rotates every ROTATE_MS with a crossfade; the slot comes from the wall clock
-// so refreshes and both PCs agree. ?bg=harvest|field|night forces one.
+// so refreshes and both PCs agree. ?bg=harvest|field|night|moon forces one.
 // ground: where feet may land (x range at the far z edge; xNear = the x range
 // at the near edge when the painted floor tapers). cam: this painting's eye
 // height — a diorama shot from table height needs a lower camera than the
@@ -80,8 +80,9 @@ const SCENES = {
   harvest: { label: "황금 들녘", src: "/world3d-harvest.png", aspect: 1672 / 941, ground: { x: [-4.8, 4.8], xNear: [-2.6, 2.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff0d0, 0x9a6a3a, 1.0], sun: [0xffe8b8, 1.5], rim: [0xffc070, 0.7] },
   field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7] },
   night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8] },
+  moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9] },
 };
-const SCENE_ORDER = ["harvest", "field", "night"];
+const SCENE_ORDER = ["harvest", "field", "night", "moon"];
 const _q = new URLSearchParams(location.search);
 const FORCED_SCENE = SCENE_ORDER.includes(_q.get("bg")) ? _q.get("bg") : null;
 const ROTATE_MS = Math.max(0.5, Number(_q.get("rotate")) || 10) * 60000;
