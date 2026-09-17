@@ -560,6 +560,32 @@ video.camera { transform: scaleX(-1); }
 .move-cheer-star { font-size: 1.6em; animation: pictoCheer 0.4s ease-in-out infinite alternate; }
 .dance-prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 92%; text-align: center; background: rgba(255, 255, 255, 0.92); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 3.6vmin, 40px); padding: 10px 22px; border-radius: 999px; box-shadow: var(--shadow); word-break: keep-all; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 @keyframes promptBounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-6px); } }
+/* scene 3 — the magic pot. Layers inside the camera window, back to front:
+   video · whole pot · the child's photo dropping in · hint ring · canvas
+   (outline, ladle, sparkles) · the pot's FRONT half again, so the ladle and
+   the photo go INTO the soup · prompt. (left/width, not a centring transform:
+   the canvas reads the pot's offset box to know where the soup is.) */
+.stir-pot { position: absolute; left: 34%; width: 32%; bottom: -5%; user-select: none; pointer-events: none; transform-origin: 50% 100%; filter: brightness(calc(1 + var(--g, 0) * 0.18)) drop-shadow(0 0 calc(10px + var(--g, 0) * 46px) rgba(255, 214, 102, calc(0.35 + var(--g, 0) * 0.6))); }
+.stir-pot-front { clip-path: inset(27% 0 0 0); filter: brightness(calc(1 + var(--g, 0) * 0.18)); }
+.stir-pot-front.burst { visibility: hidden; } /* the light pours over the whole pot */
+.stir-pot.stirring { animation: potWobble 0.5s ease-in-out infinite; }
+.stir-pot.burst { animation: potBurst 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes potWobble { 0%, 100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
+@keyframes potBurst { 0% { transform: scale(1, 1); } 22% { transform: scale(1.12, 0.84); } 55% { transform: scale(0.92, 1.14) translateY(-5%); } 100% { transform: scale(1, 1); } }
+.stir-photo { position: absolute; left: 50%; bottom: 17%; width: 13%; aspect-ratio: 1; border-radius: 50%; overflow: hidden; border: 4px solid rgba(255, 255, 255, 0.95); box-shadow: 0 0 26px rgba(255, 226, 130, 0.95); pointer-events: none; animation: photoDrop 1.9s cubic-bezier(0.5, 0, 0.8, 0.6) 0.35s both; }
+.stir-photo img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes photoDrop { 0% { opacity: 0; transform: translate(-50%, -290%) scale(1.5) rotate(-14deg); } 12% { opacity: 1; } 45% { transform: translate(-50%, -230%) scale(1.5) rotate(8deg); } 86% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 40%) scale(0.55) rotate(24deg); } }
+.stir-hint { position: absolute; left: 31%; width: 38%; bottom: 20%; overflow: visible; pointer-events: none; animation: hintPulse 1.2s ease-in-out infinite alternate; }
+.stir-hint ellipse { fill: none; stroke: #fff; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 3 17; filter: drop-shadow(0 0 5px rgba(255, 200, 70, 1)); animation: hintFlow 0.9s linear infinite; }
+@keyframes hintFlow { to { stroke-dashoffset: -20; } }
+@keyframes hintPulse { from { opacity: 0.55; } to { opacity: 1; } }
+.dance-prompt.top { bottom: auto; top: 14px; }
+.dance-prompt.done { background: var(--green); color: #fff; animation: donePop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+@keyframes donePop { from { opacity: 0; transform: translateX(-50%) scale(0.5); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+.stir-whiteout { position: fixed; inset: 0; z-index: 70; background: #fffbe6; pointer-events: none; animation: whiteIn 0.5s ease-in both; }
+@keyframes whiteIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .stir-pot.stirring, .stir-hint, .stir-hint ellipse { animation: none; } }
+
 .magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
 .magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 26px); }
@@ -610,16 +636,13 @@ video.camera { transform: scaleX(-1); }
 .birth-figure { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); height: 60%; width: 50%; transform-origin: 50% 100%; animation: birthPop 1s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
 .birth-figure::before { content: ""; position: absolute; left: 50%; bottom: 2.5%; width: 46%; height: 6%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(90, 70, 30, 0.3), rgba(90, 70, 30, 0) 70%); }
 @keyframes birthPop { 0% { opacity: 0; transform: translateX(-50%) scale(0.2); filter: brightness(2.5) blur(6px); } 55% { opacity: 1; transform: translateX(-50%) scale(1.12); filter: brightness(1.3) blur(0); } 100% { opacity: 1; transform: translateX(-50%) scale(1); filter: none; } }
-/* the moment of life: a white flash and a ring of light rolling outward */
-.birth-flash { position: absolute; inset: 0; background: #fffbe6; animation: birthFlash 0.9s ease-out both; pointer-events: none; }
-@keyframes birthFlash { 0% { opacity: 0; } 12% { opacity: 0.95; } 100% { opacity: 0; } }
+/* the moment of life: the scene opens out of the magic pot's white-out (same
+   colour, so the cut between the two screens is invisible), and a ring of
+   light rolls outward */
+.birth-flash { position: absolute; inset: 0; z-index: 4; background: #fffbe6; animation: birthFlash 1.1s ease-out both; pointer-events: none; }
+@keyframes birthFlash { 0%, 18% { opacity: 1; } 100% { opacity: 0; } }
 .birth-ring { position: absolute; left: 50%; top: 62%; width: 30vmin; aspect-ratio: 1; border-radius: 50%; border: 6px solid rgba(255, 236, 150, 0.95); box-shadow: 0 0 40px rgba(255, 220, 120, 0.9), inset 0 0 30px rgba(255, 240, 180, 0.8); animation: birthRing 1.3s ease-out both; pointer-events: none; }
 @keyframes birthRing { 0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0; } }
-/* while the dust falls, the photo hovers in the light like an egg */
-.birth-egg { position: absolute; left: 50%; top: 45%; width: 34vmin; aspect-ratio: 1; border-radius: 50%; overflow: hidden; border: 8px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 60px rgba(255, 235, 150, 0.9); animation: eggHover 1.6s ease-in-out infinite; }
-.birth-egg img { width: 100%; height: 100%; object-fit: cover; filter: saturate(1.3); }
-@keyframes eggHover { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -54%) scale(1.04); } }
-.birth-dust { position: absolute; inset: 0; pointer-events: none; }
 /* after the walk-off: "look at the wall next to you" for a few seconds */
 .sendoff { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; animation: pop 0.5s ease; }
 .sendoff-title { margin: 0; font-size: clamp(28px, 4.6vmin, 52px); font-weight: 800; color: var(--green-dark); text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95); }
@@ -632,7 +655,6 @@ video.camera { transform: scaleX(-1); }
 .sendoff-timer { width: min(60vw, 520px); height: 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); overflow: hidden; box-shadow: inset 0 1px 3px rgba(120, 90, 30, 0.2); }
 .sendoff-timer-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ffd54d, #f2a537); transform-origin: left; animation: drain linear forwards; }
 @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-.birth-dust .dust-fleck { font-size: 30px; }
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }

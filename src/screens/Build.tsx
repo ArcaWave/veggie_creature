@@ -225,7 +225,7 @@ function MagicStep({
   onRetryCloser: () => void;
   onDone: () => void;
 }) {
-  type Phase = "match" | "noshow" | "dance" | "dust" | "alive" | "walk" | "sendoff";
+  type Phase = "match" | "noshow" | "dance" | "alive" | "walk" | "sendoff";
   const SENDOFF_MS = 5000; // "look at the wall next to you" before the station resets
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
@@ -288,7 +288,8 @@ function MagicStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 3) gauge full -> dust -> 4) ALIVE -> 5) walks off right
+  // 3) the magic pot bursts (DanceCharge ends on a white-out) -> 4) ALIVE,
+  // opening out of that same white -> 5) walks off right
   const variantRef = useRef<string | null>(null);
   variantRef.current = variant;
   const partsRef = useRef<Parts | null>(null);
@@ -299,43 +300,39 @@ function MagicStep({
     danceDoneRef.current = true;
     const v = variantRef.current ?? "carrot";
     track("dance_done", { variant: v });
-    setPhase("dust");
-    speak("우와! 마법가루가 가득 모였어! 마법가루가 내려온다!");
+    setPhase("alive");
+    sparkle();
+    speak("우와! 냄비에서 빛이 팡! 채소 친구가 살아났어!");
+    later(() => magicDustBurst(frameRef.current), 80); // once the podium is on screen
     later(() => {
-      setPhase("alive");
-      magicDustBurst(frameRef.current);
-      sparkle();
-      speak("채소 친구가 살아났어!");
-      later(() => {
-        setPhase("walk");
-        speak("디지털 세계로 출발! 큰 화면에서 다시 만나!");
-        track("walk_off", { variant: v });
-        // the creature leaves this screen — announce it to the Digital World
-        fetch("/api/creatures", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ variant: v, parts: partsRef.current }),
+      setPhase("walk");
+      speak("디지털 세계로 출발! 큰 화면에서 다시 만나!");
+      track("walk_off", { variant: v });
+      // the creature leaves this screen — announce it to the Digital World
+      fetch("/api/creatures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variant: v, parts: partsRef.current }),
+      })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.uploaded) throw new Error(j.reason || j.error || `http_${r.status}`);
         })
-          .then(async (r) => {
-            const j = await r.json().catch(() => ({}));
-            if (!r.ok || !j.uploaded) throw new Error(j.reason || j.error || `http_${r.status}`);
-          })
-          .catch((e) => {
-            const reason = String(e?.message || e);
-            track("relay_fail", { reason });
-            if (aliveRef.current) setRelayFail(reason);
-          });
+        .catch((e) => {
+          const reason = String(e?.message || e);
+          track("relay_fail", { reason });
+          if (aliveRef.current) setRelayFail(reason);
+        });
+      later(() => {
+        // it has arrived on the wall: point the child at it for a moment
+        setPhase("sendoff");
+        speak("옆 화면에서 채소 친구를 확인해 봐!");
         later(() => {
-          // it has arrived on the wall: point the child at it for a moment
-          setPhase("sendoff");
-          speak("옆 화면에서 채소 친구를 확인해 봐!");
-          later(() => {
-            track("build_done", { variant: v });
-            onDone();
-          }, SENDOFF_MS);
-        }, 5200); // walk duration + a breath
-      }, 3200);
-    }, 1600);
+          track("build_done", { variant: v });
+          onDone();
+        }, SENDOFF_MS);
+      }, 5200); // walk duration + a breath
+    }, 3400);
   }
 
   if (phase === "sendoff") {
@@ -370,16 +367,16 @@ function MagicStep({
   if (phase === "dance") {
     return (
       <div className="screen center-screen" style={{ alignItems: "center" }}>
-        <DanceCharge stream={stream} onFull={danceDone} />
+        <DanceCharge stream={stream} photo={photo} onFull={danceDone} />
       </div>
     );
   }
 
-  // dust -> ALIVE -> walk: one continuous scene on the magic meadow stage.
-  // The photo hovers in the light while the dust falls; a flash and a ring
-  // of light, and the figure bursts onto the grassy podium; then it strolls
-  // off to the right. (birth-origin marks the podium for the confetti burst.)
-  if ((phase === "dust" || phase === "alive" || phase === "walk") && parts) {
+  // ALIVE -> walk: one continuous scene on the magic meadow stage. The pot's
+  // white-out clears into a flash and a ring of light, and the figure bursts
+  // onto the grassy podium; then it strolls off to the right.
+  // (birth-origin marks the podium for the confetti burst.)
+  if ((phase === "alive" || phase === "walk") && parts) {
     return (
       <div className={`birth-stage is-${phase}`}>
         <div className="birth-rays" />
@@ -396,16 +393,6 @@ function MagicStep({
           ))}
         </div>
         <div className="birth-origin" ref={frameRef} />
-        {phase === "dust" && (
-          <>
-            <div className="birth-egg"><img src={photo} alt="" /></div>
-            <div className="birth-dust" aria-hidden="true">
-              {Array.from({ length: 16 }).map((_, k) => (
-                <span key={k} className="dust-fleck" style={{ left: `${30 + k * 2.6}%`, animationDelay: `${(k % 8) * 0.16}s` }}>✨</span>
-              ))}
-            </div>
-          </>
-        )}
         {phase === "alive" && (
           <>
             <div className="birth-flash" />
@@ -423,7 +410,7 @@ function MagicStep({
           </div>
         )}
         <p className="birth-title" key={phase}>
-          {phase === "dust" ? "✨ 마법가루가 내려와요…" : phase === "alive" ? "🎉 살아났다!" : "🌏 디지털 세계로 출발!"}
+          {phase === "alive" ? "🎉 살아났다!" : "🌏 디지털 세계로 출발!"}
         </p>
       </div>
     );

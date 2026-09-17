@@ -6,8 +6,12 @@
 let pending: Promise<MediaStream> | null = null;
 
 // ?fakecam=/welcome/step1.jpg — a still photo stands in for the webcam:
-// rehearsals on a machine without one, and how the auto-start is tested
-const FAKE = new URLSearchParams(location.search).get("fakecam");
+// rehearsals on a machine without one, and how the auto-start is tested.
+// &orbit[=turns per second] slides the photo round in a small circle — the
+// "child" in it is then stirring, which is how the magic-pot move is tested.
+const QUERY = new URLSearchParams(location.search);
+const FAKE = QUERY.get("fakecam");
+const ORBIT = QUERY.has("orbit") ? Number(QUERY.get("orbit")) || 0.6 : 0;
 function fakeStream(src: string): Promise<MediaStream> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -17,11 +21,12 @@ function fakeStream(src: string): Promise<MediaStream> {
       c.height = 720;
       const ctx = c.getContext("2d")!;
       const draw = () => { // cover-fit, redrawn so the stream keeps producing frames
-        const k = Math.max(c.width / img.width, c.height / img.height);
-        ctx.drawImage(img, (c.width - img.width * k) / 2, (c.height - img.height * k) / 2, img.width * k, img.height * k);
+        const k = Math.max(c.width / img.width, c.height / img.height) * (ORBIT ? 1.25 : 1);
+        const a = (performance.now() / 1000) * ORBIT * 2 * Math.PI, r = ORBIT ? c.height * 0.09 : 0;
+        ctx.drawImage(img, (c.width - img.width * k) / 2 + r * Math.cos(a), (c.height - img.height * k) / 2 + r * Math.sin(a), img.width * k, img.height * k);
       };
       draw();
-      setInterval(draw, 100);
+      setInterval(draw, ORBIT ? 33 : 100);
       resolve(c.captureStream(15));
     };
     img.onerror = () => reject(new DOMException("fake camera image missing", "NotFoundError"));

@@ -1,19 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { pop, sparkle } from "../lib/sfx";
 import { speak } from "../lib/guide";
-import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_SHOULDER, R_SHOULDER } from "../lib/pose";
+import { magicDustBurst } from "../lib/dust";
+import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_INDEX, R_INDEX, L_SHOULDER, R_SHOULDER } from "../lib/pose";
+import { StirDetector } from "../lib/stir";
 import { CamFrame } from "./CamFrame";
 
-// The dance mini-game: two "magic moves", ONE PER SCENE — the scene changes
-// after each move, so the child only ever has one thing to do. The moves are
-// held poses (no timing to get right), chosen for how reliably BlazePose reads
-// them from an upper-body webcam view: arms out level = airplane, both hands
-// joined above the head = heart. Forgiving for the special-needs event:
-// holding the pose charges fast; and when nothing has been recognised for a
-// few seconds (a child who doesn't follow, or is just playing around) the
-// dust quietly starts gathering by itself — easing in, never a visible jump —
-// so every scene completes on its own in about 20 s. Nobody is ever stuck.
+// The dance mini-game: three "magic moves", ONE PER SCENE — the scene changes
+// after each move, so the child only ever has one thing to do. The first two
+// are held poses (no timing to get right), chosen for how reliably BlazePose
+// reads them from an upper-body webcam view: arms out level = airplane, both
+// hands joined above the head = heart. The finale is the magic pot: the
+// child's creation drops into a cauldron, a ladle sticks to the child's hand,
+// and a turn or two of stirring makes the pot burst with light and stars —
+// which is the moment the creature comes alive (Build carries on from the
+// white-out). Forgiving for the special-needs event: doing the move charges
+// fast; and when nothing has been recognised for a few seconds (a child who
+// doesn't follow, or is just playing around) the dust quietly starts
+// gathering by itself — easing in, never a visible jump — so every scene
+// completes on its own in about 20 s. Nobody is ever stuck.
 // (Tapping/clicking the stage also charges: a tester's shortcut — the
 // exhibition screen is not a touch screen, so it is not advertised.)
 type LM = NormalizedLandmark[];
@@ -45,26 +51,58 @@ export function isHeart(lm: LM): boolean {
   return up && close && centred;
 }
 
-// each move comes with a photo of a child doing it (public/dance/), shown
-// standing on the frame's edge — a real kid to copy beats a diagram
-export const MOVES = [
+// the hand that holds the ladle: between the wrist and the index knuckle
+// (the wrist alone sits a little up the arm). null when it isn't in view.
+function handOf(lm: LM, wrist: number, index: number): { x: number; y: number } | null {
+  const w = lm[wrist], i = lm[index];
+  if ((w.visibility ?? 1) < 0.5 || w.x < -0.02 || w.x > 1.02 || w.y < -0.02 || w.y > 1.02) return null;
+  return seen(i) ? { x: (w.x + i.x) / 2, y: (w.y + i.y) / 2 } : { x: w.x, y: w.y };
+}
+
+// the posed moves come with a photo of a child doing them (public/dance/),
+// shown standing on the frame's edge — a real kid to copy beats a diagram.
+// The stir has no `check`: it is followed by the StirDetector instead.
+type Move = { key: string; title: string; prompt: string; cheer: string; voice: string; guide?: string; check?: (lm: LM) => boolean };
+export const MOVES: Move[] = [
   { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑤욱! ✈️", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", guide: "/dance/guide_airplane.png", check: isAirplane },
   { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑이 가득! 생명이 깨어나요 💖", voice: "이번엔 두 손을 머리 위에서 모아 하트를 만들어 봐! 사랑을 주면 생명이 깨어나!", guide: "/dance/guide_heart.png", check: isHeart },
-] as const;
+  { key: "stir", title: "마법 냄비 젓기!", prompt: "국자로 냄비를 빙글빙글 저어 봐! 🥄", cheer: "팡! 마법 완성! ✨", voice: "마지막 마법! 국자를 잡고 마법 냄비를 빙글빙글 저어 봐!" },
+];
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes
-const ASSIST_AFTER_MS = 5000; // this long without a recognised pose → the quiet assist begins
+const ASSIST_AFTER_MS = 5000; // this long without a recognised move → the quiet assist begins
 const ASSIST_RAMP_MS = 4000;  // …easing in over this long, so its start is imperceptible
 const ASSIST_RATE = 7;        // gauge % per second once fully eased in
-const TICK_MS = 130;
+const POSE_RATE = 46;         // gauge % per second while a pose is held (~2 s to fill)
+const TICK_MS = 100;
+const STIR_TURNS = 2;         // turns of the ladle that fill the pot…
+const STIR_TRAVEL = 8;        // …or this much hand travel (frame heights) — scribbles count too
+                              // (together: a little under two real turns)
+const STIR_INTRO_MS = 1700;   // the creation drops into the pot first; stirring counts after
+const BURST_MS = 1500;        // the pot's burst, ending in the white-out Build picks up from
+const WHITE_AT_MS = 950;
 
-export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
+// pot.png geometry (fractions of the sprite): where the soup is
+const SOUP_Y = 0.27, SOUP_HALF_W = 0.3;
+// ladle.png geometry (fractions of the sprite): the grip the hand holds and
+// the middle of the bowl; its drawn length range, × window height
+const GRIP_Y = 0.16, BOWL_Y = 0.86, LADLE_ASPECT = 239 / 720, LADLE_LEN: [number, number] = [0.34, 0.95];
+const PREDICT_MS = 90;        // the ladle leads the last sample by this much (detection lag)
+
+type Box = { x0: number; y0: number; x1: number; y1: number };
+type Spark = { x: number; y: number; vx: number; vy: number; g: number; age: number; life: number; size: number; hue: number };
+
+export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | null; photo?: string | null; onFull: () => void }) {
   const vRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const potRef = useRef<HTMLImageElement>(null);
   const [stage, setStage] = useState(0);
   const [cheer, setCheer] = useState(false);
   const [gauge, setGauge] = useState(0);
-  const [hit, setHit] = useState(false); // pose currently recognised (pictogram lights up)
+  const [hit, setHit] = useState(false); // move currently recognised (guide lights up)
+  const [holding, setHolding] = useState(false); // stir: a hand is holding the ladle
+  const [burst, setBurst] = useState(false);
+  const [white, setWhite] = useState(false);
   const gaugeRef = useRef(0);
   const stageRef = useRef(0);
   const cheerRef = useRef(false);
@@ -73,6 +111,9 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
   const doneRef = useRef(false);
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
+  // what the last detection saw (video-normalised), for the render loop
+  const view = useRef<{ boxes: Box[]; main: number; hand: { x: number; y: number; vx: number; vy: number } | null; handAt: number; turningAt: number; burstAt: number }>(
+    { boxes: [], main: -1, hand: null, handAt: 0, turningAt: 0, burstAt: 0 });
 
   useEffect(() => {
     speak(MOVES[0].voice);
@@ -91,12 +132,12 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
     gaugeRef.current = Math.min(100, gaugeRef.current + amount);
     setGauge(gaugeRef.current);
     if (gaugeRef.current < 100) return;
-    // scene complete: cheer, then the next move on its own screen
     cheerRef.current = true;
-    setCheer(true);
     sparkle();
-    window.setTimeout(() => {
-      if (stageRef.current < MOVES.length - 1) {
+    if (stageRef.current < MOVES.length - 1) {
+      // scene complete: cheer, then the next move on its own screen
+      setCheer(true);
+      window.setTimeout(() => {
         stageRef.current += 1;
         stageT0.current = Date.now();
         lastHitAt.current = Date.now();
@@ -108,15 +149,24 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
         setStage(stageRef.current);
         pop();
         speak(MOVES[stageRef.current].voice);
-      } else {
+      }, CHEER_MS);
+    } else {
+      // the finale: the pot bursts, the screen goes white — and Build's
+      // "alive" scene opens out of that same white
+      view.current.burstAt = performance.now();
+      setBurst(true);
+      magicDustBurst(potRef.current);
+      window.setTimeout(() => setWhite(true), WHITE_AT_MS);
+      window.setTimeout(() => {
         doneRef.current = true;
         onFullRef.current();
-      }
-    }, CHEER_MS);
+      }, BURST_MS);
+    }
   }
   const chargeRef = useRef(charge);
   chargeRef.current = charge;
 
+  // detection: poses → gauge (and what the render loop should draw)
   useEffect(() => {
     let landmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
     let stopped = false;
@@ -131,8 +181,21 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
     const diffCtx = diffCanvas.getContext("2d", { willReadFrequently: true });
     let prev: Uint8ClampedArray | null = null;
 
+    // stir: the ladle goes to whichever hand is doing the moving
+    const stir = new StirDetector();
+    const HANDS = [[R_WRIST, R_INDEX], [L_WRIST, L_INDEX]] as const;
+    let active = 0;
+    let smooth: { x: number; y: number } | null = null;
+    const lastPos: ({ x: number; y: number } | null)[] = [null, null];
+    const energy = [0, 0];
+
+    let lastTick = Date.now();
     const id = setInterval(() => {
+      const now = Date.now();
+      const dt = Math.min(300, now - lastTick) / 1000;
+      lastTick = now;
       const v = vRef.current;
+      const move = MOVES[stageRef.current];
       if (v && v.readyState >= 2) {
         if (landmarker) {
           try {
@@ -152,10 +215,47 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
               if (area > mainArea) { mainArea = area; main = i; }
               return { x0, y0, x1, y1 };
             });
-            drawOverlay(v, boxes, main);
-            const ok = main >= 0 && MOVES[stageRef.current].check(poses[main]);
-            setHit(ok);
-            if (ok) { lastHitAt.current = Date.now(); chargeRef.current(6); }
+            view.current.boxes = boxes;
+            view.current.main = main;
+
+            if (move.check) {
+              const ok = main >= 0 && move.check(poses[main]);
+              setHit(ok);
+              if (ok) { lastHitAt.current = now; chargeRef.current(POSE_RATE * dt); }
+            } else {
+              const hands = HANDS.map(([w, i]) => (main >= 0 ? handOf(poses[main], w, i) : null));
+              hands.forEach((h, k) => {
+                const p = lastPos[k];
+                energy[k] = energy[k] * 0.85 + (h && p ? Math.hypot(h.x - p.x, h.y - p.y) : 0);
+                lastPos[k] = h;
+              });
+              const other = 1 - active;
+              if (hands[other] && (!hands[active] || energy[other] > energy[active] * 2 + 0.02)) {
+                active = other;
+                smooth = null;
+                stir.lost();
+              }
+              const h = hands[active];
+              if (h) {
+                const was = smooth;
+                smooth = was ? { x: was.x + (h.x - was.x) * 0.6, y: was.y + (h.y - was.y) * 0.6 } : h;
+                const span = Math.max(30, now - view.current.handAt); // ms since the last sample
+                const old = view.current.hand;
+                const vx = was ? (smooth.x - was.x) / span : 0, vy = was ? (smooth.y - was.y) / span : 0;
+                view.current.hand = { x: h.x, y: h.y, vx: old ? old.vx * 0.5 + vx * 0.5 : vx, vy: old ? old.vy * 0.5 + vy * 0.5 : vy };
+                view.current.handAt = now;
+                const step = stir.update(smooth.x, smooth.y, now, v.videoWidth / v.videoHeight);
+                if (step.turning) view.current.turningAt = now;
+                if (step.turning || step.moved > 0) lastHitAt.current = now;
+                if (now - stageT0.current > STIR_INTRO_MS) chargeRef.current((step.turned / STIR_TURNS + step.moved / STIR_TRAVEL) * 100);
+              } else {
+                smooth = null;
+                stir.lost();
+                if (now - view.current.handAt > 600) view.current.hand = null;
+              }
+              setHolding(now - view.current.handAt < 600);
+              setHit(now - view.current.turningAt < 500);
+            }
           } catch { /* one bad frame — skip */ }
         } else if (diffCtx) {
           diffCtx.drawImage(v, 0, 0, 64, 48);
@@ -165,66 +265,181 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = Date.now(); chargeRef.current(2.5); }
+            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = now; chargeRef.current(19 * dt); }
           }
           prev = d;
         }
       }
       // never a dead end — and never obvious: idle for a few seconds → the
       // gauge eases into a slow, slightly uneven climb of its own
-      const now = Date.now();
       const idle = now - Math.max(stageT0.current, lastHitAt.current);
       if (idle > ASSIST_AFTER_MS) {
         const r = Math.min(1, (idle - ASSIST_AFTER_MS) / ASSIST_RAMP_MS), ease = r * r * (3 - 2 * r);
         const breath = 1 + 0.25 * Math.sin(now / 700) + 0.1 * Math.sin(now / 230);
-        chargeRef.current(ASSIST_RATE * ease * breath * (TICK_MS / 1000));
+        chargeRef.current(ASSIST_RATE * ease * breath * dt);
       }
     }, TICK_MS);
     return () => { stopped = true; clearInterval(id); };
   }, []);
 
-  // glowing outline around the recognised child (thin white for the others).
-  // the video is mirrored via CSS, so x-coords are mirrored to match.
-  function drawOverlay(v: HTMLVideoElement, boxes: { x0: number; y0: number; x1: number; y1: number }[], main: number) {
-    const c = overlayRef.current;
-    if (!c) return;
-    const cw = c.clientWidth, ch = c.clientHeight;
-    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, cw, ch);
-    const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
-    const ox = (cw - v.videoWidth * s) / 2, oy = (ch - v.videoHeight * s) / 2;
-    boxes.forEach((b, i) => {
-      const pad = 0.05;
-      const x0 = ox + Math.max(0, b.x0 - pad) * v.videoWidth * s;
-      const x1 = ox + Math.min(1, b.x1 + pad) * v.videoWidth * s;
-      const y0 = oy + Math.max(0, b.y0 - pad) * v.videoHeight * s;
-      const y1 = oy + Math.min(1, b.y1 + pad) * v.videoHeight * s;
-      const mx0 = cw - x1, mx1 = cw - x0;
-      ctx.beginPath();
-      ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, 22);
-      if (i === main) {
-        const pulse = 0.75 + 0.25 * Math.sin(Date.now() / 220);
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = `rgba(242, 165, 55, ${pulse})`;
-        ctx.shadowColor = "rgba(255, 190, 60, 0.9)";
-        ctx.shadowBlur = 18;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.font = "28px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("✨", (mx0 + mx1) / 2, Math.max(30, y0 - 10));
+  // render loop: the outline around the recognised child and — in the pot
+  // scene — the ladle riding the child's hand, the sparkles the stirring
+  // raises from the soup, and the final burst. Drawn every frame (detection
+  // only runs ~10×/s; the ladle glides between its samples). The video is
+  // mirrored via CSS, so x-coords are mirrored to match.
+  useEffect(() => {
+    const ladleImg = new Image();
+    ladleImg.src = "/dance/ladle.png";
+    const sparks: Spark[] = [];
+    const ladle = { x: 0, y: 0, a: 0, len: 0, set: false };
+    let spawnDebt = 0, burstDone = false, last = performance.now(), raf = 0;
+
+    const frame = (t: number) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      const c = overlayRef.current, v = vRef.current;
+      if (!c || !v || !v.videoWidth) return;
+      const cw = c.clientWidth, ch = c.clientHeight;
+      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, cw, ch);
+      const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
+      const ox = (cw - v.videoWidth * s) / 2, oy = (ch - v.videoHeight * s) / 2;
+      const toX = (nx: number) => cw - (ox + nx * v.videoWidth * s);
+      const toY = (ny: number) => oy + ny * v.videoHeight * s;
+      const { boxes, main, hand, handAt, turningAt, burstAt } = view.current;
+      const now = Date.now();
+
+      boxes.forEach((b, i) => {
+        const pad = 0.05;
+        const mx0 = toX(Math.min(1, b.x1 + pad)), mx1 = toX(Math.max(0, b.x0 - pad));
+        const y0 = toY(Math.max(0, b.y0 - pad)), y1 = toY(Math.min(1, b.y1 + pad));
+        ctx.beginPath();
+        ctx.roundRect(mx0, y0, mx1 - mx0, y1 - y0, 22);
+        if (i === main) {
+          const pulse = 0.75 + 0.25 * Math.sin(now / 220);
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = `rgba(242, 165, 55, ${pulse})`;
+          ctx.shadowColor = "rgba(255, 190, 60, 0.9)";
+          ctx.shadowBlur = 18;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.font = "28px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("✨", (mx0 + mx1) / 2, Math.max(30, y0 - 10));
+        } else {
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+          ctx.stroke();
+        }
+      });
+
+      const pot = potRef.current;
+      if (!pot || !pot.offsetWidth) return; // not the pot scene
+      const potW = pot.offsetWidth, potH = pot.offsetHeight;
+      const soupX = pot.offsetLeft + potW / 2, soupY = pot.offsetTop + potH * SOUP_Y;
+      const bursting = burstAt > 0;
+
+      // the ladle: its grip in the child's hand, its bowl always down in the
+      // soup — so whatever the hand does, the child sees it stirring the pot.
+      // While no hand is in view it stirs by itself (the demonstration).
+      const held = !!hand && now - handAt < 600 && !bursting;
+      let tx: number, ty: number;
+      if (held) {
+        const lead = Math.min(250, now - handAt + PREDICT_MS);
+        tx = toX(hand!.x + hand!.vx * lead);
+        // (a hand down at pot level would hide the whole ladle behind the pot:
+        // there the grip floats just above the rim instead)
+        ty = Math.min(toY(hand!.y + hand!.vy * lead), soupY - ch * 0.17);
       } else {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-        ctx.shadowBlur = 0;
-        ctx.stroke();
+        const k = t / 1000 * 2.4;
+        tx = soupX + potW * 0.16 * Math.cos(k);
+        ty = soupY - ch * 0.3 + potH * 0.05 * Math.sin(k);
       }
-    });
-  }
+      if (!ladle.set) { ladle.x = tx; ladle.y = ty; ladle.set = true; }
+      const follow = 1 - Math.exp(-dt * (held ? 26 : 5));
+      ladle.x += (tx - ladle.x) * follow;
+      ladle.y += (ty - ladle.y) * follow;
+      // the bowl circles inside the soup as the hand circles above it
+      const clamp = (n: number, m: number) => Math.max(-m, Math.min(m, n));
+      const bx = soupX + clamp((ladle.x - soupX) * 0.3, potW * 0.2);
+      const by = soupY + potH * 0.02 + clamp((ladle.y - (soupY - ch * 0.3)) * 0.12, potH * 0.04);
+      const dx = bx - ladle.x, dy = Math.max(ch * 0.08, by - ladle.y);
+      const len = Math.max(ch * LADLE_LEN[0], Math.min(ch * LADLE_LEN[1], Math.hypot(dx, dy) / (BOWL_Y - GRIP_Y)));
+      ladle.len += (len - ladle.len) * (ladle.len ? 1 - Math.exp(-dt * 14) : 1);
+      ladle.a = -Math.atan2(dx, dy);
+      if (ladleImg.complete && ladleImg.naturalWidth && !bursting) {
+        const L = ladle.len, W = L * LADLE_ASPECT;
+        ctx.save();
+        ctx.translate(ladle.x, ladle.y);
+        ctx.rotate(ladle.a);
+        ctx.shadowColor = "rgba(60, 35, 10, 0.35)";
+        ctx.shadowBlur = 14;
+        ctx.shadowOffsetY = 8;
+        ctx.drawImage(ladleImg, -W / 2, -L * GRIP_Y, W, L);
+        ctx.restore();
+      }
+
+      // sparkles rising from the soup: a few always, more as the pot fills,
+      // a flurry while the ladle is going round
+      const turning = now - turningAt < 500;
+      const mk = (big: boolean): Spark => {
+        if (big) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.5, sp = ch * (0.5 + Math.random() * 1.3);
+          return { x: soupX + (Math.random() - 0.5) * potW * 0.4, y: soupY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: ch * 0.9, age: 0, life: 1.1 + Math.random() * 0.8, size: ch * (0.012 + Math.random() * 0.03), hue: 38 + Math.random() * 22 };
+        }
+        return { x: soupX + (Math.random() - 0.5) * 2 * potW * SOUP_HALF_W, y: soupY + (Math.random() - 0.5) * potH * 0.08, vx: (Math.random() - 0.5) * ch * 0.06, vy: -ch * (0.1 + Math.random() * 0.16), g: 0, age: 0, life: 0.9 + Math.random() * 0.9, size: ch * (0.007 + Math.random() * 0.013), hue: 40 + Math.random() * 20 };
+      };
+      if (bursting && !burstDone) {
+        burstDone = true;
+        for (let i = 0; i < 110; i++) sparks.push(mk(true));
+      }
+      spawnDebt += dt * (bursting ? 60 : 3 + gaugeRef.current * 0.16 + (turning ? 16 : 0));
+      while (spawnDebt >= 1) { spawnDebt -= 1; sparks.push(mk(bursting)); }
+
+      ctx.globalCompositeOperation = "lighter";
+      if (bursting) { // the light that pours out of the pot
+        const k = Math.min(1, (t - burstAt) / 900), r = ch * (0.15 + 1.5 * (1 - (1 - k) * (1 - k)));
+        const glow = ctx.createRadialGradient(soupX, soupY, 0, soupX, soupY, r);
+        glow.addColorStop(0, "rgba(255, 252, 225, 0.95)");
+        glow.addColorStop(0.35, "rgba(255, 226, 130, 0.6)");
+        glow.addColorStop(1, "rgba(255, 210, 90, 0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, cw, ch);
+      }
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const p = sparks[i];
+        p.age += dt;
+        if (p.age >= p.life) { sparks.splice(i, 1); continue; }
+        p.vy += p.g * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        const k = p.age / p.life, fade = Math.min(1, k * 6) * (1 - k) ** 0.7;
+        const r = p.size * (0.7 + 0.5 * Math.sin(p.age * 9 + p.hue));
+        // a four-point twinkle over a soft halo
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${0.16 * fade})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 1.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 88%, ${fade})`;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - r * 1.6);
+        ctx.quadraticCurveTo(p.x, p.y, p.x + r * 1.6, p.y);
+        ctx.quadraticCurveTo(p.x, p.y, p.x, p.y + r * 1.6);
+        ctx.quadraticCurveTo(p.x, p.y, p.x - r * 1.6, p.y);
+        ctx.quadraticCurveTo(p.x, p.y, p.x, p.y - r * 1.6);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const move = MOVES[stage];
+  const isStir = !move.check;
   return (
     <div className="dance-stage" onPointerDown={() => chargeRef.current(4)}>
       <div className="move-scene" key={stage}>
@@ -235,19 +450,54 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
         <div className="dance-cam-wrap">
           <CamFrame className="dance-cam-box">
             {stream ? (
-              <>
-                <video ref={vRef} autoPlay playsInline muted className="dance-cam" />
-                <canvas ref={overlayRef} className="dance-overlay" />
-              </>
+              <video ref={vRef} autoPlay playsInline muted className="dance-cam" />
             ) : (
               <div className="dance-cam dance-cam-ph">🥕✨</div>
             )}
-            <span className="dance-prompt">{move.prompt}</span>
+            {/* the pot is drawn twice: whole, behind the ladle — and its front
+                half again on top, so the ladle dips INTO the soup */}
+            {isStir && (
+              <>
+                <img
+                  ref={potRef}
+                  src="/dance/pot.png"
+                  alt=""
+                  draggable={false}
+                  className={`stir-pot${hit ? " stirring" : ""}${burst ? " burst" : ""}`}
+                  style={{ "--g": gauge / 100 } as CSSProperties}
+                />
+                {photo && <div className="stir-photo"><img src={photo} alt="" /></div>}
+                {!burst && gauge < 45 && (
+                  <svg className="stir-hint" viewBox="0 0 200 80" aria-hidden="true">
+                    <ellipse cx="100" cy="40" rx="92" ry="32" />
+                  </svg>
+                )}
+              </>
+            )}
+            {stream && <canvas ref={overlayRef} className="dance-overlay" />}
+            {isStir && (
+              <img
+                src="/dance/pot.png"
+                alt=""
+                draggable={false}
+                className={`stir-pot stir-pot-front${hit ? " stirring" : ""}${burst ? " burst" : ""}`}
+                style={{ "--g": gauge / 100 } as CSSProperties}
+              />
+            )}
+            {burst ? (
+              <span className="dance-prompt top done">{move.cheer}</span>
+            ) : (
+              <span className={`dance-prompt${isStir ? " top" : ""}`}>
+                {isStir && stream && !holding ? "손을 들어 국자를 잡아 봐! 🥄" : move.prompt}
+              </span>
+            )}
           </CamFrame>
-          <div className={`move-guide${hit ? " hit" : ""}`}>
-            <span className="move-guide-label">{hit ? "좋아요! 그대로~ ✨" : "이렇게 해 봐!"}</span>
-            <img src={move.guide} alt="" draggable={false} />
-          </div>
+          {move.guide && (
+            <div className={`move-guide${hit ? " hit" : ""}`}>
+              <span className="move-guide-label">{hit ? "좋아요! 그대로~ ✨" : "이렇게 해 봐!"}</span>
+              <img src={move.guide} alt="" draggable={false} />
+            </div>
+          )}
         </div>
         <div className="magic-gauge" aria-hidden="true">
           <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
@@ -260,6 +510,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
           <span>{move.cheer}</span>
         </div>
       )}
+      {white && <div className="stir-whiteout" />}
     </div>
   );
 }
