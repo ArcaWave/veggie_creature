@@ -117,6 +117,8 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
 
   useEffect(() => {
     speak(MOVES[0].voice);
+    document.body.classList.add("stage-dance"); // the brand moves into the title pill
+    return () => document.body.classList.remove("stage-dance");
   }, []);
 
   useEffect(() => {
@@ -443,11 +445,15 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   return (
     <div className="dance-stage" onPointerDown={() => chargeRef.current(4)}>
       <div className="move-scene" key={stage}>
-        <div className="move-head">
-          <span className="move-badge">{stage + 1} / {MOVES.length}</span>
-          <h2 className="move-title">{move.title}</h2>
-        </div>
+        {/* the camera is the show: the frame takes the whole screen height, and
+            the title (with the brand, whose fixed logo this scene hides) and the
+            gauge ride on the frame's clay bands instead of taking rows of their own */}
         <div className="dance-cam-wrap">
+          <div className="move-head">
+            <img className="move-logo" src="/monggle-logo-kr.png" alt="몽글키즈" draggable={false} />
+            <span className="move-badge">{stage + 1} / {MOVES.length}</span>
+            <h2 className="move-title">{move.title}</h2>
+          </div>
           <CamFrame className="dance-cam-box">
             {stream ? (
               <video ref={vRef} autoPlay playsInline muted className="dance-cam" />
@@ -498,10 +504,10 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
               <img src={move.guide} alt="" draggable={false} />
             </div>
           )}
-        </div>
-        <div className="magic-gauge" aria-hidden="true">
-          <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
-          <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
+          <div className="magic-gauge" aria-hidden="true">
+            <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
+            <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
+          </div>
         </div>
       </div>
       {cheer && (

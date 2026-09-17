@@ -536,16 +536,19 @@ video.camera { transform: scaleX(-1); }
 @keyframes guideBreathe { 0%, 100% { inset: 9%; } 50% { inset: 7.5%; } }
 
 /* dance mini-game: one magic move per scene charges the magic gauge */
-.dance-stage { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(96vw, 1840px); user-select: none; touch-action: manipulation; }
-.move-scene { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; animation: sceneIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.dance-stage { position: relative; display: flex; flex-direction: column; align-items: center; width: min(96vw, 1840px); user-select: none; touch-action: manipulation; }
+.move-scene { display: flex; flex-direction: column; align-items: center; width: 100%; animation: sceneIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 @keyframes sceneIn { from { opacity: 0; transform: translateX(60px) scale(0.96); } to { opacity: 1; transform: none; } }
-.move-head { display: flex; align-items: center; gap: 14px; }
+/* the title rides the frame's top clay band (between the corner characters) */
+.move-head { position: absolute; top: 11.3%; left: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center; gap: 14px; padding: 6px 26px 6px 10px; border-radius: 999px; background: rgba(255, 252, 244, 0.88); box-shadow: var(--shadow); backdrop-filter: blur(4px); white-space: nowrap; }
+.move-logo { height: clamp(34px, 5vmin, 54px); width: auto; display: block; margin-right: 4px; }
+body.stage-dance .brand { display: none; }
 .move-badge { background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(14px, 2.2vmin, 20px); padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow); }
 .move-title { margin: 0; font-size: clamp(26px, 5vmin, 54px); font-weight: 800; color: var(--ink); }
 /* the framed camera fills the stage; the guide child stands on its right edge */
-.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 180px) * 1.6164)); }
+.dance-cam-wrap { position: relative; width: min(100%, calc((100vh - 48px) * 1.6164)); } /* the frame takes the whole height: on the 55" TV the camera IS the scene */
 .dance-cam-box { width: 100%; }
-.move-guide { position: absolute; right: 2%; bottom: 5%; height: 62%; z-index: 3; transform: translateX(40%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; }
+.move-guide { position: absolute; right: 2%; bottom: 5%; height: 62%; z-index: 3; transform: translateX(24%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; }
 .move-guide img { height: 100%; width: auto; display: block; filter: drop-shadow(0 14px 16px rgba(120, 80, 30, 0.28)); animation: guideBob 2.2s ease-in-out infinite; transform-origin: 50% 100%; transition: filter 0.25s ease; }
 .move-guide.hit img { filter: drop-shadow(0 0 22px rgba(255, 190, 60, 0.95)) drop-shadow(0 14px 16px rgba(120, 80, 30, 0.28)); animation: guideCheer 0.5s ease-in-out infinite alternate; }
 .move-guide-label { position: absolute; bottom: 100%; margin-bottom: 8px; background: #fff; color: var(--green-dark); font-weight: 800; font-size: clamp(16px, 2.6vmin, 30px); padding: 8px 18px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; }
@@ -586,7 +589,8 @@ video.camera { transform: scaleX(-1); }
 @keyframes whiteIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .stir-pot.stirring, .stir-hint, .stir-hint ellipse { animation: none; } }
 
-.magic-gauge { position: relative; width: 100%; height: 42px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
+/* the gauge rides the frame's bottom clay band (between the mushrooms and the tomato) */
+.magic-gauge { position: absolute; left: 27%; right: 27%; bottom: 3.4%; transform: translateY(50%); z-index: 4; height: 40px; border-radius: 999px; background: rgba(255, 255, 255, 0.75); box-shadow: inset 0 2px 6px rgba(150, 100, 40, 0.18); overflow: hidden; }
 .magic-gauge-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ffd54d, #ffb300, #ff8f5e); transition: width 0.25s ease-out; box-shadow: 0 0 14px rgba(255, 190, 60, 0.8); }
 .magic-gauge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 18px; font-weight: 800; color: #7a5410; font-size: clamp(15px, 2.6vmin, 26px); }
 

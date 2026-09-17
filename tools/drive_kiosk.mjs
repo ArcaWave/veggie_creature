@@ -31,7 +31,10 @@ await send("Page.navigate", { url: URL0 });
 console.log("welcome:", await until(`!!document.querySelector('.mirror video')`));
 await sleep(2500);
 await ev(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }))`);
-console.log("dance:", await until(`!!document.querySelector('.dance-stage')`, 60000));
+console.log("dance:", await until(`!!document.querySelector('.dance-stage video, .dance-stage .dance-cam-ph')`, 90000));
+await sleep(1800); await shot("0_scene1");
+await ev(`document.querySelector('.dance-stage')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+if (await until(`(document.querySelector('.move-badge')?.textContent || '').startsWith('2')`, 40000, 40)) { await sleep(1800); await shot("0_scene2"); }
 const FAST = process.argv.includes("--play12") ? false : true; // tap through scenes 1 and 2
 if (FAST) console.log("stir:", await until(`(() => { document.querySelector('.dance-stage')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); return (document.querySelector('.move-title')?.textContent || '').includes('냄비'); })()`, 30000, 40));
 else console.log("stir:", await until(`(document.querySelector('.move-title')?.textContent || '').includes('냄비')`, 90000));
