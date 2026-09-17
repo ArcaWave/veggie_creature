@@ -591,11 +591,11 @@ video.camera { transform: scaleX(-1); }
 /* ---------- the birth scene: the magic meadow stage (dust -> alive -> walk) ---------- */
 .birth-stage { position: fixed; inset: 0; overflow: hidden; z-index: 30; background: #fbf3d8 url("/birth-stage.jpg") center / cover no-repeat; }
 .birth-title { position: absolute; left: 50%; top: 5%; transform: translateX(-50%); margin: 0; font-size: clamp(30px, 5.2vmin, 60px); font-weight: 800; color: var(--ink); text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95); white-space: nowrap; animation: pop 0.5s ease; }
-.birth-stage.alive .birth-title { color: var(--green-dark); animation: titleBounce 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+.birth-stage.is-alive .birth-title { color: var(--green-dark); animation: titleBounce 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
 @keyframes titleBounce { from { opacity: 0; transform: translateX(-50%) scale(0.4); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
 /* the light behind the podium: a breathing glow and slowly turning rays */
 .birth-glow { position: absolute; left: 50%; top: 45%; width: 58vmin; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(255, 252, 214, 0.95) 0%, rgba(232, 246, 178, 0.55) 40%, rgba(232, 246, 178, 0) 70%); mix-blend-mode: screen; animation: glowBreathe 2.6s ease-in-out infinite; pointer-events: none; }
-.birth-stage.alive .birth-glow { animation: glowFlare 1.2s ease-out both, glowBreathe 2.6s ease-in-out 1.2s infinite; }
+.birth-stage.is-alive .birth-glow { animation: glowFlare 1.2s ease-out both, glowBreathe 2.6s ease-in-out 1.2s infinite; }
 @keyframes glowBreathe { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.85; } 50% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; } }
 @keyframes glowFlare { 0% { transform: translate(-50%, -50%) scale(0.6); opacity: 1; } 40% { transform: translate(-50%, -50%) scale(1.6); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.85; } }
 .birth-rays { position: absolute; left: 50%; top: 45%; width: 130vmin; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0) 0deg 9deg, rgba(255, 255, 230, 0.5) 9deg 14deg, rgba(255, 255, 255, 0) 14deg 24deg); -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%); mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, 0.6) 35%, transparent 62%); animation: raysTurn 48s linear infinite; mix-blend-mode: screen; pointer-events: none; }

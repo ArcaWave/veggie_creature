@@ -349,7 +349,7 @@ function MagicStep({
   // off to the right. (birth-origin marks the podium for the confetti burst.)
   if ((phase === "dust" || phase === "alive" || phase === "walk") && parts) {
     return (
-      <div className={`birth-stage ${phase}`}>
+      <div className={`birth-stage is-${phase}`}>
         <div className="birth-rays" />
         <div className="birth-glow" />
         <div className="birth-particles" aria-hidden="true">
