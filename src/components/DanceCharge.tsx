@@ -10,8 +10,12 @@ import { CamFrame } from "./CamFrame";
 // held poses (no timing to get right), chosen for how reliably BlazePose reads
 // them from an upper-body webcam view: arms out level = airplane, both hands
 // joined above the head = heart. Forgiving for the special-needs event:
-// holding the pose charges fast, tapping the screen charges too, a trickle
-// starts after 10s and each scene hard-completes by ~20s — nobody is stuck.
+// holding the pose charges fast; and when nothing has been recognised for a
+// few seconds (a child who doesn't follow, or is just playing around) the
+// dust quietly starts gathering by itself — easing in, never a visible jump —
+// so every scene completes on its own in about 20 s. Nobody is ever stuck.
+// (Tapping/clicking the stage also charges: a tester's shortcut — the
+// exhibition screen is not a touch screen, so it is not advertised.)
 type LM = NormalizedLandmark[];
 const seen = (p: NormalizedLandmark) => (p.visibility ?? 1) > 0.4;
 
@@ -49,6 +53,10 @@ export const MOVES = [
 ] as const;
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes
+const ASSIST_AFTER_MS = 5000; // this long without a recognised pose → the quiet assist begins
+const ASSIST_RAMP_MS = 4000;  // …easing in over this long, so its start is imperceptible
+const ASSIST_RATE = 7;        // gauge % per second once fully eased in
+const TICK_MS = 130;
 
 export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; onFull: () => void }) {
   const vRef = useRef<HTMLVideoElement>(null);
@@ -61,6 +69,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
   const stageRef = useRef(0);
   const cheerRef = useRef(false);
   const stageT0 = useRef(Date.now());
+  const lastHitAt = useRef(Date.now()); // last moment the child's own move charged the gauge
   const doneRef = useRef(false);
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
@@ -90,6 +99,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
       if (stageRef.current < MOVES.length - 1) {
         stageRef.current += 1;
         stageT0.current = Date.now();
+        lastHitAt.current = Date.now();
         gaugeRef.current = 0;
         cheerRef.current = false;
         setGauge(0);
@@ -145,7 +155,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
             drawOverlay(v, boxes, main);
             const ok = main >= 0 && MOVES[stageRef.current].check(poses[main]);
             setHit(ok);
-            if (ok) chargeRef.current(6);
+            if (ok) { lastHitAt.current = Date.now(); chargeRef.current(6); }
           } catch { /* one bad frame — skip */ }
         } else if (diffCtx) {
           diffCtx.drawImage(v, 0, 0, 64, 48);
@@ -155,16 +165,21 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) chargeRef.current(2.5);
+            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = Date.now(); chargeRef.current(2.5); }
           }
           prev = d;
         }
       }
-      // never a dead end: per-scene trickle, hard-full within ~20s
-      const held = Date.now() - stageT0.current;
-      if (held > 10000) chargeRef.current(0.8);
-      if (held > 20000) chargeRef.current(5);
-    }, 130);
+      // never a dead end — and never obvious: idle for a few seconds → the
+      // gauge eases into a slow, slightly uneven climb of its own
+      const now = Date.now();
+      const idle = now - Math.max(stageT0.current, lastHitAt.current);
+      if (idle > ASSIST_AFTER_MS) {
+        const r = Math.min(1, (idle - ASSIST_AFTER_MS) / ASSIST_RAMP_MS), ease = r * r * (3 - 2 * r);
+        const breath = 1 + 0.25 * Math.sin(now / 700) + 0.1 * Math.sin(now / 230);
+        chargeRef.current(ASSIST_RATE * ease * breath * (TICK_MS / 1000));
+      }
+    }, TICK_MS);
     return () => { stopped = true; clearInterval(id); };
   }, []);
 
@@ -236,7 +251,7 @@ export function DanceCharge({ stream, onFull }: { stream: MediaStream | null; on
         </div>
         <div className="magic-gauge" aria-hidden="true">
           <div className="magic-gauge-fill" style={{ width: `${gauge}%` }} />
-          <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}% <small>화면을 팡팡 눌러도 모여요!</small></span>
+          <span className="magic-gauge-label">✨ 마법가루 {Math.round(gauge)}%</span>
         </div>
       </div>
       {cheer && (
