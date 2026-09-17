@@ -51,10 +51,9 @@ const imageModel = () => process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-ima
 const videoModel = () => process.env.GEMINI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
 const matchModel = () => process.env.GEMINI_MATCH_MODEL || "gemini-2.5-flash";
 
-// The pre-generated creature library (tools/pregen_variants.py + public/variants).
-export const VARIANT_IDS = [
-  "carrot", "broccoli", "tomato", "potato", "cucumber", "eggplant", "corn", "cauliflower",
-] as const;
+// The event's five main vegetables — the bodies a child can build on, and so
+// the only bodies the figure library (public/parts/fig_*.png) has.
+export const VARIANT_IDS = ["pumpkin", "corn", "sweetpotato", "tomato", "onion"] as const;
 
 export type Result = { status: number; body: Record<string, unknown> };
 
@@ -104,11 +103,21 @@ const MATCH_PROMPT =
   "attached). The creature is assembled as: a MAIN BODY vegetable (the torso — the biggest " +
   "central piece), one optional HAT sticker on top, two ARM stickers and two LEG stickers. " +
   "Identify each: " +
-  "`variant` = the kind of the main body vegetable (by its shape and color). " +
-  "`hat` = the hat sticker: leaves = a green leafy sprout hat, acorn = a brown acorn cap, " +
-  "straw = a yellow woven straw hat, none = no hat at all. " +
-  "`arms` and `legs` = the sticker style of the limbs: twig = brown wooden twigs/branches, " +
-  "cucumber = green cucumber slices or pieces, carrot = orange carrot sticks. " +
+  "`variant` = the kind of the main body vegetable, one of exactly five: " +
+  "pumpkin = a big flattened-round ribbed pumpkin, dull tan-orange or yellowish-brown (a Korean old pumpkin); " +
+  "corn = an ear of corn, yellow kernels, maybe with green or pale husk; " +
+  "sweetpotato = an elongated tapered root with reddish-purple or brownish-purple skin; " +
+  "tomato = a round smooth glossy red fruit with a small green stem; " +
+  "onion = a round bulb with dry papery golden-brown (or white/purple) skin and a pointed tip. " +
+  "Pick the closest of the five by shape first, then color. " +
+  "`hat` = the hat sticker on top: leaves = a crown or garland of red, orange and yellow autumn " +
+  "maple leaves with little acorns; acorn = a big brown dome-shaped cap with a scaly acorn-cup / " +
+  "pinecone texture (a few leaves may peek out beside it); straw = a woven yellow straw sun hat " +
+  "with a checked ribbon; none = no hat at all. " +
+  "`arms` and `legs` = the sticker style of the limbs: twig = brown wooden twigs/branches (arms " +
+  "end in twig fingers, legs in round brown feet), cucumber = green bumpy cucumber pieces, " +
+  "carrot = orange carrots with green tops. If the two arms (or the two legs) are of different " +
+  "styles, answer the style that is more clearly visible. " +
   "Ignore googly eyes, toothpicks, the hands holding it, the table and other decorations. " +
   "First describe what you see briefly in `reason`, then fill every field. " +
   "IMPORTANT: if NO vegetable creation is visible at all — an empty scene, only a person or " +

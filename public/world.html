@@ -44,7 +44,7 @@ import { RoomEnvironment } from "/vendor/three/examples/jsm/environments/RoomEnv
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 const DEBUG = new URLSearchParams(location.search).has("debug");
-// ?closeup=carrot,leaves,twig,carrot  -> one creature, framed close, slowly turning (asset review / reveal)
+// ?closeup=tomato,leaves,twig,carrot  -> one creature, framed close, slowly turning (asset review / reveal)
 const CLOSEUP = new URLSearchParams(location.search).get("closeup");
 const POLL_MS = 5000;
 const MAX_ON_STAGE = 12;
@@ -518,7 +518,7 @@ function sticker(def) {
 // parts = { body, hat, arms, legs }  ->  a Creature with animation state
 function assemble(parts) {
   const root = new THREE.Group();          // feet on the ground (y=0)
-  const b = BODIES[parts.body] || BODIES.carrot;
+  const b = BODIES[parts.body] || Object.values(BODIES)[0];
   const key = `${parts.body}_${parts.arms}_${parts.legs}`;
   const fig = FIGURES[key];
   // the complete figure (fallback: the body-only render until its figure exists)
@@ -530,7 +530,7 @@ function assemble(parts) {
   const body = sticker(def);
   bodyPivot.add(body);
   const hat = sticker(PARTS.hats[parts.hat]);
-  hat.position.set(0, def.h * (1 - b.hatY), 0.03);
+  hat.position.set(0, def.h * (1 - (fig?.hatY ?? b.hatY)), 0.03); // each figure carries its own hat socket
   bodyPivot.add(hat);
   return { root, body, bodyPivot, hat, height: def.h, baseY: 0, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
 }
@@ -666,7 +666,7 @@ function partsFor(entry) {
   const h = hash(entry.id);
   const keys = (o) => Object.keys(o);
   return {
-    body: BODIES[entry.variant] ? entry.variant : "carrot",
+    body: BODIES[entry.variant] ? entry.variant : keys(BODIES)[(h >>> 4) % keys(BODIES).length], // (a vegetable from before the line-up changed)
     hat: keys(PARTS.hats)[h % keys(PARTS.hats).length],
     arms: keys(PARTS.arms)[(h >>> 8) % keys(PARTS.arms).length],
     legs: keys(PARTS.legs)[(h >>> 16) % keys(PARTS.legs).length],
@@ -745,7 +745,7 @@ async function poll(first) {
 await figuresReady;
 applyScene(sceneNow(), true);
 if (CLOSEUP) {
-  const [body = "carrot", hat = "leaves", arms = "twig", legs = "carrot"] = CLOSEUP.split(",");
+  const [body = "tomato", hat = "leaves", arms = "twig", legs = "carrot"] = CLOSEUP.split(",");
   const e = { id: `closeup-${body}`, variant: body, at: Date.now(), parts: { body, hat, arms, legs } };
   addCreature(e, false);
   const c = onStage.get(e.id);

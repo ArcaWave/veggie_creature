@@ -14,3 +14,6 @@ animator/creatures
 
 # dev-only visual review captures
 .shots/
+
+# raw character renders (regenerable: tools/gen_figures.py)
+tools/figs_src/

@@ -1,59 +1,47 @@
 {
  "bodies": {
-  "carrot": {
-   "h": 2.3,
-   "hatY": 0.13
-  },
-  "eggplant": {
-   "h": 2.2,
-   "hatY": 0.11
-  },
-  "tomato": {
-   "h": 1.9,
-   "hatY": 0.13
-  },
-  "potato": {
-   "h": 2.0,
-   "hatY": 0.09
-  },
-  "cucumber": {
-   "h": 2.25,
-   "hatY": 0.08
+  "pumpkin": {
+   "h": 1.95,
+   "hatY": 0.205
   },
   "corn": {
    "h": 2.1,
    "hatY": 0.11
   },
-  "broccoli": {
-   "h": 2.1,
-   "hatY": 0.09
+  "sweetpotato": {
+   "h": 2.15,
+   "hatY": 0.145
   },
-  "cauliflower": {
-   "h": 1.8,
-   "hatY": 0.1
+  "tomato": {
+   "h": 1.9,
+   "hatY": 0.13
+  },
+  "onion": {
+   "h": 1.9,
+   "hatY": 0.205
   }
  },
  "hats": {
   "leaves": {
    "tex": "/parts/cute_hat_leaves.png",
-   "h": 0.5,
-   "aspect": 1.2452,
+   "h": 0.6,
+   "aspect": 1.7846,
    "ax": 0.5,
-   "ay": 0.96
+   "ay": 0.84
   },
   "acorn": {
    "tex": "/parts/cute_hat_acorn.png",
-   "h": 0.62,
-   "aspect": 0.9023,
+   "h": 0.5,
+   "aspect": 1.9553,
    "ax": 0.5,
-   "ay": 0.95
+   "ay": 0.72
   },
   "straw": {
    "tex": "/parts/cute_hat_straw.png",
-   "h": 0.4,
-   "aspect": 1.9591,
-   "ax": 0.5,
-   "ay": 0.82
+   "h": 0.8,
+   "aspect": 1.4768,
+   "ax": 0.42,
+   "ay": 0.56
   }
  },
  "arms": [

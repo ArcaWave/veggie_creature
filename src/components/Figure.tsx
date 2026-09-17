@@ -12,7 +12,7 @@ type Rig = {
   hats: Record<string, { tex: string; h: number; aspect: number; ax: number; ay: number }>;
   arms: string[];
   legs: string[];
-  figures: Record<string, { aspect: number }>;
+  figures: Record<string, { aspect: number; hatY?: number }>; // hatY: this figure's own hat socket
 };
 
 let rigPromise: Promise<Rig> | null = null;
@@ -31,7 +31,7 @@ export function loadRig(): Promise<Rig> {
 export async function randomParts(body: string): Promise<Parts> {
   const rig = await loadRig();
   const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
-  return { body: rig.bodies[body] ? body : "carrot", hat: pick(["none", ...Object.keys(rig.hats)]), arms: pick(rig.arms), legs: pick(rig.legs) };
+  return { body: rig.bodies[body] ? body : Object.keys(rig.bodies)[0], hat: pick(["none", ...Object.keys(rig.hats)]), arms: pick(rig.arms), legs: pick(rig.legs) };
 }
 
 export function Figure({ parts, className = "" }: { parts: Parts; className?: string }) {
@@ -43,7 +43,7 @@ export function Figure({ parts, className = "" }: { parts: Parts; className?: st
   }, []);
   if (!rig) return <div className={`figure ${className}`} />;
 
-  const b = rig.bodies[parts.body] ?? rig.bodies.carrot;
+  const b = rig.bodies[parts.body] ?? Object.values(rig.bodies)[0];
   const key = `${parts.body}_${parts.arms}_${parts.legs}`;
   const fig = rig.figures[key];
   const src = fig ? `/parts/fig_${key}.png` : `/parts/cute_body_${parts.body}.png`;
@@ -53,7 +53,7 @@ export function Figure({ parts, className = "" }: { parts: Parts; className?: st
   // width = height × aspect): the hat's anchor (ax, ay) sits on the socket
   const hatH = hat ? (hat.h / b.h) * 100 : 0;
   const hatW = hat ? ((hat.h / b.h) * hat.aspect) / aspect * 100 : 0;
-  const hatTop = hat ? b.hatY * 100 - hatH * hat.ay : 0;
+  const hatTop = hat ? (fig?.hatY ?? b.hatY) * 100 - hatH * hat.ay : 0;
   const hatLeft = hat ? 50 - hatW * hat.ax : 0;
 
   return (

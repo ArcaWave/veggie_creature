@@ -247,7 +247,7 @@ function MagicStep({
   useEffect(() => {
     (async () => {
       track("match_start");
-      const RANDOM = ["carrot", "broccoli", "tomato", "potato", "cucumber", "eggplant", "corn", "cauliflower"];
+      const RANDOM = ["pumpkin", "corn", "sweetpotato", "tomato", "onion"];
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
       let p: Parts | null = null;
       try {
@@ -298,7 +298,7 @@ function MagicStep({
   function danceDone() {
     if (!aliveRef.current || danceDoneRef.current) return;
     danceDoneRef.current = true;
-    const v = variantRef.current ?? "carrot";
+    const v = variantRef.current ?? "tomato";
     track("dance_done", { variant: v });
     setPhase("alive");
     sparkle();

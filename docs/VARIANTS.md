@@ -1,23 +1,39 @@
-# 변형(경우의 수) 캐릭터 카탈로그
+# 캐릭터 라인업 (2026-09-17 확정)
 
-아이들 만들기 키트 구성: **머리(모자) + 몸통(메인 야채) + 팔다리**.
-매칭은 **몸통(메인 야채)의 색·종류**를 기준으로 판단한다 (부속은 무시).
+전시 키트 = **실제 채소 1개(몸통) + 스티커(모자·팔·다리)**. 스캔 스테이션이 사진에서
+몸통 채소와 스티커 종류를 읽고, 같은 조합의 클레이 3D 캐릭터를 월드에 보낸다.
 
-클립 파일: `public/variants/<id>.greet.gif`(인사) / `<id>.smile.gif`(신남) / `<id>.png`(스틸)
-원본 mp4: `variants-src/` · 재생성: `tools/pregen_variants.py` → `tools/finalize_variants.py`
+## 몸통 5종 (`variant` / `parts.body`)
 
-| id | 이름 | 몸통(메인) | 머리(모자) | 카테고리 | 클립 |
-|----|------|-----------|-----------|----------|------|
-| carrot      | 당근이     | 주황 당근            | 초록 새싹        | 🟠 주황 · 뿌리 · 둥근   | greet, smile |
-| broccoli    | 브로콜리   | 초록 줄기            | 몽글 송이        | 🟢 진초록 · 꽃 · 송이   | greet, smile |
-| tomato      | 토마토     | 빨강 광택            | 초록 꼭지 모자   | 🔴 빨강 · 열매 · 둥근   | greet, smile |
-| potato      | 감자       | 베이지+갈색 주근깨   | (민머리)         | 🟤 베이지 · 뿌리 · 둥근 | greet, smile |
-| cucumber    | 오이       | 초록 줄무늬 길쭉     | (민머리)         | 🟢 연초록 · 열매 · 길쭉 | greet, smile |
-| eggplant    | 가지       | 보라 광택            | 초록 꼭지 모자   | 🟣 보라 · 열매 · 길쭉둥근 | greet, smile |
-| corn        | 옥수수     | 노랑 알갱이          | 수염·껍질잎      | 🟡 노랑 · 곡물 · 길쭉   | greet, smile |
-| cauliflower | 콜리플라워 | 크림 흰 송이         | 연두 잎 장식     | ⚪ 흰색 · 꽃 · 송이     | greet, smile |
+| id          | 채소     | 생김새                                   |
+|-------------|----------|------------------------------------------|
+| pumpkin     | 늙은호박 | 납작 둥근, 세로 골, 누런 주황, 꼬불 꼭지 |
+| corn        | 옥수수   | 노란 알갱이, 연두 껍질                   |
+| sweetpotato | 고구마   | 길쭉, 양끝 뾰족, 자줏빛                  |
+| tomato      | 토마토   | 둥근 빨강, 초록 꼭지                     |
+| onion       | 양파     | 둥근 황갈색, 세로 결, 뾰족한 끝          |
 
-## 유형 추가/교체 방법
-1. `tools/pregen_variants.py`의 `VARIANTS` 목록에 (id, 영어 묘사) 추가
-2. `api/_gemini.ts`의 `VARIANT_IDS`에 id 추가
-3. `python3 tools/pregen_variants.py images` → `videos` → `animator/venv/bin/python tools/finalize_variants.py`
+## 스티커 (형태는 스티커 시트 그대로, 질감은 클레이 3D)
+
+| 종류 | id                          | 생김새 |
+|------|-----------------------------|--------|
+| 모자 | leaves · acorn · straw · none | 단풍잎+도토리 화관 · 솔방울 비늘 모자(단풍·도토리 장식) · 체크 리본 밀짚모자 · 없음 |
+| 팔   | twig · cucumber · carrot    | 손가락 달린 나뭇가지 · 잎사귀 손의 울퉁불퉁 오이 · 초록 꼭지+손가락 당근 |
+| 다리 | twig · cucumber · carrot    | 둥근 발 나뭇가지 그루터기 · 장화 같은 오이 · 장화 같은 당근(초록 잎) |
+
+## 경우의 수와 에셋
+
+- 아이가 만들 수 있는 조합: 5 × 3(팔) × 3(다리) × 4(모자 3 + 없음) = **180** (모자 필수면 135)
+- 렌더는 **몸통×팔×다리 = 45장** (`public/parts/fig_<body>_<arms>_<legs>.png`) —
+  모자는 3장(`cute_hat_*.png`)을 머리 위 소켓(`rig.json`의 `hatY`)에 얹는다.
+- 팔(또는 다리) 양쪽이 서로 다른 스티커면 더 잘 보이는 쪽 하나로 맞춘다.
+
+## 다시 만들기
+
+```
+python3 tools/gen_figures.py          # 없는 .src.png만 생성 (sample = 모자 3 + 캐릭터 3)
+python3 tools/cut_figures.py          # 배경 제거 + figures.json
+```
+
+스티커 참조 이미지: `tools/sticker_refs/` (시트에서 자른 것). 인식 프롬프트: `api/_gemini.ts`.
+(`public/variants/`, `public/world2d.html`은 예전 2D 월드용 — 현재 흐름에서는 쓰지 않는다.)
