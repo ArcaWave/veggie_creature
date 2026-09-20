@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Veggie Creature — Digital Village (3D)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
 <style>
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; overflow: hidden; background: #1a0d05; }
@@ -19,6 +22,15 @@
   #bgnav button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
   #bgnav button:hover { background: rgba(255, 244, 220, 0.16); }
   #bgnav span { min-width: 96px; text-align: center; font: 600 13px/1 "Noto Serif KR", serif; letter-spacing: 0.06em; }
+  /* speech bubbles: HTML over the canvas (crisp text), placed over each head every frame */
+  #bubbles { position: absolute; inset: 0; z-index: 5; overflow: hidden; pointer-events: none; }
+  .bubble { position: absolute; left: 0; top: 0; will-change: transform; }
+  .bubble-in { position: relative; font-family: "Jua", "Apple SD Gothic Neo", system-ui, sans-serif; line-height: 1.15; white-space: nowrap; color: #4a2f14; background: #fffdf6; border: 0.13em solid #f2c777; border-radius: 1.05em; padding: 0.34em 0.78em 0.3em; box-shadow: 0 0.25em 0.7em rgba(80, 45, 10, 0.24); transform-origin: var(--tail, 50%) 115%; animation: bubbleIn 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.5) both; }
+  .bubble-in::after { content: ""; position: absolute; left: var(--tail, 50%); top: 100%; width: 0.7em; height: 0.7em; margin: -0.42em 0 0 -0.35em; background: inherit; border: inherit; border-top-color: transparent; border-left-color: transparent; border-radius: 0 0 0.18em 0; transform: rotate(45deg); }
+  .bubble.mine .bubble-in { background: #fff3cf; border-color: #ff9f43; color: #7a3a06; } /* the newcomer: "that one is mine!" */
+  .bubble.out .bubble-in { animation: bubbleOut 0.3s ease-in both; }
+  @keyframes bubbleIn { from { opacity: 0; transform: scale(0.3) translateY(0.4em); } to { opacity: 1; transform: none; } }
+  @keyframes bubbleOut { to { opacity: 0; transform: scale(0.6) translateY(0.3em); } }
   #hud { position: absolute; left: 14px; bottom: 12px; z-index: 10; color: rgba(255, 244, 220, 0.55); font: 600 13px/1.4 "Noto Serif KR", serif; letter-spacing: 0.08em; pointer-events: none; }
 </style>
 </head>
@@ -26,6 +38,7 @@
 <button id="fs" title="전체화면">⛶</button>
 <button id="snd" title="배경음악 켜기/끄기 (M) · 볼륨 [ ]"><i>🔊</i><span></span></button>
 <div id="bgnav" title="배경 미리보기 — 전체화면에서는 숨겨지고 자동 순환으로 돌아갑니다"><button id="bgPrev">◀</button><span id="bgName"></span><button id="bgNext">▶</button></div>
+<div id="bubbles"></div>
 <div id="hud"></div>
 
 <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
@@ -412,6 +425,7 @@ function ambientTick(dt) {
   }
   if (fx.meteors && ambient.time >= ambient.meteorNext) {
     launchMeteor(0);
+    window.dispatchEvent(new Event("vc-meteor"));
     if (Math.random() < 0.3) launchMeteor(rnd(0.3, 0.7)); // now and then a pair
     ambient.meteorNext = ambient.time + rnd(...fx.meteors.every);
   }
@@ -684,8 +698,132 @@ function freeSpot(self) {
   return { x: rnd(...groundX(z)), z };
 }
 
+// ---- speech bubbles ----------------------------------------------------------
+// Short lines a child can read from across the room. Never a crowd: two at a
+// time (three on a busy stage), each speaker rests before speaking again.
+// A newcomer announces itself in its own colour — "that one is mine!" — and
+// the nearest friend answers. ?bubbles=0 turns them off.
+const LINES = {
+  arrive: ["짠! 내가 왔어! ✨", "안녕! 나 살아났어! 🎉", "우와~ 여기가 디지털 세계!", "얘들아, 나 왔어!"],
+  greet: ["어서 와! 👋", "새 친구다! 반가워!", "우와, 멋지다!", "같이 놀자!"],
+  bye: ["안녕~ 또 만나! 👋", "재미있었어! 안녕~", "다음에 또 놀자!"],
+  chatA: ["안녕? 👋", "우리 같이 놀까?", "너 정말 멋지다!", "오늘 기분 어때?", "나랑 춤출래?"],
+  chatB: ["안녕! 반가워!", "좋아! 좋아!", "헤헤, 고마워!", "최고야! 😄", "그래, 같이 하자!"],
+  idle: ["가을이 참 좋아~ 🍂", "오늘 날씨 최고!", "나를 만들어 줘서 고마워 💛", "살랑살랑~ 바람 좋다", "여기 너무 재밌어!", "친구들아~ 어디 있니?", "기분이 몽글몽글해 ☁️"],
+  jump: ["폴짝! 폴짝!", "높이높이 뛰자!", "이얍!"],
+  dance: ["랄랄라~ ♪", "둠칫 둠칫 ♬", "신난다!"],
+  wave: ["안녕~ 👋", "여기야 여기!", "나 보여?"],
+  hat: { leaves: ["내 단풍 왕관 어때? 🍁"], acorn: ["도토리 모자 멋지지? 🌰"], straw: ["밀짚모자 쓰고 나들이~ 👒"] },
+  body: {
+    pumpkin: ["나는 둥글둥글 호박! 🎃", "호박이 넝쿨째 굴러왔어!"],
+    corn: ["옥수수 알이 톡톡! 🌽", "나는 노란 옥수수야!"],
+    sweetpotato: ["나는 달콤한 고구마! 🍠", "고구마는 가을이 제맛!"],
+    tomato: ["나는 새빨간 토마토! 🍅", "토마토~ 토마토~ ♪"],
+    onion: ["나는 동글동글 양파! 🧅", "나 때문에 울지 마~"],
+  },
+  scene: {
+    harvest: ["벼가 노랗게 익었네! 🌾", "풍년이다, 풍년!"],
+    field: ["허수아비 아저씨 안녕!", "송편 먹고 싶다~"],
+    night: ["달이 참 밝다~ 🌕", "토끼야, 뭐 하니?", "몸이 둥실둥실 가벼워!"],
+    moon: ["보름달에 소원 빌자! 🌕", "풍등이 올라간다~ ✨", "강강술래~ ♪"],
+    market: ["맛있는 냄새가 나! 😋", "장터 구경 가자!", "노을이 참 예쁘다~ 🌇"],
+  },
+  meteor: ["별똥별이다! ✨", "소원 빌자! 🙏", "우와! 봤어?"],
+};
+const BUBBLES_ON = _q.get("bubbles") !== "0";
+const bubbleLayer = document.getElementById("bubbles");
+const talk = { next: 0, last: null };
+// someone right next to a speaker waits: two bubbles side by side would overlap
+const crowded = (c) => [...onStage.values()].some((o) => o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4);
+function say(c, text, ms = 3200, cls = "") {
+  if (!BUBBLES_ON || !c || c.bubble || !c.root.visible || CLOSEUP) return false;
+  if (cls !== "mine" && cls !== "reply" && crowded(c)) return false;
+  const el = document.createElement("div");
+  el.className = `bubble ${cls}`;
+  const inner = document.createElement("div");
+  inner.className = "bubble-in";
+  inner.textContent = text;
+  el.appendChild(inner);
+  bubbleLayer.appendChild(el);
+  c.bubble = { el, inner, until: performance.now() + ms, w: 0 };
+  c.spokeAt = performance.now();
+  return true;
+}
+function hush(c) {
+  if (!c.bubble) return;
+  c.bubble.el.remove();
+  c.bubble = null;
+}
+const speakers = () => [...onStage.values()].filter((c) => c.bubble).length;
+// (someone standing right in front would wear the bubble: whoever is hidden keeps quiet)
+const hidden = (c) => [...onStage.values()].some((o) => o !== c && o.root.visible && o.root.position.z > c.root.position.z + 0.4 && Math.abs(o.root.position.x - c.root.position.x) < 1.7);
+const canSpeak = (c) => c.root.visible && !c.leaving && !c.bubble && c.mode !== "pop" && !hidden(c) && performance.now() - (c.spokeAt ?? -9000) > 9000;
+const nearestTo = (c, ok) => [...onStage.values()].filter((o) => o !== c && ok(o))
+  .sort((a, b) => a.root.position.distanceTo(c.root.position) - b.root.position.distanceTo(c.root.position))[0];
+function welcome(c) {
+  hush(c);
+  for (const o of onStage.values()) if (o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4) hush(o);
+  say(c, pick(LINES.arrive), 4600, "mine");
+  const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
+  if (friend) setTimeout(() => { hush(friend); if (onStage.has(friend.entry.id)) say(friend, pick(LINES.greet), 3000); }, 1700);
+  talk.next = performance.now() + 5200; // let the newcomer have the floor
+}
+function chatter(now) {
+  if (!BUBBLES_ON || now < talk.next || onStage.size === 0) return;
+  talk.next = now + rnd(2400, 4800);
+  if (speakers() >= (onStage.size >= 6 ? 3 : 2)) return;
+  const free = [...onStage.values()].filter(canSpeak);
+  const c = pick(free.filter((o) => o !== talk.last).length ? free.filter((o) => o !== talk.last) : free);
+  if (!c) return;
+  talk.last = c;
+  const friend = nearestTo(c, canSpeak);
+  const gap = friend ? Math.abs(friend.root.position.x - c.root.position.x) : 99;
+  if (friend && gap >= 3.4 && gap < 6 && Math.random() < 0.4) { // a little exchange, across a gap the two bubbles fit in
+    const i = Math.floor(Math.random() * LINES.chatA.length);
+    say(c, LINES.chatA[i], 3000);
+    setTimeout(() => { if (onStage.has(friend.entry.id) && !friend.leaving) say(friend, LINES.chatB[i], 3000, "reply"); }, 1500);
+    return;
+  }
+  const r = Math.random();
+  const byMode = LINES[c.mode];
+  const line = Array.isArray(byMode) && r < 0.4 ? pick(byMode)
+    : r < 0.6 ? pick(LINES.scene[currentScene] || LINES.idle)
+    : r < 0.78 ? pick(LINES.body[c.parts?.body] || LINES.idle)
+    : r < 0.88 && LINES.hat[c.parts?.hat] ? pick(LINES.hat[c.parts.hat])
+    : pick(LINES.idle);
+  say(c, line);
+}
+window.addEventListener("vc-meteor", () => { const c = pick([...onStage.values()].filter(canSpeak)); if (c) say(c, pick(LINES.meteor), 2800); });
+// every frame: each bubble sits over its speaker's head, sized by how near the speaker is
+const _head = new THREE.Vector3(), _feet = new THREE.Vector3();
+function placeBubbles(now) {
+  const placed = [];
+  for (const c of onStage.values()) {
+    const b = c.bubble;
+    if (!b) continue;
+    if (now > b.until + 300 || !c.root.visible) { hush(c); continue; }
+    if (now > b.until) b.el.classList.add("out");
+    const top = (c.height + (c.hat ? 0.3 : 0.04)) * c.root.scale.y + (c.bodyPivot.position.y || 0);
+    _feet.copy(c.root.position).project(camera);
+    _head.copy(c.root.position).setY(top).project(camera);
+    const px = (_head.y - _feet.y) * 0.5 * innerHeight; // the speaker's height on screen
+    const size = THREE.MathUtils.clamp(px * 0.1, 20, 44);
+    b.el.style.fontSize = `${size.toFixed(1)}px`;
+    if (!b.w || b.size !== Math.round(size)) { b.size = Math.round(size); b.w = b.inner.offsetWidth; b.h = b.inner.offsetHeight; }
+    const hx = (_head.x * 0.5 + 0.5) * innerWidth, hy = (-_head.y * 0.5 + 0.5) * innerHeight;
+    const x = THREE.MathUtils.clamp(hx - b.w / 2, 10, innerWidth - b.w - 10); // stay on screen; the tail still points at the head
+    let y = Math.max(10, hy - b.h - size * 0.55);
+    for (const r of placed) if (x < r.x + r.w + 8 && x + b.w + 8 > r.x && y < r.y + r.h + 6 && y + b.h + 6 > r.y) y = Math.max(10, r.y - b.h - 8);
+    placed.push({ x, y, w: b.w, h: b.h });
+    b.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    b.inner.style.setProperty("--tail", `${THREE.MathUtils.clamp((hx - x) / b.w * 100, 14, 86).toFixed(1)}%`);
+  }
+}
+
 function addCreature(entry, isNew) {
-  const c = assemble(partsFor(entry));
+  const parts = partsFor(entry);
+  const c = assemble(parts);
+  c.parts = parts;
   c.entry = entry;
   c.timers = [];
   c.leaving = false;
@@ -698,6 +836,7 @@ function addCreature(entry, isNew) {
     c.mode = "idle";
     later(() => preglow(spot), POP_DELAY - 1300);
     later(() => { c.root.visible = true; c.mode = "pop"; c.modeT = 0; c.dir = 1; burst(spot, c.height); }, POP_DELAY);
+    later(() => welcome(c), POP_DELAY + 1100);
   } else { c.root.position.set(spot.x, 0, spot.z); c.mode = "idle"; }
   c.speed = 2.6;
   scene.add(c.root);
@@ -719,11 +858,13 @@ function addCreature(entry, isNew) {
   later(() => {
     c.leaving = true;
     c.mode = "wave"; c.dir = 1;
+    say(c, pick(LINES.bye), 2600);
     later(() => { c.target = { x: 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200);
   }, Math.max(entry.at + STAY_MS(entry) - Date.now(), DEMO ? 6000 : 15000));
 }
 
 function removeCreature(c) {
+  hush(c);
   c.timers.forEach(clearTimeout);
   scene.remove(c.root);
   onStage.delete(c.entry.id);
@@ -805,6 +946,8 @@ function frame() {
     }
     animate(c, dt);
   }
+  chatter(performance.now());
+  placeBubbles(performance.now());
   renderer.render(scene, camera);
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
