@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Audit every shipped cut-out for leftover studio background:
+# Audit every shipped cut-out for leftover studio background (it finds LEFTOVERS, not bites —
+# for what the cutter removed, run cut_figures.py with CUT_DEBUG=<dir> and look):
 #  floor  = pale low-saturation pixels at foot level that touch transparency
 #  pocket = neutral-white blobs anywhere inside the figure (eye glints excluded by size/darkness around)
 #  halo   = share of edge pixels that are much brighter+paler than the pixels just inside them
@@ -26,7 +27,10 @@ for p in sorted(glob.glob(ROOT+'fig_*.png'))+sorted(glob.glob(ROOT+'cute_hat_*.p
     rgb=a[...,:3]; al=a[...,3]; op=al>60; V=rgb.max(axis=2); mn=rgb.min(axis=2); sat=(V-mn)/np.maximum(V,1)
     trans=al<40
     near_t=np.asarray(Image.fromarray((trans*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7)))>127
-    floor=op&(sat<0.42)&(V>110); floor[:int(h*0.87)]=False
+    # the same colours cut_figures.py calls floor: warm grey / its bright glare / plain grey — never a
+    # green or orange boot's own highlight, never a golden onion
+    R,G,B=rgb[...,0],rgb[...,1],rgb[...,2]; warm=(R>=G-4)&(G>=B-4)
+    floor=op&((warm&(V-mn<62)&(V>110)&(V<238))|(warm&(V>=238)&(V-mn<42))|((sat<0.2)&(V<238)&(V>110))); floor[:int(h*0.87)]=False
     floor_n=int((floor&near_t).sum()) if 'fig_' in p else 0
     white=op&(mn>222)&(V-mn<18)
     pockets=[b for b in blobs(white) if len(b)>=60]

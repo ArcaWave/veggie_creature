@@ -26,6 +26,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PARTS = os.path.join(ROOT, "public", "parts")
 SRC = os.path.join(ROOT, "tools", "figs_src")
+DEBUG_DIR = os.environ.get("CUT_DEBUG")  # CUT_DEBUG=<dir>: save what the pocket / floor rules removed, per figure
 # pale vegetables wash out to cream under the wall's lights: (saturation, brightness)
 GRADE = {"pumpkin": (1.45, 0.9), "onion": (1.35, 0.9)}
 # how far a hat sinks onto each vegetable (fraction of the figure's height)
@@ -80,10 +81,11 @@ def cut(src: str) -> dict:
     edge[0, :] = edge[-1, :] = edge[:, 0] = edge[:, -1] = True
 
     # 1) the studio white, in from the border
-    gone = spread(edge, (mn > 215) & (V - mn < 26))
+    gone = spread(edge, (mn > 215) & (V - mn < 26), 3)
 
     # 3) white pockets inside the silhouette (flat, pure white — a highlight on a
     #    tomato is neither), unless they sit in an eye
+    pocket_px = np.zeros((h, w), bool)
     for pts in blobs((mn > 236) & (V - mn < 12) & ~gone):
         if len(pts) < 40:
             continue
@@ -92,17 +94,27 @@ def cut(src: str) -> dict:
         if (around < 70).mean() < 0.25:
             for y, x in pts:
                 gone[y, x] = True
+                pocket_px[y, x] = True
     gone = dilate(gone, 1)
 
-    # 4) the floor shadow: below the body, pale & unsaturated (or plain grey),
-    #    and connected to what is already gone
+    # 4) the floor shadow. Two lessons learnt: it is TINTED by the feet, so "grey"
+    #    misses it — and pale vegetables (the onion!) look just like it, so a loose
+    #    rule takes bites out of the body. Hence: only at FOOT LEVEL (the shadow
+    #    is a flat ellipse on the floor, the bottom 16% of the figure), only warm-
+    #    neutral colours (R>=G>=B, little chroma: not a green or orange boot, not
+    #    a golden onion), darker than the studio white, connected to what is gone.
     figure_rows = np.where((~gone).any(axis=1))[0]
     top, bottom = figure_rows.min(), figure_rows.max()
-    below_body = np.zeros((h, w), bool)
-    below_body[int(top + (bottom - top) * 0.70) :] = True
-    floorish = below_body & (((sat < 0.40) & (V > 110)) | (sat < 0.22))
+    foot_level = np.zeros((h, w), bool)
+    foot_level[int(top + (bottom - top) * 0.84) :] = True
+    R, G, B = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    warm_grey = (R >= G - 4) & (G >= B - 4) & (V - mn < 62) & (V > 110) & (V < 238)
+    glare = (V >= 238) & (V - mn < 42) & (R >= G - 4) & (G >= B - 4)  # the floor's brightest, faintly pink part
+    floorish = foot_level & (warm_grey | glare | ((sat < 0.2) & (V < 238)))
+    before_floor = gone.copy()
     gone |= spread(dilate(gone, 2), floorish | gone, 2) & (floorish | gone)
     gone = dilate(gone, 1)
+    removed_floor = gone & ~dilate(before_floor, 1)
 
     # 5) one connected piece, grown from the middle of the body
     solid = ~gone
@@ -120,6 +132,12 @@ def cut(src: str) -> dict:
     look = Image.fromarray(rgb.astype(np.uint8))
     if body in GRADE:
         look = ImageEnhance.Brightness(ImageEnhance.Color(look).enhance(GRADE[body][0])).enhance(GRADE[body][1])
+    if DEBUG_DIR:  # every pixel the two risky rules removed, painted on the source
+        dbg = rgb.copy()
+        dbg[dilate(pocket_px, 1)] = (255, 0, 0)
+        dbg[removed_floor] = (0, 80, 255)
+        ys, xs = np.where(~gone)
+        Image.fromarray(dbg.astype(np.uint8)).crop((xs.min() - 20, ys.min() - 20, xs.max() + 20, ys.max() + 40)).save(os.path.join(DEBUG_DIR, name + ".jpg"), quality=85)
     im = Image.fromarray(np.dstack([np.asarray(look), (alpha * 255).astype(np.uint8)]))
     im = im.crop(im.getbbox())
     im.thumbnail((900, 900), Image.LANCZOS)
@@ -135,9 +153,20 @@ def cut(src: str) -> dict:
 
 
 if __name__ == "__main__":
+    if DEBUG_DIR:
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+    # cut_figures.py                     → everything (a few minutes)
+    # cut_figures.py onion_twig_twig …   → just these; the rest of the catalog is kept
+    import sys
+    only = [a for a in sys.argv[1:] if a.count("_") == 2]
     catalog = {}
+    if only:
+        with open(os.path.join(PARTS, "figures.json")) as f:
+            catalog = json.load(f)
     for src in sorted(glob.glob(os.path.join(SRC, "fig_*.src.png"))):
-        catalog[os.path.basename(src)[4:-8]] = cut(src)
+        key = os.path.basename(src)[4:-8]
+        if not only or key in only:
+            catalog[key] = cut(src)
     with open(os.path.join(PARTS, "figures.json"), "w") as f:
         json.dump(catalog, f)
     print("figures:", len(catalog))
