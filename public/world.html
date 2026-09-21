@@ -29,6 +29,10 @@
   .bubble-in::after { content: ""; position: absolute; left: var(--tail, 50%); top: 100%; width: 0.7em; height: 0.7em; margin: -0.42em 0 0 -0.35em; background: inherit; border: inherit; border-top-color: transparent; border-left-color: transparent; border-radius: 0 0 0.18em 0; transform: rotate(45deg); }
   .bubble.mine .bubble-in { background: #fff3cf; border-color: #ff9f43; color: #7a3a06; } /* the newcomer: "that one is mine!" */
   .bubble.out .bubble-in { animation: bubbleOut 0.3s ease-in both; }
+  /* a feeling, not a sentence: one big emoji over the head, no bubble */
+  .emote { position: absolute; left: 0; top: 0; width: 1em; height: 1em; line-height: 1; text-align: center; will-change: transform; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+  .emote span { display: block; filter: drop-shadow(0 0.06em 0.1em rgba(80, 45, 10, 0.35)); animation: emoteLife 2.6s ease-out both; }
+  @keyframes emoteLife { 0% { opacity: 0; transform: scale(0.2) rotate(-18deg); } 10% { opacity: 1; transform: scale(1.3) rotate(8deg); } 20% { transform: scale(0.95) rotate(-4deg); } 30% { transform: scale(1.05) rotate(0deg); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.12); } }
   @keyframes bubbleIn { from { opacity: 0; transform: scale(0.3) translateY(0.4em); } to { opacity: 1; transform: none; } }
   @keyframes bubbleOut { to { opacity: 0; transform: scale(0.6) translateY(0.3em); } }
   #hud { position: absolute; left: 14px; bottom: 12px; z-index: 10; color: rgba(255, 244, 220, 0.55); font: 600 13px/1.4 "Noto Serif KR", serif; letter-spacing: 0.08em; pointer-events: none; }
@@ -704,32 +708,54 @@ function freeSpot(self) {
 // A newcomer announces itself in its own colour — "that one is mine!" — and
 // the nearest friend answers. ?bubbles=0 turns them off.
 const LINES = {
-  arrive: ["짠! 내가 왔어! ✨", "안녕! 나 살아났어! 🎉", "우와~ 여기가 디지털 세계!", "얘들아, 나 왔어!"],
-  greet: ["어서 와! 👋", "새 친구다! 반가워!", "우와, 멋지다!", "같이 놀자!"],
-  bye: ["안녕~ 또 만나! 👋", "재미있었어! 안녕~", "다음에 또 놀자!"],
-  chatA: ["안녕? 👋", "우리 같이 놀까?", "너 정말 멋지다!", "오늘 기분 어때?", "나랑 춤출래?"],
-  chatB: ["안녕! 반가워!", "좋아! 좋아!", "헤헤, 고마워!", "최고야! 😄", "그래, 같이 하자!"],
-  idle: ["가을이 참 좋아~ 🍂", "오늘 날씨 최고!", "나를 만들어 줘서 고마워 💛", "살랑살랑~ 바람 좋다", "여기 너무 재밌어!", "친구들아~ 어디 있니?", "기분이 몽글몽글해 ☁️"],
-  jump: ["폴짝! 폴짝!", "높이높이 뛰자!", "이얍!"],
-  dance: ["랄랄라~ ♪", "둠칫 둠칫 ♬", "신난다!"],
-  wave: ["안녕~ 👋", "여기야 여기!", "나 보여?"],
-  hat: { leaves: ["내 단풍 왕관 어때? 🍁"], acorn: ["도토리 모자 멋지지? 🌰"], straw: ["밀짚모자 쓰고 나들이~ 👒"] },
+  arrive: ["짠! 내가 왔어! ✨", "안녕! 나 살아났어! 🎉", "우와~ 여기가 디지털 세계!", "얘들아, 나 왔어!", "한가위에 태어났어! 🌕"],
+  greet: ["어서 와! 👋", "새 친구다! 반가워!", "우와, 멋지다!", "같이 송편 먹자!", "한가위에 온 걸 환영해!"],
+  bye: ["안녕~ 또 만나! 👋", "풍성한 한가위 보내~ 🌕", "재미있었어! 안녕~", "할머니 댁에 다녀올게!"],
+  // little exchanges: [one says, the other answers]
+  chat: [
+    ["송편 같이 빚을래?", "좋아! 예쁘게 빚자!"],
+    ["보름달에 무슨 소원 빌었어?", "우리 모두 건강하게! 🌕"],
+    ["더도 말고 덜도 말고~", "한가위만 같아라! 🌕"],
+    ["윷놀이 할 사람~?", "나! 나도 할래!"],
+    ["강강술래 같이 돌자!", "손잡고 빙글빙글~ ♪"],
+    ["추석 잘 보내!", "너도 풍성한 한가위!"],
+    ["송편 몇 개 먹었어?", "열 개! 헤헤 😋"],
+    ["한복 입으니까 멋지다!", "헤헤, 고마워!"],
+    ["제기차기 몇 개 해?", "나는 다섯 개!"],
+    ["우리 같이 놀까?", "좋아! 좋아!"],
+    ["달님이 우릴 보고 있어!", "달님, 안녕하세요~ 🌕"],
+  ],
+  idle: [
+    "풍성한 한가위 보내! 🌕", "오늘은 즐거운 추석!", "보름달에 소원을 빌자! 🌕", "내 소원은… 비밀이야! 🤫",
+    "송편이 제일 맛있어! 😋", "할머니 댁에 가는 길~", "온 가족이 모이는 날!", "강강술래~ 강강술래~ ♪",
+    "윷이야! 모야! 신난다!", "한복 입고 나들이 가자!", "햅쌀밥이 꿀맛이야!", "올해도 풍년이래! 🌾",
+    "밤이랑 대추가 주렁주렁~", "감이 빨갛게 익었네! 🍊", "달토끼가 떡방아 찧는대!", "연을 높이높이 날리자!",
+    "가을바람이 살랑살랑~ 🍂", "나를 만들어 줘서 고마워 💛", "기분이 몽글몽글해 ☁️", "친구들아~ 같이 놀자!",
+  ],
+  jump: ["폴짝! 폴짝!", "보름달까지 뛰어 보자!", "널뛰기처럼 높이높이!"],
+  dance: ["강강술래~ ♪", "덩실덩실 어깨춤! ♬", "얼쑤! 신난다!"],
+  wave: ["안녕~ 👋", "여기야 여기!", "한가위 잘 보내!"],
+  hat: { leaves: ["내 단풍 왕관 어때? 🍁"], acorn: ["도토리 모자 멋지지? 🌰"], straw: ["밀짚모자 쓰고 성묘 가요~ 👒"] },
   body: {
-    pumpkin: ["나는 둥글둥글 호박! 🎃", "호박이 넝쿨째 굴러왔어!"],
-    corn: ["옥수수 알이 톡톡! 🌽", "나는 노란 옥수수야!"],
-    sweetpotato: ["나는 달콤한 고구마! 🍠", "고구마는 가을이 제맛!"],
-    tomato: ["나는 새빨간 토마토! 🍅", "토마토~ 토마토~ ♪"],
-    cabbage: ["나는 아삭아삭 양배추! 🥬", "겹겹이 잎이 몇 장일까?"],
+    pumpkin: ["나는 둥글둥글 늙은호박! 🎃", "호박이 넝쿨째 굴러왔어!", "호박전 부쳐 먹자!"],
+    corn: ["옥수수 알이 톡톡! 🌽", "나는 노란 옥수수야!", "가을 옥수수가 제일 달아!"],
+    sweetpotato: ["나는 달콤한 고구마! 🍠", "군고구마 냄새 솔솔~", "고구마는 가을이 제맛!"],
+    tomato: ["나는 새빨간 토마토! 🍅", "토마토~ 토마토~ ♪", "보름달처럼 동글동글!"],
+    cabbage: ["나는 아삭아삭 양배추! 🥬", "겹겹이 잎이 몇 장일까?", "보름달처럼 동글동글!"],
   },
   scene: {
-    harvest: ["벼가 노랗게 익었네! 🌾", "풍년이다, 풍년!"],
-    field: ["허수아비 아저씨 안녕!", "송편 먹고 싶다~"],
-    night: ["달이 참 밝다~ 🌕", "토끼야, 뭐 하니?", "몸이 둥실둥실 가벼워!"],
-    moon: ["보름달에 소원 빌자! 🌕", "풍등이 올라간다~ ✨", "강강술래~ ♪"],
-    market: ["맛있는 냄새가 나! 😋", "장터 구경 가자!", "노을이 참 예쁘다~ 🌇"],
+    harvest: ["벼가 노랗게 익었네! 🌾", "풍년이다, 풍년!", "햅쌀로 송편 빚자!", "들녘이 온통 황금빛이야!"],
+    field: ["허수아비 아저씨 안녕!", "상에 송편이 가득해!", "팽이 돌리기 하자!", "투호 놀이 해 볼까?"],
+    night: ["달이 참 밝다~ 🌕", "달토끼야, 떡 좀 나눠 줘!", "몸이 둥실둥실 가벼워!", "여기가 달나라구나!", "쿵덕쿵덕 떡방아 소리~"],
+    moon: ["보름달에 소원 빌자! 🌕", "풍등이 올라간다~ ✨", "강강술래~ 강강술래~ ♪", "달맞이 하러 나왔어!"],
+    market: ["맛있는 냄새가 나! 😋", "추석 장 보러 왔어요!", "노을이 참 예쁘다~ 🌇", "복주머니에 복이 가득!", "밤, 대추, 감 사세요~"],
   },
   meteor: ["별똥별이다! ✨", "소원 빌자! 🙏", "우와! 봤어?"],
 };
+// Now and then no words at all: one BIG emoji pops out over a head and floats
+// away (no bubble round it). What it is follows what the creature is up to.
+const EMOTES = ["❤️", "😆", "⭐", "🎉", "🌕"]; // all colourful on every platform (🎵 is a black glyph on Apple — lost against a night sky)
+const EMOTE_CHANCE = 0.3; // of the chatter turns
 const BUBBLES_ON = _q.get("bubbles") !== "0";
 const bubbleLayer = document.getElementById("bubbles");
 const talk = { next: 0, last: null };
@@ -737,6 +763,7 @@ const talk = { next: 0, last: null };
 const crowded = (c) => [...onStage.values()].some((o) => o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4);
 function say(c, text, ms = 3200, cls = "") {
   if (!BUBBLES_ON || !c || c.bubble || !c.root.visible || CLOSEUP) return false;
+  if (c.emote) { c.emote.el.remove(); c.emote = null; } // words win over a feeling
   if (cls !== "mine" && cls !== "reply" && crowded(c)) return false;
   const el = document.createElement("div");
   el.className = `bubble ${cls}`;
@@ -750,14 +777,29 @@ function say(c, text, ms = 3200, cls = "") {
   return true;
 }
 function hush(c) {
+  if (c.emote) { c.emote.el.remove(); c.emote = null; }
   if (!c.bubble) return;
   c.bubble.el.remove();
   c.bubble = null;
 }
+const EMOTE_MS = 2600;
+function emote(c, glyph) {
+  if (!BUBBLES_ON || !c || c.bubble || c.emote || !c.root.visible || CLOSEUP) return false;
+  if (crowded(c)) return false; // a neighbour's bubble would cover it
+  const el = document.createElement("div");
+  el.className = "emote";
+  const inner = document.createElement("span");
+  inner.textContent = glyph;
+  el.appendChild(inner);
+  bubbleLayer.appendChild(el);
+  c.emote = { el, born: performance.now() };
+  c.spokeAt = performance.now();
+  return true;
+}
 const speakers = () => [...onStage.values()].filter((c) => c.bubble).length;
 // (someone standing right in front would wear the bubble: whoever is hidden keeps quiet)
 const hidden = (c) => [...onStage.values()].some((o) => o !== c && o.root.visible && o.root.position.z > c.root.position.z + 0.4 && Math.abs(o.root.position.x - c.root.position.x) < 1.7);
-const canSpeak = (c) => c.root.visible && !c.leaving && !c.bubble && c.mode !== "pop" && !hidden(c) && performance.now() - (c.spokeAt ?? -9000) > 9000;
+const canSpeak = (c) => c.root.visible && !c.leaving && !c.bubble && !c.emote && c.mode !== "pop" && !hidden(c) && performance.now() - (c.spokeAt ?? -9000) > 9000;
 const nearestTo = (c, ok) => [...onStage.values()].filter((o) => o !== c && ok(o))
   .sort((a, b) => a.root.position.distanceTo(c.root.position) - b.root.position.distanceTo(c.root.position))[0];
 function welcome(c) {
@@ -766,6 +808,8 @@ function welcome(c) {
   say(c, pick(LINES.arrive), 4600, "mine");
   const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o) && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
   if (friend) setTimeout(() => { hush(friend); if (onStage.has(friend.entry.id)) say(friend, pick(LINES.greet), 3000); }, 1700);
+  [...onStage.values()].filter((o) => o !== c && o !== friend && canSpeak(o)).slice(0, 2)
+    .forEach((o, i) => setTimeout(() => { if (onStage.has(o.entry.id)) emote(o, i ? "😆" : "❤️"); }, 2600 + i * 700));
   talk.next = performance.now() + 5200; // let the newcomer have the floor
 }
 function chatter(now) {
@@ -779,9 +823,14 @@ function chatter(now) {
   const friend = nearestTo(c, canSpeak);
   const gap = friend ? Math.abs(friend.root.position.x - c.root.position.x) : 99;
   if (friend && gap >= 3.4 && gap < 6 && Math.random() < 0.4) { // a little exchange, across a gap the two bubbles fit in
-    const i = Math.floor(Math.random() * LINES.chatA.length);
-    say(c, LINES.chatA[i], 3000);
-    setTimeout(() => { if (onStage.has(friend.entry.id) && !friend.leaving) say(friend, LINES.chatB[i], 3000, "reply"); }, 1500);
+    const [ask, answer] = pick(LINES.chat);
+    say(c, ask, 3000);
+    setTimeout(() => { if (onStage.has(friend.entry.id) && !friend.leaving) say(friend, answer, 3000, "reply"); }, 1500);
+    return;
+  }
+  if (Math.random() < EMOTE_CHANCE) { // a feeling instead of a sentence
+    const night = currentScene === "night" || currentScene === "moon";
+    emote(c, c.mode === "dance" ? pick(["🎉", "🎉", "❤️"]) : c.mode === "jump" ? pick(["⭐", "😆"]) : night && Math.random() < 0.45 ? "🌕" : pick(EMOTES));
     return;
   }
   const r = Math.random();
@@ -799,6 +848,23 @@ const _head = new THREE.Vector3(), _feet = new THREE.Vector3();
 function placeBubbles(now) {
   const placed = [];
   for (const c of onStage.values()) {
+    const em = c.emote;
+    if (em) {
+      const k = (now - em.born) / EMOTE_MS;
+      if (k >= 1 || !c.root.visible) { em.el.remove(); c.emote = null; }
+      else {
+        const top = (c.height + (c.hat ? 0.3 : 0.04)) * c.root.scale.y + (c.bodyPivot.position.y || 0);
+        _feet.copy(c.root.position).project(camera);
+        _head.copy(c.root.position).setY(top).project(camera);
+        const px = (_head.y - _feet.y) * 0.5 * innerHeight;
+        const size = THREE.MathUtils.clamp(px * 0.4, 44, 170);
+        const hx = (_head.x * 0.5 + 0.5) * innerWidth, hy = (-_head.y * 0.5 + 0.5) * innerHeight;
+        const rise = size * (0.08 + 0.55 * (1 - Math.pow(1 - k, 2)));   // drifts up a little, easing out
+        const sway = Math.sin(k * 7) * size * 0.08;
+        em.el.style.fontSize = `${size.toFixed(0)}px`;
+        em.el.style.transform = `translate(${(hx - size / 2 + sway).toFixed(1)}px, ${Math.max(4, hy - size - rise).toFixed(1)}px)`;
+      }
+    }
     const b = c.bubble;
     if (!b) continue;
     if (now > b.until + 300 || !c.root.visible) { hush(c); continue; }
@@ -952,7 +1018,7 @@ function frame() {
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
 setInterval(() => applyScene(sceneNow()), 10000);
-if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor, ambient }; // rehearse scene changes / a shooting star / poses from the console
+if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor, ambient, say, emote, EMOTES }; // rehearse scene changes / a shooting star / poses from the console
 frame();
 
 addEventListener("resize", () => {
