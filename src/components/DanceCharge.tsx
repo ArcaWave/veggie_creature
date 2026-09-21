@@ -229,11 +229,24 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
               if (area > mainArea) { mainArea = area; main = i; }
               return { x0, y0, x1, y1 };
             });
+            // …but whoever DOES the move counts: with a parent behind (bigger in
+            // frame) or brothers and sisters alongside, the child doing the
+            // airplane must not be ignored. The glow follows the one doing it.
+            const doer = move.check ? poses.findIndex((lm) => move.check!(lm)) : -1;
+            if (move.check && doer >= 0) main = doer;
+            if (!move.check) { // the ladle goes to the biggest person who has a hand in view
+              let best = -1, bestArea = 0;
+              poses.forEach((lm, i) => {
+                const area = (boxes[i].x1 - boxes[i].x0) * (boxes[i].y1 - boxes[i].y0);
+                if (area > bestArea && HANDS.some(([w, ix]) => handOf(lm, w, ix))) { bestArea = area; best = i; }
+              });
+              if (best >= 0) main = best;
+            }
             view.current.boxes = boxes;
             view.current.main = main;
 
             if (move.check) {
-              const ok = main >= 0 && move.check(poses[main]);
+              const ok = doer >= 0;
               setHit(ok);
               if (ok) { lastHitAt.current = now; chargeRef.current(POSE_RATE * dt); }
             } else {

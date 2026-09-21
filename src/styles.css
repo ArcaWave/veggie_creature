@@ -177,7 +177,6 @@ body.stage-build .app { max-width: 1880px; }
 .mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1520px, calc((100vh - 100px) * 1.6164)); min-width: min(100%, 520px); }
 .mirror-stage { position: relative; width: 100%; }
 /* (object-position = CAM_FOCUS in lib/camera.ts: a 4:3 stream is trimmed top/bottom by the wide window — keep the head room, lose floor) */
-.voice-blocked { color: #a3452a; font-weight: 800; }
 .mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .mirror-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff4dc; font-weight: 800; background: #2c3627; }
@@ -187,7 +186,9 @@ body.stage-build .app { max-width: 1880px; }
 @keyframes snapFlash { from { opacity: 0.95; } to { opacity: 0; } }
 .mirror-pill { position: absolute; left: 50%; bottom: 1.5%; transform: translateX(-50%); z-index: 3; background: rgba(255, 255, 255, 0.94); color: var(--green-dark); font-weight: 800; font-size: clamp(18px, 2.1vw, 38px); padding: 10px 26px; border-radius: 999px; box-shadow: var(--shadow); white-space: nowrap; animation: promptBounce 0.8s ease-in-out infinite alternate; }
 .mirror-pill.still, .mirror-pill.count { background: var(--green); color: #fff; }
-.mirror-note { margin: 0; font-size: 14px; font-weight: 700; color: var(--muted); }
+/* the privacy promise, where a parent will actually read it: a pill right under the mirror */
+.mirror-note { margin: 0; display: inline-flex; align-items: center; gap: 0.5em; font-size: clamp(16px, 2.4vmin, 26px); font-weight: 800; color: #5b4a2a; background: rgba(255, 255, 255, 0.86); border: 2px solid #f2dcae; padding: 0.4em 1.1em; border-radius: 999px; box-shadow: var(--shadow); }
+.mirror-note.voice-blocked { font-size: clamp(13px, 1.7vmin, 18px); border-color: #f0b9a5; color: #a3452a; }
 .gate-hud { position: absolute; left: 10px; top: 10px; margin: 0; z-index: 3; background: rgba(0, 0, 0, 0.55); color: #9ff; font: 600 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border-radius: 10px; white-space: pre; }
 
 /* ---- the clay veggie frame around every camera view ---- */
