@@ -30,8 +30,8 @@
   .bubble.mine .bubble-in { background: #fff3cf; border-color: #ff9f43; color: #7a3a06; } /* the newcomer: "that one is mine!" */
   .bubble.out .bubble-in { animation: bubbleOut 0.3s ease-in both; }
   /* a feeling, not a sentence: one big emoji over the head, no bubble */
-  .emote { position: absolute; left: 0; top: 0; width: 1em; height: 1em; line-height: 1; text-align: center; will-change: transform; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
-  .emote span { display: block; filter: drop-shadow(0 0.06em 0.1em rgba(80, 45, 10, 0.35)); animation: emoteLife 2.6s ease-out both; }
+  .emote { position: absolute; left: 0; top: 0; width: 1em; height: 1em; will-change: transform; }
+  .emote img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0.05em 0.09em rgba(60, 35, 10, 0.4)); animation: emoteLife 2.6s ease-out both; transform-origin: 50% 80%; }
   @keyframes emoteLife { 0% { opacity: 0; transform: scale(0.2) rotate(-18deg); } 10% { opacity: 1; transform: scale(1.3) rotate(8deg); } 20% { transform: scale(0.95) rotate(-4deg); } 30% { transform: scale(1.05) rotate(0deg); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.12); } }
   @keyframes bubbleIn { from { opacity: 0; transform: scale(0.3) translateY(0.4em); } to { opacity: 1; transform: none; } }
   @keyframes bubbleOut { to { opacity: 0; transform: scale(0.6) translateY(0.3em); } }
@@ -754,8 +754,9 @@ const LINES = {
 };
 // Now and then no words at all: one BIG emoji pops out over a head and floats
 // away (no bubble round it). What it is follows what the creature is up to.
-const EMOTES = ["❤️", "😆", "⭐", "🎉", "🌕"]; // all colourful on every platform (🎵 is a black glyph on Apple — lost against a night sky)
+const EMOTES = ["heart", "songpyeon", "moon", "star", "note", "persimmon"]; // the world's own clay icons: /fx/emote_<name>.png (tools/gen_emotes.py) — system emoji looked generic here
 const EMOTE_CHANCE = 0.3; // of the chatter turns
+EMOTES.forEach((n) => { new Image().src = `/fx/emote_${n}.png`; }); // warm, so the first pop isn't late
 const BUBBLES_ON = _q.get("bubbles") !== "0";
 const bubbleLayer = document.getElementById("bubbles");
 const talk = { next: 0, last: null };
@@ -788,8 +789,10 @@ function emote(c, glyph) {
   if (crowded(c)) return false; // a neighbour's bubble would cover it
   const el = document.createElement("div");
   el.className = "emote";
-  const inner = document.createElement("span");
-  inner.textContent = glyph;
+  const inner = document.createElement("img");
+  inner.src = `/fx/emote_${glyph}.png`;
+  inner.alt = "";
+  inner.draggable = false;
   el.appendChild(inner);
   bubbleLayer.appendChild(el);
   c.emote = { el, born: performance.now() };
@@ -809,7 +812,7 @@ function welcome(c) {
   const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o) && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
   if (friend) setTimeout(() => { hush(friend); if (onStage.has(friend.entry.id)) say(friend, pick(LINES.greet), 3000); }, 1700);
   [...onStage.values()].filter((o) => o !== c && o !== friend && canSpeak(o)).slice(0, 2)
-    .forEach((o, i) => setTimeout(() => { if (onStage.has(o.entry.id)) emote(o, i ? "😆" : "❤️"); }, 2600 + i * 700));
+    .forEach((o, i) => setTimeout(() => { if (onStage.has(o.entry.id)) emote(o, i ? "songpyeon" : "heart"); }, 2600 + i * 700));
   talk.next = performance.now() + 5200; // let the newcomer have the floor
 }
 function chatter(now) {
@@ -830,7 +833,7 @@ function chatter(now) {
   }
   if (Math.random() < EMOTE_CHANCE) { // a feeling instead of a sentence
     const night = currentScene === "night" || currentScene === "moon";
-    emote(c, c.mode === "dance" ? pick(["🎉", "🎉", "❤️"]) : c.mode === "jump" ? pick(["⭐", "😆"]) : night && Math.random() < 0.45 ? "🌕" : pick(EMOTES));
+    emote(c, c.mode === "dance" ? pick(["note", "note", "heart"]) : c.mode === "jump" ? pick(["star", "persimmon"]) : night && Math.random() < 0.45 ? "moon" : pick(EMOTES));
     return;
   }
   const r = Math.random();

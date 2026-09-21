@@ -17,3 +17,6 @@ animator/creatures
 
 # raw character renders (regenerable: tools/gen_figures.py)
 tools/figs_src/
+
+# raw emote renders (regenerable: tools/gen_emotes.py)
+tools/emotes_src/
