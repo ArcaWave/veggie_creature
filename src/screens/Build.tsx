@@ -4,7 +4,7 @@ import { pop, sparkle } from "../lib/sfx";
 import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
-import { speak } from "../lib/guide";
+import { narrate, hush, clipMs, voicedCountdown } from "../lib/narrate";
 import { getCamera, releaseCamera, cameraErrorText, snapshot } from "../lib/camera";
 import { DanceCharge } from "../components/DanceCharge";
 import { Figure, randomParts, type Parts } from "../components/Figure";
@@ -20,7 +20,6 @@ import { CamFrame } from "../components/CamFrame";
 // goes on with the best guess). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
-const COUNTDOWN_S = 6; // time to hold the creature up before the auto-snap
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
 const MATCH_TIMEOUT_MS = 20000; // matcher deadline before the show goes on regardless
 
@@ -84,28 +83,20 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
     }
   }, [camOn, step, camTry]);
 
-  // the countdown starts as soon as the camera is live, then snaps by itself
+  // the camera is live → the voice asks for the creation (first time) or for
+  // stillness (a reshoot: the noshow screen already said why), counts
+  // "셋! 둘! 하나!" with the numbers landing on the spoken ones, then snaps
   useEffect(() => {
     if (!camOn || step !== "photo") {
       setCount(null);
       return;
     }
-    // (retries were already prompted by the noshow screen's voice line)
-    if (tries === 0) speak("내가 만든 채소 친구를 화면 가운데에 보여 줘! 곧 사진을 찍을 거야!");
-    setCount(COUNTDOWN_S);
-    const id = setInterval(() => {
-      setCount((c) => {
-        if (c === null) return null;
-        if (c <= 1) {
-          clearInterval(id);
-          capture();
-          return 0;
-        }
-        pop();
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
+    setCount(null);
+    let cancel = () => {};
+    narrate(tries === 0 ? "w2_show" : "w3_still", () => {
+      cancel = voicedCountdown((n) => { setCount(n); pop(); }, () => { setCount(0); capture(); });
+    });
+    return () => { cancel(); hush(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camOn, step, camTry]);
 
@@ -117,11 +108,12 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
       return;
     }
     sparkle();
+    narrate("w5_snap");
     const url = snapshot(v);
     setPhoto(url);
     track("photo_captured");
     keepAsset("original", url);
-    setStep("magic");
+    window.setTimeout(() => setStep("magic"), clipMs("w5_snap") + 120); // "찰칵!" is heard out before the next scene speaks
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -226,7 +218,7 @@ function MagicStep({
   onDone: () => void;
 }) {
   type Phase = "match" | "noshow" | "dance" | "alive" | "walk" | "sendoff";
-  const SENDOFF_MS = 5000; // "look at the wall next to you" before the station resets
+  const SENDOFF_MS = Math.max(5000, clipMs("a3_look") + 800); // "look at the wall next to you" (the whole line is heard) before the station resets
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
   const [parts, setParts] = useState<Parts | null>(null);
@@ -239,7 +231,7 @@ function MagicStep({
   useEffect(() => {
     aliveRef.current = true;
     const timers = timersRef.current;
-    return () => { aliveRef.current = false; timers.forEach(clearTimeout); };
+    return () => { aliveRef.current = false; timers.forEach(clearTimeout); hush(); }; // leaving the session: the voice stops with it
   }, []);
 
   // 1) which pre-made creature does this creation resemble?
@@ -247,6 +239,8 @@ function MagicStep({
   useEffect(() => {
     (async () => {
       track("match_start");
+      narrate("m1_reading");
+      const lineSaid = new Promise((r) => window.setTimeout(r, clipMs("m1_reading") + 80)); // the question is never cut mid-sentence
       const RANDOM = ["pumpkin", "corn", "sweetpotato", "tomato", "cabbage"];
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
       let p: Parts | null = null;
@@ -260,14 +254,15 @@ function MagicStep({
           signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
         });
         const j = await r.json();
+        await lineSaid;
         // nothing visible in the shot? ask the child to hold it closer and
         // reshoot (twice at most — then the show goes on with the best guess)
         if (j.none && tries < MAX_RETRIES) {
           if (!aliveRef.current) return;
           track("match_none", { tries });
-          speak("어라? 채소 친구가 잘 안 보여! 조금만 더 가까이 보여줄래? 다시 찍어 보자!");
+          narrate("m2_noshow");
           setPhase("noshow");
-          later(onRetryCloser, 2800);
+          later(onRetryCloser, clipMs("m2_noshow") + 500);
           return;
         }
         if (typeof j.variant === "string" && j.variant) v = j.variant;
@@ -277,6 +272,7 @@ function MagicStep({
       } catch {
         track("match_fail");
       }
+      await lineSaid;
       if (!aliveRef.current) return;
       if (!p) p = await randomParts(v).catch(() => ({ body: v, hat: "none", arms: "twig", legs: "twig" }));
       if (!aliveRef.current) return;
@@ -302,11 +298,11 @@ function MagicStep({
     track("dance_done", { variant: v });
     setPhase("alive");
     sparkle();
-    speak("우와! 냄비에서 빛이 팡! 채소 친구가 살아났어!");
+    // ("팡! 마법 완성! 우와~ 채소 친구가 살아났어!" began with the pot's burst and runs on into this scene)
     later(() => magicDustBurst(frameRef.current), 80); // once the podium is on screen
     later(() => {
       setPhase("walk");
-      speak("디지털 세계로 출발! 큰 화면에서 다시 만나!");
+      narrate("a2_go");
       track("walk_off", { variant: v });
       // the creature leaves this screen — announce it to the Digital World
       fetch("/api/creatures", {
@@ -326,7 +322,7 @@ function MagicStep({
       later(() => {
         // it has arrived on the wall: point the child at it for a moment
         setPhase("sendoff");
-        speak("옆 화면에서 채소 친구를 확인해 봐!");
+        narrate("a3_look");
         later(() => {
           track("build_done", { variant: v });
           onDone();

@@ -177,6 +177,7 @@ body.stage-build .app { max-width: 1880px; }
 .mirror { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 1 640px; max-width: min(1520px, calc((100vh - 100px) * 1.6164)); min-width: min(100%, 520px); }
 .mirror-stage { position: relative; width: 100%; }
 /* (object-position = CAM_FOCUS in lib/camera.ts: a 4:3 stream is trimmed top/bottom by the wide window — keep the head room, lose floor) */
+.voice-blocked { color: #a3452a; font-weight: 800; }
 .mirror-cam { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transform: scaleX(-1); }
 .mirror-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .mirror-ph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff4dc; font-weight: 800; background: #2c3627; }

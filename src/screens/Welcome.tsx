@@ -3,7 +3,7 @@ import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverF
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
 import { pop, sparkle } from "../lib/sfx";
-import { speak } from "../lib/guide";
+import { narrate, hush, narrating, clipMs, voicedCountdown, preloadVoice, voiceBlocked, onVoiceBlocked } from "../lib/narrate";
 import { track } from "../lib/analytics";
 import { CamFrame } from "../components/CamFrame";
 
@@ -53,7 +53,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   const [flash, setFlash] = useState(false);
 
   const countRef = useRef<number | null>(null);
-  const countTimer = useRef<number | null>(null);
+  const countTimer = useRef<(() => void) | null>(null); // cancels the voiced countdown
   const gateRef = useRef<ShowGate | null>(null);
   const armedRef = useRef(false);
   const doneRef = useRef(false);
@@ -87,31 +87,29 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     countRef.current = c;
     setCount(c);
   }
+  // "좋아! 움직이지 말고 그대로~ 사진 찍을게!" → "셋! 둘! 하나!" with the numbers
+  // landing on the spoken ones → snap. countRef marks "in progress" from the
+  // first word on; the big number only shows once the voice counts.
   function startCountdown(reason: "gate" | "button" | "key") {
     if (countRef.current !== null || doneRef.current) return;
     track("welcome_countdown", { reason });
-    speak("움직이지 말고 잠깐만, 사진 찍을게!");
     setHint("count");
-    setCountBoth(COUNT_FROM);
-    pop();
-    countTimer.current = window.setInterval(() => {
-      const c = (countRef.current ?? 1) - 1;
-      if (c <= 0) {
-        clearCountTimer();
-        setCountBoth(0);
-        snap();
-      } else {
-        setCountBoth(c);
-        pop();
-      }
-    }, 1000);
+    countRef.current = COUNT_FROM;
+    setCount(null);
+    narrate("w3_still", () => {
+      countTimer.current = voicedCountdown(
+        (n) => { setCountBoth(n); pop(); },
+        () => { countTimer.current = null; setCountBoth(0); snap(); },
+      );
+    });
   }
   function clearCountTimer() {
-    if (countTimer.current !== null) clearInterval(countTimer.current);
+    countTimer.current?.();
     countTimer.current = null;
   }
   function cancelCountdown() {
     clearCountTimer();
+    hush();
     setCountBoth(null);
     gateRef.current?.reset();
     track("welcome_countdown_cancel");
@@ -122,12 +120,48 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     doneRef.current = true;
     hadSession = true;
     sparkle();
+    narrate("w5_snap");
     setHint("snap");
     setFlash(true);
     const url = snapshot(v);
-    window.setTimeout(() => onCaptured(url), 550);
+    window.setTimeout(() => onCaptured(url), clipMs("w5_snap") + 150);
   }
   useEffect(() => () => clearCountTimer(), []);
+
+  // -------- the voice of the idle screen --------
+  // Anyone may walk up at any moment, so "안녕! … 가까이 와 봐!" comes round again
+  // and again with a pause between (?hello=<seconds>, default 15). Someone who
+  // is close but not showing a creation is asked to show it (at most every 9 s;
+  // this one may cut the hello short — it no longer applies). A state has to
+  // hold for a moment before it speaks, so a flickering detection can't
+  // stutter, and nothing here ever talks over the countdown.
+  const hintRef = useRef<Hint>("come");
+  const hintSince = useRef(Date.now());
+  if (hintRef.current !== hint) { hintRef.current = hint; hintSince.current = Date.now(); }
+  const [muted, setMuted] = useState(voiceBlocked());
+  useEffect(() => onVoiceBlocked(setMuted), []);
+  useEffect(() => {
+    hush(); // whatever the last session was saying ends here
+    preloadVoice();
+    const q = Number(new URLSearchParams(location.search).get("hello"));
+    const HELLO_GAP = (Number.isFinite(q) && q >= 3 ? q : 15) * 1000, SHOW_EVERY = 9000;
+    let helloAt = Date.now() + (hadSession ? 4000 : 2500); // the next hello is due then
+    let showAt = 0;
+    const id = window.setInterval(() => {
+      if (doneRef.current || countRef.current !== null) return;
+      const now = Date.now(), h = hintRef.current, held = now - hintSince.current;
+      const saying = narrating();
+      if (h === "hold" && held > 700 && now >= showAt && saying !== "w2_show") {
+        narrate("w2_show");
+        showAt = now + clipMs("w2_show") + SHOW_EVERY;
+        helloAt = now + clipMs("w2_show") + HELLO_GAP;
+      } else if (h === "come" && held > 700 && now >= helloAt && !saying) {
+        narrate("w1_hello");
+        helloAt = now + clipMs("w1_hello") + HELLO_GAP;
+      }
+    }, 300);
+    return () => { clearInterval(id); hush(); };
+  }, []);
 
   // staff / physical-trigger fallback: the button, Space or Enter
   function manualStart(reason: "button" | "key") {
@@ -325,6 +359,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
           <span className={`mirror-pill ${hint}`}>{stageHint}</span>
         </div>
         <p className="mirror-note">📷 카메라 화면은 사진 찍기에만 쓰여요</p>
+        {muted && <p className="mirror-note voice-blocked">🔇 안내 음성이 막혀 있어요 — 화면을 한 번 클릭해 주세요 (직원용)</p>}
       </div>
     </div>
   );

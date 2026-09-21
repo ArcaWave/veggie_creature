@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { pop, sparkle } from "../lib/sfx";
-import { speak } from "../lib/guide";
+import { narrate, narrating, clipMs, type VoiceId } from "../lib/narrate";
 import { magicDustBurst } from "../lib/dust";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_INDEX, R_INDEX, L_SHOULDER, R_SHOULDER } from "../lib/pose";
 import { StirDetector } from "../lib/stir";
@@ -63,14 +63,16 @@ function handOf(lm: LM, wrist: number, index: number): { x: number; y: number } 
 // the posed moves come with a photo of a child doing them (public/dance/),
 // shown standing on the frame's edge — a real kid to copy beats a diagram.
 // The stir has no `check`: it is followed by the StirDetector instead.
-type Move = { key: string; title: string; prompt: string; cheer: string; voice: string; guide?: string; check?: (lm: LM) => boolean };
+type Move = { key: string; title: string; prompt: string; cheer: string; voice: VoiceId; cheerVoice?: VoiceId; guide?: string; check?: (lm: LM) => boolean };
 export const MOVES: Move[] = [
-  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑤욱! ✈️", voice: "첫 번째 마법 동작! 비행기처럼 양팔을 옆으로 쭉 펴 볼까?", guide: "/dance/guide_airplane.png", check: isAirplane },
-  { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑이 가득! 생명이 깨어나요 💖", voice: "이번엔 두 손을 머리 위에서 모아 하트를 만들어 봐! 사랑을 주면 생명이 깨어나!", guide: "/dance/guide_heart.png", check: isHeart },
-  { key: "stir", title: "마법 냄비 젓기!", prompt: "국자로 냄비를 빙글빙글 저어 봐! 🥄", cheer: "팡! 마법 완성! ✨", voice: "마지막 마법! 국자를 잡고 마법 냄비를 빙글빙글 저어 봐!" },
+  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑤욱! 잘했어! ✈️", voice: "d1_airplane", cheerVoice: "d1_cheer", guide: "/dance/guide_airplane.png", check: isAirplane },
+  { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑을 듬뿍 주었어! 💖", voice: "d2_heart", cheerVoice: "d2_cheer", guide: "/dance/guide_heart.png", check: isHeart },
+  { key: "stir", title: "마법 냄비 젓기!", prompt: "국자로 냄비를 빙글빙글 저어 봐! 🥄", cheer: "팡! 마법 완성! ✨", voice: "d3_stir" },
 ];
 
-const CHEER_MS = 1500; // "참 잘했어요" beat between scenes
+const CHEER_MS = 1500; // "참 잘했어요" beat between scenes (stretched to the spoken cheer)
+const WAIT_LINE_AFTER_MS = 6000; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
+const HAND_LINE_AFTER_MS = 3500; // stir: no hand in view this long → "손을 들어 봐!" (at most every 12 s)
 const ASSIST_AFTER_MS = 5000; // this long without a recognised move → the quiet assist begins
 const ASSIST_RAMP_MS = 4000;  // …easing in over this long, so its start is imperceptible
 const ASSIST_RATE = 7;        // gauge % per second once fully eased in
@@ -110,6 +112,9 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   const stageT0 = useRef(Date.now());
   const lastHitAt = useRef(Date.now()); // last moment the child's own move charged the gauge
   const doneRef = useRef(false);
+  const waitSaid = useRef(false);  // "천천히 해도 괜찮아~" was said in this scene
+  const talkEnd = useRef(Date.now() + clipMs("d0_intro") + 250 + clipMs(MOVES[0].voice)); // when this scene's instruction has been said
+  const handSaidAt = useRef(0);    // when "손을 들어 봐!" was last said
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
   // what the last detection saw (video-normalised), for the render loop
@@ -117,7 +122,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
     { boxes: [], main: -1, hand: null, handAt: 0, turningAt: 0, burstAt: 0 });
 
   useEffect(() => {
-    speak(MOVES[0].voice);
+    narrate(["d0_intro", MOVES[0].voice]); // (cut at once if the child is already doing the move)
     document.body.classList.add("stage-dance"); // the brand moves into the title pill
     return () => document.body.classList.remove("stage-dance");
   }, []);
@@ -138,7 +143,10 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
     cheerRef.current = true;
     sparkle();
     if (stageRef.current < MOVES.length - 1) {
-      // scene complete: cheer, then the next move on its own screen
+      // scene complete: cheer (spoken — it cuts the instruction if that was
+      // still running), then the next move on its own screen
+      const said = MOVES[stageRef.current].cheerVoice;
+      if (said) narrate(said);
       setCheer(true);
       window.setTimeout(() => {
         stageRef.current += 1;
@@ -151,12 +159,15 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
         setCheer(false);
         setStage(stageRef.current);
         pop();
-        speak(MOVES[stageRef.current].voice);
-      }, CHEER_MS);
+        waitSaid.current = false;
+        talkEnd.current = Date.now() + clipMs(MOVES[stageRef.current].voice);
+        narrate(MOVES[stageRef.current].voice);
+      }, said ? Math.max(CHEER_MS, clipMs(said) + 200) : CHEER_MS);
     } else {
       // the finale: the pot bursts, the screen goes white — and Build's
       // "alive" scene opens out of that same white
       view.current.burstAt = performance.now();
+      narrate("a1_alive"); // "팡! 마법 완성!…" starts WITH the burst and runs on into Build's alive scene
       setBurst(true);
       magicDustBurst(potRef.current);
       window.setTimeout(() => setWhite(true), WHITE_AT_MS);
@@ -276,6 +287,16 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
       // never a dead end — and never obvious: idle for a few seconds → the
       // gauge eases into a slow, slightly uneven climb of its own
       const idle = now - Math.max(stageT0.current, lastHitAt.current);
+      // the gentle lines — only into silence, never over another line, never after the scene is won
+      if (!cheerRef.current && !doneRef.current && !narrating()) {
+        if (!move.check && now - Math.max(stageT0.current, view.current.handAt) > HAND_LINE_AFTER_MS + clipMs("d3_stir") * (view.current.handAt ? 0 : 1) && now - handSaidAt.current > 12000) {
+          handSaidAt.current = now;
+          narrate("d3_hand");
+        } else if (now - Math.max(talkEnd.current, lastHitAt.current) > WAIT_LINE_AFTER_MS && !waitSaid.current) {
+          waitSaid.current = true;
+          narrate("d_wait");
+        }
+      }
       if (idle > ASSIST_AFTER_MS) {
         const r = Math.min(1, (idle - ASSIST_AFTER_MS) / ASSIST_RAMP_MS), ease = r * r * (3 - 2 * r);
         const breath = 1 + 0.25 * Math.sin(now / 700) + 0.1 * Math.sin(now / 230);

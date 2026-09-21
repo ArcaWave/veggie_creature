@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { setSfx, sfxEnabled, pop } from "../lib/sfx";
+import { hush } from "../lib/narrate";
 
 // Persistent overlay bar: brand placeholder (left) + fullscreen & sound (right).
 // Staff access: tap the logo 5 times quickly.
@@ -33,6 +34,7 @@ export function TopBar({ onStaff }: { onStaff: () => void }) {
         onClick={() => {
           const next = !sound;
           setSfx(next);
+          if (!next) hush();
           setSound(next);
           if (next) pop();
         }}
