@@ -53,7 +53,7 @@ const matchModel = () => process.env.GEMINI_MATCH_MODEL || "gemini-2.5-flash";
 
 // The event's five main vegetables — the bodies a child can build on, and so
 // the only bodies the figure library (public/parts/fig_*.png) has.
-export const VARIANT_IDS = ["pumpkin", "corn", "sweetpotato", "tomato", "onion"] as const;
+export const VARIANT_IDS = ["pumpkin", "corn", "sweetpotato", "tomato", "cabbage"] as const;
 
 export type Result = { status: number; body: Record<string, unknown> };
 
@@ -108,7 +108,8 @@ const MATCH_PROMPT =
   "corn = an ear of corn, yellow kernels, maybe with green or pale husk; " +
   "sweetpotato = an elongated tapered root with reddish-purple or brownish-purple skin; " +
   "tomato = a round smooth glossy red fruit with a small green stem; " +
-  "onion = a round bulb with dry papery golden-brown (or white/purple) skin and a pointed tip. " +
+  "cabbage = a big round head of cabbage: pale green (or whitish-green) leaves wrapped tightly in layers, thick " +
+  "white leaf veins, a matte waxy surface, no ribs and no stem on top (that would be the pumpkin). " +
   "Pick the closest of the five by shape first, then color. " +
   "`hat` = the hat sticker on top: leaves = a crown or garland of red, orange and yellow autumn " +
   "maple leaves with little acorns; acorn = a big brown dome-shaped cap with a scaly acorn-cup / " +

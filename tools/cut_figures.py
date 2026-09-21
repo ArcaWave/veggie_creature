@@ -28,9 +28,9 @@ PARTS = os.path.join(ROOT, "public", "parts")
 SRC = os.path.join(ROOT, "tools", "figs_src")
 DEBUG_DIR = os.environ.get("CUT_DEBUG")  # CUT_DEBUG=<dir>: save what the pocket / floor rules removed, per figure
 # pale vegetables wash out to cream under the wall's lights: (saturation, brightness)
-GRADE = {"pumpkin": (1.45, 0.9), "onion": (1.35, 0.9)}
+GRADE = {"pumpkin": (1.45, 0.9), "cabbage": (1.3, 0.93)}
 # how far a hat sinks onto each vegetable (fraction of the figure's height)
-SINK = {"pumpkin": 0.035, "corn": 0.0, "sweetpotato": 0.05, "tomato": 0.05, "onion": 0.03}
+SINK = {"pumpkin": 0.035, "corn": 0.0, "sweetpotato": 0.05, "tomato": 0.05, "cabbage": 0.05}
 
 
 def dilate(mask: np.ndarray, px: int) -> np.ndarray:
@@ -98,7 +98,7 @@ def cut(src: str) -> dict:
     gone = dilate(gone, 1)
 
     # 4) the floor shadow. Two lessons learnt: it is TINTED by the feet, so "grey"
-    #    misses it — and pale vegetables (the onion!) look just like it, so a loose
+    #    misses it — and pale vegetables (the onion we once had!) look just like it, so a loose
     #    rule takes bites out of the body. Hence: only at FOOT LEVEL (the shadow
     #    is a flat ellipse on the floor, the bottom 16% of the figure), only warm-
     #    neutral colours (R>=G>=B, little chroma: not a green or orange boot, not
@@ -156,14 +156,17 @@ if __name__ == "__main__":
     if DEBUG_DIR:
         os.makedirs(DEBUG_DIR, exist_ok=True)
     # cut_figures.py                     → everything (a few minutes)
-    # cut_figures.py onion_twig_twig …   → just these; the rest of the catalog is kept
+    # cut_figures.py cabbage_twig_twig … → just these; the rest of the catalog is kept
     import sys
     only = [a for a in sys.argv[1:] if a.count("_") == 2]
     catalog = {}
     if only:
         with open(os.path.join(PARTS, "figures.json")) as f:
             catalog = json.load(f)
-    for src in sorted(glob.glob(os.path.join(SRC, "fig_*.src.png"))):
+    sources = sorted(glob.glob(os.path.join(SRC, "fig_*.src.png")))
+    have = {os.path.basename(src)[4:-8] for src in sources}
+    catalog = {k: v for k, v in catalog.items() if k in have}  # a retired vegetable leaves the catalog
+    for src in sources:
         key = os.path.basename(src)[4:-8]
         if not only or key in only:
             catalog[key] = cut(src)

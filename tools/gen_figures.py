@@ -20,12 +20,12 @@ STYLE = ("Adorable kawaii chibi 3D toy-figurine render in the style of a collect
          "blush cheeks, tiny sweet smile, soft studio lighting, gentle pastel colors, FULL BODY standing upright "
          "facing the camera, centered and filling the frame, ONE character only, isolated on a plain solid WHITE "
          "background, no floor shadow, no props, no text. NO hat, nothing on the head.")
-BODIES = {  # the event's five main vegetables (fixed 2026-09-17)
+BODIES = {  # the event's five main vegetables (fixed 2026-09-20: 늙은호박, 옥수수, 고구마, 토마토, 양배추)
   "pumpkin": "a big plump FLATTENED-round Korean old pumpkin (like a cheese pumpkin) with deep vertical ribs all around, muted warm tan-orange skin, and a short curly dried brown stem on top",
   "corn": "a plump rounded ear of yellow corn with soft kernel bumps and small husk leaves at the top",
   "sweetpotato": "a plump elongated sweet potato standing upright, gently tapered at the top and bottom, with reddish-purple magenta-brown skin and a few tiny root dimples",
   "tomato": "a plump round red tomato with a tiny green stem",
-  "onion": "a plump round golden-brown onion with fine vertical papery-skin lines and a small pointed dry tip on top",
+  "cabbage": "a plump round head of green cabbage: big overlapping pale-green outer leaves wrapped around it, with clearly visible white leaf veins and gently ruffled leaf edges, a little darker green on the outermost leaves; the eyes, blush and smile sit DIRECTLY on the green leaf surface (no separate skin-colored face, no hood)",
 }
 # The limbs and hats are the event's printed STICKERS (tools/sticker_refs/, cut
 # from the sticker sheet). Each render gets the matching sticker crops as
@@ -96,7 +96,7 @@ HAT_STYLE = ("Adorable kawaii 3D toy accessory sculpted from soft matte modellin
              "frame. ONE object only, isolated on a plain solid WHITE background, no head, no character, no floor shadow, no text.")
 def gen_hat(name):
     # text only: given the sticker itself as an image, the model hands the 2D drawing back
-    path = os.path.join(OUT, f"cute_hat_{name}.src.png")
+    path = os.path.join(ROOT, "tools", "hats_src", f"cute_hat_{name}.src.png")
     if os.path.exists(path): return f"skip hat {name}"
     return f"{'saved' if call([{'text': f'A hat: {HATS[name]}. {HAT_STYLE}'}], path) else 'FAILED'} hat {name}"
 if __name__ == "__main__":
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # gen_figures.py tomato_carrot_twig …  → redo just these figures (then cut_figures.py)
     jobs = [(b, a, l) for b in BODIES for a in ARMS for l in LEGS]
     hats = list(HATS)
-    if "sample" in sys.argv: jobs = [("pumpkin", "twig", "carrot"), ("onion", "cucumber", "cucumber"), ("tomato", "carrot", "twig")]
+    if "sample" in sys.argv: jobs = [("pumpkin", "twig", "carrot"), ("cabbage", "cucumber", "cucumber"), ("tomato", "carrot", "twig")]
     named = [tuple(x.split("_")) for x in sys.argv[1:] if x.count("_") == 2]
     if named: jobs, hats = named, []; FORCE.update(named)
     with ThreadPoolExecutor(max_workers=3) as ex:

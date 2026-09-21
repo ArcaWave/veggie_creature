@@ -247,7 +247,7 @@ function MagicStep({
   useEffect(() => {
     (async () => {
       track("match_start");
-      const RANDOM = ["pumpkin", "corn", "sweetpotato", "tomato", "onion"];
+      const RANDOM = ["pumpkin", "corn", "sweetpotato", "tomato", "cabbage"];
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
       let p: Parts | null = null;
       try {

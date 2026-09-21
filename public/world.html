@@ -719,7 +719,7 @@ const LINES = {
     corn: ["옥수수 알이 톡톡! 🌽", "나는 노란 옥수수야!"],
     sweetpotato: ["나는 달콤한 고구마! 🍠", "고구마는 가을이 제맛!"],
     tomato: ["나는 새빨간 토마토! 🍅", "토마토~ 토마토~ ♪"],
-    onion: ["나는 동글동글 양파! 🧅", "나 때문에 울지 마~"],
+    cabbage: ["나는 아삭아삭 양배추! 🥬", "겹겹이 잎이 몇 장일까?"],
   },
   scene: {
     harvest: ["벼가 노랗게 익었네! 🌾", "풍년이다, 풍년!"],
@@ -764,7 +764,7 @@ function welcome(c) {
   hush(c);
   for (const o of onStage.values()) if (o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4) hush(o);
   say(c, pick(LINES.arrive), 4600, "mine");
-  const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
+  const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o) && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
   if (friend) setTimeout(() => { hush(friend); if (onStage.has(friend.entry.id)) say(friend, pick(LINES.greet), 3000); }, 1700);
   talk.next = performance.now() + 5200; // let the newcomer have the floor
 }
