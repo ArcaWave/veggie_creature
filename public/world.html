@@ -247,11 +247,12 @@ ambientGroup.position.z = -BACKDROP_D + 0.15;
 camera.add(ambientGroup);
 const ambient = { scene: null, next: null, opacity: 1, build: 0, clouds: [], floaters: [], stars: [], glows: [], time: 0 };
 
-// ---- the news banner: two clay magpies (까치 — the bird that brings news) carry a cloth banner
-// across the sky every few minutes, like one more cloud: in from one side, a pause in the
-// middle (long enough to point a phone at it), out the other side. The cloth's blank panel gets
-// the QR code (public/fx/qr_matrix.json, drawn on whole pixels at the screen's own scale so it
-// scans) and a label in the page's font, at runtime. ?banner=0 hides it; ?banner=<seconds>
+// ---- the drifting sign: a chubby clay cloud with a wooden sign board hanging under it
+// crosses the sky every few minutes like one more cloud — in from one side, a pause in the
+// middle (long enough to point a phone at it), out the other side. The board's paper gets the
+// QR code (public/fx/qr_matrix.json, drawn on whole pixels at the screen's own scale so it
+// scans) and a label at runtime, MULTIPLIED into the paper so the ink takes the board's own
+// light and grain and reads as printed, not pasted. ?banner=0 hides it; ?banner=<seconds>
 // sets how often (default 150); &stay= keeps a demo crowd around to react to it.
 const BANNER_Q = _q.get("banner");
 const BANNER = {
@@ -259,10 +260,10 @@ const BANNER = {
   every: (Number(BANNER_Q) || 150) * 1000,
   first: Math.min(35000, (Number(BANNER_Q) || 150) * 1000), // ms after the page opens
   glide: 7000, hover: 14000,    // ms in, ms paused, ms out
-  w: 600,                       // painting px, magpies included
-  at: { harvest: [836, 228], field: [780, 218], night: [640, 232], moon: [700, 238], market: [836, 228] }, // hover centre, painting px (the magpies stay under the top edge)
-  strings: [[218, 44, 242, 186], [700, 44, 678, 186]], // beak → banner corner, sprite px (too thin to survive the cut-out; drawn here)
-  label: ["몽글키즈 소식 받기", "휴대폰으로 찍어 보세요 📷"],
+  w: 620,                       // painting px, cloud included (the QR comes out ~145 px on a 1920 screen)
+  // hover centre, painting px: the cloud's top rides above the screen edge (as clouds do), the board hangs in the sky
+  at: { harvest: [836, 140], field: [780, 140], night: [640, 145], moon: [700, 150], market: [760, 140] },
+  label: ["몽글키즈", "소식 받기 📷"],
 };
 const banner = { mesh: null, meta: null, qr: null, phase: "hidden", t0: 0, nextAt: performance.now() + BANNER.first, dir: 1, x: 0, y: 0, said: false };
 if (BANNER.on) Promise.all([fetch("/fx/banner.json").then((r) => r.json()), fetch("/fx/qr_matrix.json").then((r) => r.json())])
@@ -271,31 +272,37 @@ async function buildBanner() {
   const meta = banner.meta, M = banner.qr;
   if (!meta || !M) return null;
   const frame = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = "/fx/banner.png"; });
-  try { await document.fonts.load('40px "Jua"'); } catch (e) {}
+  try { await document.fonts.load('40px "Jua"', BANNER.label.join("")); } catch (e) {} // (the label's own glyphs: Google serves Korean fonts in subsets, and canvas text won't fetch them on its own)
   const [PW, PH] = SCENES[currentScene]?.px || [1672, 941];
   const pxScale = Math.max(innerWidth / PW, innerHeight / PH);
   const W = Math.round(BANNER.w * pxScale), k = W / meta.w, H = Math.round(meta.h * k);
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d");
   g.drawImage(frame, 0, 0, W, H);
-  g.strokeStyle = "#6a4a2a"; g.lineWidth = Math.max(1.5, 2.6 * k); g.lineCap = "round";
-  for (const [x1, y1, x2, y2] of BANNER.strings) { g.beginPath(); g.moveTo(x1 * k, y1 * k); g.lineTo(x2 * k, y2 * k); g.stroke(); }
   const [px0, py0, px1, py1] = meta.panel.map((v) => v * k);
   const pw = px1 - px0, ph = py1 - py0;
-  // QR on the left of the cloth, on whole pixels, with a quiet zone the cream supplies; the label to its right
-  const N = M.length, Q = 3;
-  const mod = Math.max(1, Math.floor((ph - 6) / (N + 2 * Q)));
-  const side = mod * N, qx = Math.round(px0 + mod * Q + 4), qy = Math.round(py0 + (ph - side) / 2);
-  g.fillStyle = "#fffdf7"; g.fillRect(qx - mod * Q, qy - mod * Q, side + 2 * mod * Q, side + 2 * mod * Q);
-  g.fillStyle = "#1b1410";
+  // printed, not pasted: ink multiplied into the paper (its shading and grain show through)
+  g.globalCompositeOperation = "multiply";
+  // the QR on whole pixels (the cream paper itself is the quiet zone) with the label beside it on a
+  // wide paper, under it on a squarer one
+  const N = M.length, Q = 3, wide = pw / ph > 1.45;
+  const room = wide ? Math.min(ph - 8, pw * 0.5) : Math.min(pw - 8, ph * 0.72);
+  const mod = Math.max(1, Math.floor(room / (N + 2 * Q)));
+  const side = mod * N;
+  const qx = Math.round(wide ? px0 + mod * Q + 4 : px0 + (pw - side) / 2), qy = Math.round(wide ? py0 + (ph - side) / 2 : py0 + mod * Q);
+  g.fillStyle = "#2b1d12";
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (M[y][x]) g.fillRect(qx + x * mod, qy + y * mod, mod, mod);
-  const tx0 = qx + side + mod * Q + 6, tw = px1 - tx0 - 6, tcx = tx0 + tw / 2;
-  const fs = Math.min(ph * 0.3, tw / 7.2);
-  g.fillStyle = "#6b4a1e"; g.textAlign = "center"; g.textBaseline = "middle";
-  g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`;
-  g.fillText(BANNER.label[0], tcx, py0 + ph * 0.38);
-  g.font = `${fs * 0.66}px "Jua", "Apple SD Gothic Neo", sans-serif`;
-  g.fillText(BANNER.label[1], tcx, py0 + ph * 0.7);
+  g.fillStyle = "#5a3d1c"; g.textAlign = "center"; g.textBaseline = "middle";
+  if (wide) {
+    const tx0 = qx + side + mod * Q + 4, tw = px1 - tx0 - 6, cx = tx0 + tw / 2, fs = Math.max(9, Math.min(ph * 0.32, tw / 4.6));
+    g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[0], cx, py0 + ph * 0.36);
+    g.font = `${fs * 0.8}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[1], cx, py0 + ph * 0.7);
+  } else {
+    const top = qy + side + mod * Q, rest = py1 - top, fs = Math.max(9, Math.min(pw * 0.2, rest * 0.46));
+    g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[0], (px0 + px1) / 2, top + rest * 0.3);
+    g.font = `${fs * 0.78}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[1], (px0 + px1) / 2, top + rest * 0.7);
+  }
+  g.globalCompositeOperation = "source-over";
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }));
@@ -315,7 +322,7 @@ function bannerTick(now, f, PW, PH) {
     banner.mesh.visible = true;
   }
   const [hx, hy] = BANNER.at[currentScene] || [PW / 2, 170];
-  const offX = banner.dir > 0 ? -BANNER.w : PW + BANNER.w; // where it comes from
+  const offX = banner.dir > 0 ? -BANNER.w * 0.8 : PW + BANNER.w * 0.8; // where it comes from (just off the edge)
   const el = now - banner.t0;
   let x = hx, alpha = 1;
   if (banner.phase === "in") {
@@ -324,7 +331,8 @@ function bannerTick(now, f, PW, PH) {
   } else if (banner.phase === "hover") {
     if (!banner.said) { // somebody points it out (anyone on stage, even mid-sentence: this is the moment)
       banner.said = true;
-      const c = pick([...onStage.values()].filter((o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o)));
+      const able = [...onStage.values()].filter((o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o));
+      const c = pick(able.filter((o) => !underSign(o))) || pick(able); // someone to the side of it, else anyone
       if (c) { hush(c); say(c, pick(LINES.magpie), 3600, "news"); }
     }
     if (el >= BANNER.hover) { banner.phase = "out"; banner.t0 = now; }
@@ -332,13 +340,13 @@ function bannerTick(now, f, PW, PH) {
     const k = Math.min(1, el / BANNER.glide); x = hx + (hx - offX) * easeInOut(k); // on, in the same direction, until off the far side
     if (k >= 1) { banner.phase = "hidden"; banner.nextAt = now + BANNER.every; banner.mesh.visible = false; return; }
   }
-  // a slow bob, and a hint of wingbeat in the tilt
+  // a slow, cloud-like bob
   const t = now / 1000;
-  const y = hy + Math.sin(t * 1.1) * 7;
+  const y = hy + Math.sin(t * 0.8) * 6;
   banner.mesh.scale.set(BANNER.w / PW * f.w, banner.h / PH * f.h, 1);
   banner.mesh.position.x = (x / PW - 0.5) * f.w;
   banner.mesh.position.y = (0.5 - y / PH) * f.h + f.lift;
-  banner.mesh.rotation.z = Math.sin(t * 1.1 + 1) * 0.015;
+  banner.mesh.rotation.z = Math.sin(t * 0.8 + 1) * 0.008;
   banner.mesh.material.opacity = alpha;
 }
 const spriteMat = (tex) => new THREE.MeshBasicMaterial({ map: getTex(tex), transparent: true, depthWrite: false, toneMapped: false, opacity: 1 });
@@ -850,8 +858,8 @@ const LINES = {
   meteor: ["별똥별이다! ✨", "소원 빌자! 🙏", "우와! 봤어?"],
   // a word for 몽글키즈 now and then — rare, and only ever in passing
   promo: ["나는 몽글키즈에서 태어났어! 💛", "몽글몽글 가을 놀이터, 재밌지?", "몽글키즈에서 또 만나! 👋", "다음 몽글키즈 놀이터도 기대해 줘!"],
-  // when the magpies arrive with the banner
-  magpie: ["까치가 몽글키즈 소식을 물고 왔어! 📷", "저기 위를 봐! 까치다! 🐦", "까치야, 무슨 소식이야?", "휴대폰으로 찍어 보래~ 📱"],
+  // when the sign cloud arrives
+  magpie: ["저기 위를 봐! 구름이 소식을 가져왔어! ☁️", "구름 간판이다! 몽글키즈 소식이래 📷", "휴대폰으로 찍어 보래~ 📱", "우와, 구름에 간판이 달렸어!"],
 };
 const PROMO_EVERY_MS = (Number(_q.get("promo")) || 180) * 1000; // a passing promo line about this often (?promo=<seconds> for rehearsal)
 // Now and then no words at all: one BIG emoji pops out over a head and floats
@@ -864,8 +872,25 @@ const bubbleLayer = document.getElementById("bubbles");
 const talk = { next: 0, last: null, promoAt: performance.now() - PROMO_EVERY_MS + 100000 }; // (first passing promo line ~100 s in; the banner's own line comes with the banner)
 // someone right next to a speaker waits: two bubbles side by side would overlap
 const crowded = (c) => [...onStage.values()].some((o) => o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4);
+const _sv = new THREE.Vector3();
+function signRect() { // the drifting sign's box on screen, or null
+  const m = banner.mesh;
+  if (!m || !m.visible || !m.scale.x) return null;
+  const px = (cx, cy) => { _sv.set(cx, cy, 0); m.localToWorld(_sv); _sv.project(camera); return [(_sv.x * 0.5 + 0.5) * innerWidth, (-_sv.y * 0.5 + 0.5) * innerHeight]; };
+  const [x0, y0] = px(-0.5, 0.5), [x1, y1] = px(0.5, -0.5);
+  return { x0, y0, x1, y1 };
+}
+// a bubble that would sit on the sign (the speaker stands under it) is not worth the clutter
+function underSign(c) {
+  const r = signRect();
+  if (!r) return false;
+  _sv.copy(c.root.position).setY(c.height * c.root.scale.y + 0.6).project(camera);
+  const hx = (_sv.x * 0.5 + 0.5) * innerWidth, hy = (-_sv.y * 0.5 + 0.5) * innerHeight;
+  return hx > r.x0 - 140 && hx < r.x1 + 140 && hy - 120 < r.y1;
+}
 function say(c, text, ms = 3200, cls = "") {
   if (!BUBBLES_ON || !c || c.bubble || !c.root.visible || CLOSEUP) return false;
+  if (cls !== "mine" && cls !== "news" && underSign(c)) return false;
   if (c.emote) { c.emote.el.remove(); c.emote = null; } // words win over a feeling
   if (cls !== "mine" && cls !== "reply" && cls !== "news" && crowded(c)) return false;
   const el = document.createElement("div");

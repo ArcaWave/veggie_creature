@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# The village's flying BANNER: two clay magpies (까치 — the bird that brings news)
-# carrying a cloth banner with a BLANK cream panel, which world.html fills at
-# runtime with the QR code (drawn crisply from public/fx/qr_matrix.json) and a
-# label. It glides in across the sky like a cloud every few minutes, hovers,
-# and leaves. Rendered on a GREEN backdrop (magpies are black, white and blue).
+# The village's drifting SIGN: a chubby clay cloud with a wooden sign board hanging
+# under it, which world.html fills at runtime with the QR code (drawn crisply from
+# public/fx/qr_matrix.json, multiplied into the board so it reads as printed) and a
+# label. It drifts in across the sky like one more cloud every few minutes, pauses,
+# and drifts out. Rendered on a BLUE backdrop and cut here.
 #   gen_banner.py          render if missing (tools/banner_src) + cut + banner.json
 #   gen_banner.py redo     render again
 # public/fx/banner.png + public/fx/banner.json { w, h, panel: [x0,y0,x1,y1] }
@@ -20,17 +20,17 @@ def env(key):
             if m: return m.group(1)
 KEY = env("GEMINI_API_KEY")
 G = "https://generativelanguage.googleapis.com/v1beta"
-STYLE = ("Adorable kawaii 3D scene sculpted from soft matte modelling clay, like a collectible vinyl toy diorama piece: "
-         "chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting. The banner's PANEL is a "
-         "completely BLANK, flat, plain, uniform cream-white rectangle, much wider than tall (landscape, about 3:1), with "
-         "absolutely nothing drawn or written on it, filling almost the whole cloth. Seen straight from the front, centered "
-         "and filling the frame width, isolated on a plain, flat, solid, saturated pure GREEN background (#00C800) with NO "
-         "gradient, no ground, no shadow, no text.")
+STYLE = ("Adorable kawaii 3D prop sculpted from soft matte modelling clay, like a piece from a collectible vinyl toy "
+         "diorama: chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting. The sign "
+         "board's PANEL is a completely BLANK, flat, plain, uniform cream-white paper rectangle, much wider than tall "
+         "(landscape, about 2.4:1), with absolutely nothing drawn or written on it, filling almost the whole board inside "
+         "its frame. Seen straight from the front, centered and filling the frame, isolated on a plain, flat, solid, "
+         "saturated pure BLUE background (#0038FF) with NO gradient, no ground, no shadow, no text.")
 SIGNS = {
-    "banner": "two cute chubby Korean magpies (black head and back, white belly, glossy dark-blue wing tips) flying side by side "
-              "with wings spread, one at each end, each holding a short string in its beak; the strings hold up a wide cream "
-              "cloth banner stretched between them, its top edge slightly scalloped where it hangs from the strings, with two "
-              "tiny red maple leaves stuck on its top corners",
+    "banner": "a low, wide, fluffy chubby white clay cloud (much wider than tall), and hanging level below it from two short "
+              "THICK brown ropes tied to the cloud, a long wooden sign board like a shop sign, about THREE times wider than "
+              "tall and nearly as wide as the cloud, with a rounded light-wood frame and a blank cream paper panel; a tiny "
+              "red maple leaf resting on the frame's top edge",
 }
 BACKDROP = {}
 def gen(name):
@@ -72,6 +72,21 @@ def cut(name):
         g = dilate(keyed, 2) & near
         if (g == keyed).all(): break
         keyed = g
+    # …plus enclosed pockets of backdrop (between the ropes, under the cloud): any blob of the backdrop colour
+    # that is more than a speck (a speck could be bounce light on the prop; a pocket is hundreds of pixels)
+    left = near & ~keyed
+    seen = np.zeros_like(left)
+    for y0, x0 in zip(*np.where(left)):
+        if seen[y0, x0]: continue
+        st, pts = [(y0, x0)], []
+        seen[y0, x0] = True
+        while st:
+            y, x = st.pop(); pts.append((y, x))
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < h and 0 <= xx < w and left[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True; st.append((yy, xx))
+        if len(pts) >= 150:
+            for y, x in pts: keyed[y, x] = True
     solid = ~dilate(keyed, 1)
     alpha = np.asarray(Image.fromarray((solid * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.0))).astype(np.float32) / 255
     # the rim (3 px in from the edge) carries the backdrop's spill: recolour it from the prop's own
@@ -94,7 +109,8 @@ def cut(name):
     im.save(os.path.join(OUT, f"{name}.png"), optimize=True)
     # the blank panel = the largest flat, bright, unsaturated region (eroded so the frame's highlights don't join)
     a = np.asarray(im).astype(np.float32); V = a[..., :3].max(axis=2); mn = a[..., :3].min(axis=2)
-    pale = (a[..., 3] > 200) & (V > 185) & (V - mn < 45)
+    R, B = a[..., 0], a[..., 2]
+    pale = (a[..., 3] > 200) & (V > 185) & (V - mn < 45) & (R - B > 6)   # cream paper — not the (blue-lit, neutral) cloud
     core = erode(pale, 6)
     ys, xs = np.where(core)
     best, seen = None, np.zeros_like(core)
