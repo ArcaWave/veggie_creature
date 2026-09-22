@@ -247,35 +247,44 @@ ambientGroup.position.z = -BACKDROP_D + 0.15;
 camera.add(ambientGroup);
 const ambient = { scene: null, next: null, opacity: 1, build: 0, clouds: [], floaters: [], stars: [], glows: [], time: 0 };
 
-// ---- the drifting sign: a chubby clay cloud with a wooden sign board hanging under it
-// crosses the sky every few minutes like one more cloud — in from one side, a pause in the
-// middle (long enough to point a phone at it), out the other side. The board's paper gets the
-// QR code (public/fx/qr_matrix.json, drawn on whole pixels at the screen's own scale so it
-// scans) and a label at runtime, MULTIPLIED into the paper so the ink takes the board's own
-// light and grain and reads as printed, not pasted. ?banner=0 hides it; ?banner=<seconds>
-// sets how often (default 150); &stay= keeps a demo crowd around to react to it.
+// ---- the QR carriers: in each scene, something that belongs there crosses the sky carrying the
+// QR code — a shield kite over the harvest field, a small hot-air balloon over the autumn field, a
+// flying saucer (moon rabbit at the controls) over the moon village, a sky lantern rising in the
+// full-moon yard, a bunch of balloons floating up from the market. Every few minutes: in along its
+// path, a slow middle stretch (long enough to point a phone at it), out. The prop's blank panel gets
+// the QR (public/fx/qr_matrix.json, drawn on whole pixels at the screen's own scale so it scans)
+// and a small label at runtime, MULTIPLIED into the paper so it reads as printed. ?banner=0 hides
+// them; ?banner=<seconds> sets how often (default 150); &stay= keeps a demo crowd around to react.
 const BANNER_Q = _q.get("banner");
 const BANNER = {
   on: BANNER_Q !== "0",
   every: (Number(BANNER_Q) || 150) * 1000,
   first: Math.min(35000, (Number(BANNER_Q) || 150) * 1000), // ms after the page opens
-  glide: 7000, hover: 14000,    // ms in, ms paused, ms out
-  w: 620,                       // painting px, cloud included (the QR comes out ~145 px on a 1920 screen)
-  // hover centre, painting px: the cloud's top rides above the screen edge (as clouds do), the board hangs in the sky
-  at: { harvest: [836, 140], field: [780, 140], night: [640, 145], moon: [700, 150], market: [760, 140] },
-  label: ["몽글키즈", "소식 받기 📷"],
+  glide: 8000, hover: 14000,    // ms in, ms slow middle, ms out
+  label: ["몽글키즈", "소식 받기"],
+  // per scene: the prop, its width (painting px), its path (from → to, painting px; the slow middle is the
+  // 40-60 % stretch), how it moves, what the creatures say about it
+  by: {
+    harvest: { tex: "kite", w: 215, from: [-140, 330], to: [1820, 230], sway: 0.07, bob: 9, lines: ["연이 날아간다~ 🪁", "저기 연에 몽글키즈 소식이 적혔어! 📷"] },
+    field: { tex: "balloon", w: 250, from: [1830, 300], to: [-170, 220], sway: 0.02, bob: 7, lines: ["열기구다! 저기 위를 봐!", "열기구에 몽글키즈 소식이 있대 📷"] },
+    night: { tex: "ufo", w: 260, from: [-170, 260], to: [1840, 215], sway: 0.03, bob: 10, lines: ["달토끼가 비행접시를 타고 왔어!", "우와, 비행접시다! 소식을 가져왔대 📷"] },
+    moon: { tex: "lantern", w: 170, from: [1500, 760], to: [1150, -320], sway: 0.04, bob: 0, lines: ["풍등에 소식이 적혀 있어! 📷", "저 풍등 좀 봐~ 몽글키즈래!"] },
+    market: { tex: "balloons", w: 250, from: [1540, 780], to: [1000, -360], sway: 0.04, bob: 0, lines: ["풍선이 날아간다~ 🎈", "풍선에 몽글키즈 소식이 달렸어! 📷"] },
+  },
 };
-const banner = { mesh: null, meta: null, qr: null, phase: "hidden", t0: 0, nextAt: performance.now() + BANNER.first, dir: 1, x: 0, y: 0, said: false };
-if (BANNER.on) Promise.all([fetch("/fx/banner.json").then((r) => r.json()), fetch("/fx/qr_matrix.json").then((r) => r.json())])
+const banner = { mesh: null, meta: null, qr: null, phase: "hidden", t0: 0, nextAt: performance.now() + BANNER.first, scene: null, cfg: null };
+if (BANNER.on) Promise.all([fetch("/fx/carriers.json").then((r) => r.json()), fetch("/fx/qr_matrix.json").then((r) => r.json())])
   .then(([m, q]) => { banner.meta = m; banner.qr = q; }).catch(() => {});
-async function buildBanner() {
-  const meta = banner.meta, M = banner.qr;
-  if (!meta || !M) return null;
-  const frame = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = "/fx/banner.png"; });
-  try { await document.fonts.load('40px "Jua"', BANNER.label.join("")); } catch (e) {} // (the label's own glyphs: Google serves Korean fonts in subsets, and canvas text won't fetch them on its own)
-  const [PW, PH] = SCENES[currentScene]?.px || [1672, 941];
+const carrierTex = {}; // scene → { tex, w, h } once composed
+async function buildCarrier(scene) {
+  const cfg = BANNER.by[scene], meta = banner.meta?.[cfg?.tex], M = banner.qr;
+  if (!cfg || !meta || !M) return null;
+  if (carrierTex[scene]) return carrierTex[scene];
+  const frame = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = `/fx/carrier_${cfg.tex}.png`; });
+  try { await document.fonts.load('40px "Jua"', BANNER.label.join("")); } catch (e) {} // (the label's own glyphs: Korean web fonts come in subsets, and canvas text won't fetch them)
+  const [PW, PH] = SCENES[scene].px;
   const pxScale = Math.max(innerWidth / PW, innerHeight / PH);
-  const W = Math.round(BANNER.w * pxScale), k = W / meta.w, H = Math.round(meta.h * k);
+  const W = Math.round(cfg.w * pxScale), k = W / meta.w, H = Math.round(meta.h * k);
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d");
   g.drawImage(frame, 0, 0, W, H);
@@ -283,71 +292,74 @@ async function buildBanner() {
   const pw = px1 - px0, ph = py1 - py0;
   // printed, not pasted: ink multiplied into the paper (its shading and grain show through)
   g.globalCompositeOperation = "multiply";
-  // the QR on whole pixels (the cream paper itself is the quiet zone) with the label beside it on a
-  // wide paper, under it on a squarer one
-  const N = M.length, Q = 3, wide = pw / ph > 1.45;
-  const room = wide ? Math.min(ph - 8, pw * 0.5) : Math.min(pw - 8, ph * 0.72);
+  // the QR as big as the paper allows (the paper is its quiet zone), on whole pixels; the label beside it
+  // on a wide paper, under it on a tall one — or left out when there is no room for it
+  const N = M.length, Q = 2, wide = pw / ph > 1.45;
+  const room = wide ? Math.min(ph - 6, pw * 0.52) : Math.min(pw - 6, ph - 6);
   const mod = Math.max(1, Math.floor(room / (N + 2 * Q)));
   const side = mod * N;
-  const qx = Math.round(wide ? px0 + mod * Q + 4 : px0 + (pw - side) / 2), qy = Math.round(wide ? py0 + (ph - side) / 2 : py0 + mod * Q);
+  const rest = wide ? 0 : ph - (side + 2 * mod * Q);
+  const stacked = !wide && rest > ph * 0.2;
+  const qx = Math.round(wide ? px0 + mod * Q + 3 : px0 + (pw - side) / 2);
+  const qy = Math.round(wide ? py0 + (ph - side) / 2 : stacked ? py0 + mod * Q + 2 : py0 + (ph - side) / 2);
   g.fillStyle = "#2b1d12";
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (M[y][x]) g.fillRect(qx + x * mod, qy + y * mod, mod, mod);
   g.fillStyle = "#5a3d1c"; g.textAlign = "center"; g.textBaseline = "middle";
   if (wide) {
-    const tx0 = qx + side + mod * Q + 4, tw = px1 - tx0 - 6, cx = tx0 + tw / 2, fs = Math.max(9, Math.min(ph * 0.32, tw / 4.6));
+    const tx0 = qx + side + mod * Q + 3, tw = px1 - tx0 - 4, cx = tx0 + tw / 2, fs = Math.max(8, Math.min(ph * 0.3, tw / 4.4));
     g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[0], cx, py0 + ph * 0.36);
-    g.font = `${fs * 0.8}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[1], cx, py0 + ph * 0.7);
-  } else {
-    const top = qy + side + mod * Q, rest = py1 - top, fs = Math.max(9, Math.min(pw * 0.2, rest * 0.46));
-    g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[0], (px0 + px1) / 2, top + rest * 0.3);
-    g.font = `${fs * 0.78}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[1], (px0 + px1) / 2, top + rest * 0.7);
+    g.font = `${fs * 0.82}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label[1], cx, py0 + ph * 0.68);
+  } else if (stacked) {
+    const top = qy + side + mod * Q, r = py1 - top, fs = Math.max(8, Math.min(pw * 0.19, r * 0.5));
+    g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`; g.fillText(BANNER.label.join(" "), (px0 + px1) / 2, top + r * 0.5);
   }
   g.globalCompositeOperation = "source-over";
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }));
-  mesh.position.z = 0.09; // in front of everything painted — clouds, stars, leaves, sky lanterns — so nothing drifts over the QR
-  mesh.visible = false;
-  ambientGroup.add(mesh);
-  banner.h = BANNER.w * meta.h / meta.w;
-  return mesh;
+  carrierTex[scene] = { tex, w: cfg.w, h: cfg.w * meta.h / meta.w };
+  return carrierTex[scene];
 }
 const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 function bannerTick(now, f, PW, PH) {
   if (!BANNER.on) return;
   if (banner.phase === "hidden") {
-    if (now < banner.nextAt || !banner.meta) return;
-    if (!banner.mesh) { if (!banner.building) { banner.building = buildBanner().then((m) => { banner.mesh = m; }).catch(() => {}); } return; }
-    banner.phase = "in"; banner.t0 = now; banner.dir = -banner.dir; banner.said = false;
-    banner.mesh.visible = true;
+    if (now < banner.nextAt || !banner.meta || !BANNER.by[currentScene]) return;
+    if (!banner.building) { // compose this scene's prop, then set off
+      banner.building = buildCarrier(currentScene).then((tx) => {
+        banner.building = null;
+        if (!tx) { banner.nextAt = now + 20000; return; }
+        if (!banner.mesh) { banner.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false })); banner.mesh.position.z = 0.09; ambientGroup.add(banner.mesh); } // in front of everything painted
+        banner.mesh.material.map = tx.tex; banner.mesh.material.needsUpdate = true;
+        banner.scene = currentScene; banner.cfg = BANNER.by[currentScene]; banner.size = tx;
+        banner.phase = "in"; banner.t0 = performance.now(); banner.said = false; banner.mesh.visible = true;
+      }).catch(() => { banner.building = null; banner.nextAt = now + 20000; });
+    }
+    return;
   }
-  const [hx, hy] = BANNER.at[currentScene] || [PW / 2, 170];
-  const offX = banner.dir > 0 ? -BANNER.w * 0.8 : PW + BANNER.w * 0.8; // where it comes from (just off the edge)
+  const cfg = banner.cfg, [x0, y0] = cfg.from, [x1, y1] = cfg.to;
   const el = now - banner.t0;
-  let x = hx, alpha = 1;
-  if (banner.phase === "in") {
-    const k = Math.min(1, el / BANNER.glide); x = offX + (hx - offX) * easeInOut(k);
-    if (k >= 1) { banner.phase = "hover"; banner.t0 = now; }
-  } else if (banner.phase === "hover") {
-    if (!banner.said) { // somebody points it out (anyone on stage, even mid-sentence: this is the moment)
+  let u; // 0..1 along the path: 0-0.4 in (easing out), 0.4-0.6 the slow middle, 0.6-1 out (easing in)
+  if (banner.phase === "in") { const k = Math.min(1, el / BANNER.glide); u = 0.4 * (1 - Math.pow(1 - k, 2.2)); if (k >= 1) { banner.phase = "hover"; banner.t0 = now; } }
+  else if (banner.phase === "hover") {
+    const k = Math.min(1, el / BANNER.hover); u = 0.4 + 0.2 * k;
+    if (!banner.said) { // somebody points it out — from the side of it, else anyone
       banner.said = true;
       const able = [...onStage.values()].filter((o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o));
-      const c = pick(able.filter((o) => !underSign(o))) || pick(able); // someone to the side of it, else anyone
-      if (c) { hush(c); say(c, pick(LINES.magpie), 3600, "news"); }
+      const c = pick(able.filter((o) => !underSign(o))) || pick(able);
+      if (c) { hush(c); say(c, pick(cfg.lines.concat(LINES.magpie)), 3600, "news"); }
     }
-    if (el >= BANNER.hover) { banner.phase = "out"; banner.t0 = now; }
-  } else if (banner.phase === "out") {
-    const k = Math.min(1, el / BANNER.glide); x = hx + (hx - offX) * easeInOut(k); // on, in the same direction, until off the far side
+    if (k >= 1) { banner.phase = "out"; banner.t0 = now; }
+  } else {
+    const k = Math.min(1, el / BANNER.glide); u = 0.6 + 0.4 * Math.pow(k, 2.2);
     if (k >= 1) { banner.phase = "hidden"; banner.nextAt = now + BANNER.every; banner.mesh.visible = false; return; }
   }
-  // a slow, cloud-like bob
   const t = now / 1000;
-  const y = hy + Math.sin(t * 0.8) * 6;
-  banner.mesh.scale.set(BANNER.w / PW * f.w, banner.h / PH * f.h, 1);
+  const x = x0 + (x1 - x0) * u, y = y0 + (y1 - y0) * u + Math.sin(t * 0.9) * cfg.bob;
+  banner.mesh.scale.set(banner.size.w / PW * f.w, banner.size.h / PH * f.h, 1);
   banner.mesh.position.x = (x / PW - 0.5) * f.w;
   banner.mesh.position.y = (0.5 - y / PH) * f.h + f.lift;
-  banner.mesh.rotation.z = Math.sin(t * 0.8 + 1) * 0.008;
-  banner.mesh.material.opacity = alpha;
+  banner.mesh.rotation.z = Math.sin(t * 0.7 + 1) * cfg.sway;
+  banner.mesh.material.opacity = 1;
 }
 const spriteMat = (tex) => new THREE.MeshBasicMaterial({ map: getTex(tex), transparent: true, depthWrite: false, toneMapped: false, opacity: 1 });
 // a soft round glow (for lantern flicker), drawn once
@@ -858,8 +870,8 @@ const LINES = {
   meteor: ["별똥별이다! ✨", "소원 빌자! 🙏", "우와! 봤어?"],
   // a word for 몽글키즈 now and then — rare, and only ever in passing
   promo: ["나는 몽글키즈에서 태어났어! 💛", "몽글몽글 가을 놀이터, 재밌지?", "몽글키즈에서 또 만나! 👋", "다음 몽글키즈 놀이터도 기대해 줘!"],
-  // when the sign cloud arrives
-  magpie: ["저기 위를 봐! 구름이 소식을 가져왔어! ☁️", "구름 간판이다! 몽글키즈 소식이래 📷", "휴대폰으로 찍어 보래~ 📱", "우와, 구름에 간판이 달렸어!"],
+  // when the QR carrier comes by (each scene adds its own lines)
+  magpie: ["저기 위를 봐! 몽글키즈 소식이래 📷", "휴대폰으로 찍어 보래~ 📱"],
 };
 const PROMO_EVERY_MS = (Number(_q.get("promo")) || 180) * 1000; // a passing promo line about this often (?promo=<seconds> for rehearsal)
 // Now and then no words at all: one BIG emoji pops out over a head and floats

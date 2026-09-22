@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-# The village's drifting SIGN: a chubby clay cloud with a wooden sign board hanging
-# under it, which world.html fills at runtime with the QR code (drawn crisply from
-# public/fx/qr_matrix.json, multiplied into the board so it reads as printed) and a
-# label. It drifts in across the sky like one more cloud every few minutes, pauses,
-# and drifts out. Rendered on a BLUE backdrop and cut here.
-#   gen_banner.py          render if missing (tools/banner_src) + cut + banner.json
-#   gen_banner.py redo     render again
-# public/fx/banner.png + public/fx/banner.json { w, h, panel: [x0,y0,x1,y1] }
+# The QR CARRIERS of the village: in each scene, something that belongs there
+# drifts across the sky carrying the QR code — a shield kite over the harvest
+# field, a small hot-air balloon over the autumn field, a flying saucer with a
+# moon rabbit over the moon village, a sky lantern in the full-moon yard, a bunch
+# of balloons over the market. Each has a BLANK cream panel that world.html fills
+# at runtime with the QR (drawn crisply from public/fx/qr_matrix.json, multiplied
+# in so it reads as printed) and a small label. Rendered on a coloured backdrop
+# that none of the prop's own colours share, and cut here.
+#   gen_carriers.py            render what is missing (tools/carriers_src) + cut all + carriers.json
+#   gen_carriers.py kite ufo   redo these
+# public/fx/carrier_<name>.png + public/fx/carriers.json { name: { w, h, panel: [x0,y0,x1,y1] } }
 import base64, json, os, re, sys, time, urllib.request
 import numpy as np
 from PIL import Image, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "tools", "banner_src")
+SRC = os.path.join(ROOT, "tools", "carriers_src")
 OUT = os.path.join(ROOT, "public", "fx")
 def env(key):
     with open(os.path.join(ROOT, ".env")) as f:
@@ -21,23 +24,36 @@ def env(key):
 KEY = env("GEMINI_API_KEY")
 G = "https://generativelanguage.googleapis.com/v1beta"
 STYLE = ("Adorable kawaii 3D prop sculpted from soft matte modelling clay, like a piece from a collectible vinyl toy "
-         "diorama: chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting. The sign "
-         "board's PANEL is a completely BLANK, flat, plain, uniform cream-white paper rectangle, much wider than tall "
-         "(landscape, about 2.4:1), with absolutely nothing drawn or written on it, filling almost the whole board inside "
-         "its frame. Seen straight from the front, centered and filling the frame, isolated on a plain, flat, solid, "
-         "saturated pure BLUE background (#0038FF) with NO gradient, no ground, no shadow, no text.")
+         "diorama: chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting. Its PANEL "
+         "is a completely BLANK, flat, plain, uniform cream-white paper rectangle with absolutely nothing drawn or "
+         "written on it. ONE object only, seen straight from the front, centered and filling most of the frame, "
+         "isolated on a plain, flat, solid, saturated pure {BG} background with NO gradient, no ground, no shadow, no text.")
 SIGNS = {
-    "banner": "a low, wide, fluffy chubby white clay cloud (much wider than tall), and hanging level below it from two short "
-              "THICK brown ropes tied to the cloud, a long wooden sign board like a shop sign, about THREE times wider than "
-              "tall and nearly as wide as the cloud, with a rounded light-wood frame and a blank cream paper panel; a tiny "
-              "red maple leaf resting on the frame's top edge",
+    "kite": "a Korean bangpae-yeon shield kite: an upright rectangular kite (a little taller than wide) of blank cream paper "
+            "stretched on a thin bamboo frame, the paper face completely blank, with small red and yellow paper tassels at "
+            "its top corners and a long wavy ribbon tail of red, yellow and green streamers hanging below, a thin string "
+            "trailing from its middle",
+    "balloon": "a small chubby hot-air balloon: an envelope in warm vertical stripes of orange, cream and mustard yellow, "
+               "thin ropes down to a little wicker basket, and hanging level right below the basket a WIDE wooden sign "
+               "board, as wide as the balloon itself, with a rounded light-wood frame and a blank cream paper panel that is "
+               "wider than tall",
+    "ufo": "a cute chubby flying saucer: a pale cream clay saucer with a warm orange rim band and soft yellow underside "
+           "lights, and a clear glass dome on top with a tiny white moon rabbit pilot peeking out; hanging level below "
+           "the saucer from two short thin rods a WIDE sign board, as wide as the saucer itself, with a rounded "
+           "light-wood frame and a blank cream paper panel that is wider than tall",
+    "lantern": "a Korean sky lantern (a tall paper wish lantern): a tall rounded rectangular paper lantern glowing softly "
+               "warm from inside, its front face a blank cream paper panel, a thin bamboo ring and a small warm flame at "
+               "the bottom opening, a tiny red tassel hanging under it",
+    "balloons": "a bunch of five chubby glossy clay party balloons (red, orange, yellow, pink and mint green) tied together, "
+                "their strings tied to a WIDE wooden sign board, as wide as the bunch of balloons, with a rounded "
+                "light-wood frame and a blank cream paper panel that is wider than tall, hanging level below them",
 }
-BACKDROP = {}
+BACKDROP = {}  # all on the saturated pure blue: the props' own colours stay clear of it (no blue tassels or balloons)
 def gen(name):
     os.makedirs(SRC, exist_ok=True)
     path = os.path.join(SRC, f"{name}.src.png")
     req = urllib.request.Request(f"{G}/models/gemini-2.5-flash-image:generateContent",
-        data=json.dumps({"contents":[{"parts":[{"text": f"{SIGNS[name]}. {STYLE}"}]}],"generationConfig":{"responseModalities":["IMAGE"]}}).encode(),
+        data=json.dumps({"contents":[{"parts":[{"text": f"{SIGNS[name]}. {STYLE.replace('{BG}', BACKDROP.get(name, 'BLUE (#0038FF)'))}"}]}],"generationConfig":{"responseModalities":["IMAGE"]}}).encode(),
         headers={"Content-Type":"application/json","x-goog-api-key":KEY})
     for attempt in range(4):
         try:
@@ -105,12 +121,12 @@ def cut(name):
         col[..., ch] = np.where(col[..., ch] > others, others + (col[..., ch] - others) * 0.3, col[..., ch])
     im = Image.fromarray(np.dstack([col, alpha * 255]).astype(np.uint8))
     box = im.getbbox(); im = im.crop(box)
-    k = min(1, 1400 / im.width); im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
-    im.save(os.path.join(OUT, f"{name}.png"), optimize=True)
+    k = min(1, 900 / max(im.size)); im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+    im.save(os.path.join(OUT, f"carrier_{name}.png"), optimize=True)
     # the blank panel = the largest flat, bright, unsaturated region (eroded so the frame's highlights don't join)
     a = np.asarray(im).astype(np.float32); V = a[..., :3].max(axis=2); mn = a[..., :3].min(axis=2)
     R, B = a[..., 0], a[..., 2]
-    pale = (a[..., 3] > 200) & (V > 185) & (V - mn < 45) & (R - B > 6)   # cream paper — not the (blue-lit, neutral) cloud
+    pale = (a[..., 3] > 200) & (V > 185) & (V - mn < 45) & (R >= B - 2)   # cream paper (warm), not sky-lit white
     core = erode(pale, 6)
     ys, xs = np.where(core)
     best, seen = None, np.zeros_like(core)
@@ -141,7 +157,12 @@ def cut(name):
     return {"w": im.width, "h": im.height, "panel": panel}
 
 if __name__ == "__main__":
-    if "redo" in sys.argv or not os.path.exists(os.path.join(SRC, "banner.src.png")):
-        print(gen("banner"), flush=True)
-    meta = cut("banner"); print("cut banner", meta, flush=True)
-    json.dump(meta, open(os.path.join(OUT, "banner.json"), "w"))
+    names = [a for a in sys.argv[1:] if a in SIGNS]
+    for n in SIGNS:
+        if n in names or not os.path.exists(os.path.join(SRC, f"{n}.src.png")):
+            print(gen(n), flush=True)
+    meta = {}
+    for n in SIGNS:
+        if os.path.exists(os.path.join(SRC, f"{n}.src.png")):
+            meta[n] = cut(n); print("cut", n, meta[n], flush=True)
+    json.dump(meta, open(os.path.join(OUT, "carriers.json"), "w"))
