@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-# The QR signs of the village: one clay sign prop per scene (a different object
-# each time — signpost, straw bundle, lantern board, 청사초롱, shop board), with
-# a BLANK cream panel that world.html fills at runtime with the QR code (drawn
-# crisply from public/fx/qr_matrix.json) and a label in the page's own font.
-#   gen_signs.py          render what is missing (tools/signs_src) + cut all + signs.json
-#   gen_signs.py market   redo this one
-# public/fx/sign_<scene>.png + public/fx/signs.json { scene: { w, h, panel: [x0,y0,x1,y1] } }
+# The village's flying BANNER: two clay magpies (까치 — the bird that brings news)
+# carrying a cloth banner with a BLANK cream panel, which world.html fills at
+# runtime with the QR code (drawn crisply from public/fx/qr_matrix.json) and a
+# label. It glides in across the sky like a cloud every few minutes, hovers,
+# and leaves. Rendered on a GREEN backdrop (magpies are black, white and blue).
+#   gen_banner.py          render if missing (tools/banner_src) + cut + banner.json
+#   gen_banner.py redo     render again
+# public/fx/banner.png + public/fx/banner.json { w, h, panel: [x0,y0,x1,y1] }
 import base64, json, os, re, sys, time, urllib.request
 import numpy as np
 from PIL import Image, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "tools", "signs_src")
+SRC = os.path.join(ROOT, "tools", "banner_src")
 OUT = os.path.join(ROOT, "public", "fx")
 def env(key):
     with open(os.path.join(ROOT, ".env")) as f:
@@ -19,25 +20,24 @@ def env(key):
             if m: return m.group(1)
 KEY = env("GEMINI_API_KEY")
 G = "https://generativelanguage.googleapis.com/v1beta"
-STYLE = ("Adorable kawaii 3D prop sculpted from soft matte modelling clay, like a piece from a collectible vinyl toy "
-         "diorama: chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting, warm autumn "
-         "colors. The sign's PANEL is a completely BLANK, flat, plain, uniform cream-white rectangle, taller than it is "
-         "wide (portrait), with absolutely nothing drawn or written on it, taking up most of the board's face. "
-         "ONE object only, seen straight from the front, centered and filling most of the frame, isolated on a plain, "
-         "flat, solid, saturated pure {BG} background with NO gradient, no floor, no shadow, no text.")
-BACKDROP = {"moon": "GREEN (#00C800)"}  # (red top band, blue bottom band: neither may be the backdrop)
+STYLE = ("Adorable kawaii 3D scene sculpted from soft matte modelling clay, like a collectible vinyl toy diorama piece: "
+         "chubby rounded volumes, smooth soft shading, gentle subsurface glow, soft studio lighting. The banner's PANEL is a "
+         "completely BLANK, flat, plain, uniform cream-white rectangle, much wider than tall (landscape, about 3:1), with "
+         "absolutely nothing drawn or written on it, filling almost the whole cloth. Seen straight from the front, centered "
+         "and filling the frame width, isolated on a plain, flat, solid, saturated pure GREEN background (#00C800) with NO "
+         "gradient, no ground, no shadow, no text.")
 SIGNS = {
-    "harvest": "a wooden signpost: a portrait blank cream board with a thick rounded light-wood frame, mounted on a single sturdy wooden post standing in a small tuft of golden rice-straw and grass, a tiny red maple leaf resting on one top corner",
-    "field": "a portrait blank cream board with a thin wooden frame, tied with twine to the front of a small round bundle of golden rice straw (a little hay stack), with a tiny orange pumpkin sitting at its foot",
-    "night": "a portrait blank cream board with a rounded top and a wooden frame on a short wooden post, a small softly glowing round paper lantern hanging from a little hook at the top corner, a tiny white moon rabbit sitting at the foot of the post",
-    "moon": "a Korean cheongsachorong lantern-style sign: a portrait blank cream panel framed by a red silk band across the top and a blue silk band across the bottom, hanging from a curved dark-wood hook stand by a short cord, with a small red tassel at the bottom",
-    "market": "a shop sign board of a Korean market stall: a portrait blank cream board with a dark-wood frame, hanging by two short ropes from a small wooden crossbar, a tiny red paper lantern hanging from one end of the crossbar",
+    "banner": "two cute chubby Korean magpies (black head and back, white belly, glossy dark-blue wing tips) flying side by side "
+              "with wings spread, one at each end, each holding a short string in its beak; the strings hold up a wide cream "
+              "cloth banner stretched between them, its top edge slightly scalloped where it hangs from the strings, with two "
+              "tiny red maple leaves stuck on its top corners",
 }
+BACKDROP = {}
 def gen(name):
     os.makedirs(SRC, exist_ok=True)
     path = os.path.join(SRC, f"{name}.src.png")
     req = urllib.request.Request(f"{G}/models/gemini-2.5-flash-image:generateContent",
-        data=json.dumps({"contents":[{"parts":[{"text": f"{SIGNS[name]}. {STYLE.replace('{BG}', BACKDROP.get(name, 'BLUE (#0038FF)'))}"}]}],"generationConfig":{"responseModalities":["IMAGE"]}}).encode(),
+        data=json.dumps({"contents":[{"parts":[{"text": f"{SIGNS[name]}. {STYLE}"}]}],"generationConfig":{"responseModalities":["IMAGE"]}}).encode(),
         headers={"Content-Type":"application/json","x-goog-api-key":KEY})
     for attempt in range(4):
         try:
@@ -63,12 +63,15 @@ def cut(name):
     border = np.concatenate([rgb[:6].reshape(-1, 3), rgb[-6:].reshape(-1, 3), rgb[:, :6].reshape(-1, 3), rgb[:, -6:].reshape(-1, 3)])
     bg = np.median(border, axis=0)
     dist = np.sqrt(((rgb - bg) ** 2).sum(axis=2))
-    # backdrop-like = close to the border colour, or the same HUE at any brightness (the vignette): the
-    # backdrop's strong channels stay strong and its weak channels stay well below them
-    hi = bg > 120
-    strong = rgb[..., hi].min(axis=2) if hi.any() else np.zeros((h, w))
-    weak = rgb[..., ~hi].max(axis=2) if (~hi).any() else np.zeros((h, w))
-    keyed = (dist < 95) | ((strong > 150) & (weak < strong - 70))
+    # backdrop = what is close to the border colour AND reachable from the border. Colour alone is not
+    # enough: the backdrop's light bounces onto the birds (green-tinted feathers are within the colour
+    # tolerance), and those pixels are inside the prop — not connected to the outside.
+    near = dist < 80
+    keyed = np.zeros((h, w), bool); keyed[0, :] = keyed[-1, :] = keyed[:, 0] = keyed[:, -1] = True; keyed &= near
+    while True:
+        g = dilate(keyed, 2) & near
+        if (g == keyed).all(): break
+        keyed = g
     solid = ~dilate(keyed, 1)
     alpha = np.asarray(Image.fromarray((solid * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.0))).astype(np.float32) / 255
     # the rim (3 px in from the edge) carries the backdrop's spill: recolour it from the prop's own
@@ -80,10 +83,15 @@ def cut(name):
     local = inner / np.maximum(wgt, 1e-3)[..., None]
     edge = (solid & ~interior)[..., None]
     col = np.where(edge & (wgt[..., None] > 0.05), local, rgb)
+    # despill: the backdrop's own hue bounced onto the prop (a green cast on white bellies) is pulled back
+    hi = bg > 120
+    if hi.sum() == 1:
+        ch = int(np.argmax(hi)); others = np.max(col[..., [i for i in range(3) if i != ch]], axis=2)
+        col[..., ch] = np.where(col[..., ch] > others, others + (col[..., ch] - others) * 0.3, col[..., ch])
     im = Image.fromarray(np.dstack([col, alpha * 255]).astype(np.uint8))
     box = im.getbbox(); im = im.crop(box)
-    k = min(1, 720 / im.height); im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
-    im.save(os.path.join(OUT, f"sign_{name}.png"), optimize=True)
+    k = min(1, 1400 / im.width); im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+    im.save(os.path.join(OUT, f"{name}.png"), optimize=True)
     # the blank panel = the largest flat, bright, unsaturated region (eroded so the frame's highlights don't join)
     a = np.asarray(im).astype(np.float32); V = a[..., :3].max(axis=2); mn = a[..., :3].min(axis=2)
     pale = (a[..., 3] > 200) & (V > 185) & (V - mn < 45)
@@ -117,12 +125,7 @@ def cut(name):
     return {"w": im.width, "h": im.height, "panel": panel}
 
 if __name__ == "__main__":
-    names = [a for a in sys.argv[1:] if a in SIGNS]
-    for n in SIGNS:
-        if n in names or not os.path.exists(os.path.join(SRC, f"{n}.src.png")):
-            print(gen(n), flush=True)
-    meta = {}
-    for n in SIGNS:
-        if os.path.exists(os.path.join(SRC, f"{n}.src.png")):
-            meta[n] = cut(n); print("cut", n, meta[n], flush=True)
-    json.dump(meta, open(os.path.join(OUT, "signs.json"), "w"))
+    if "redo" in sys.argv or not os.path.exists(os.path.join(SRC, "banner.src.png")):
+        print(gen("banner"), flush=True)
+    meta = cut("banner"); print("cut banner", meta, flush=True)
+    json.dump(meta, open(os.path.join(OUT, "banner.json"), "w"))

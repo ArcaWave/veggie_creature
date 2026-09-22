@@ -103,7 +103,7 @@ const SCENES = {
   harvest: { label: "황금 들녘", src: "/world3d-harvest.png", aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 4.8], xNear: [-2.6, 2.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff0d0, 0x9a6a3a, 1.0], sun: [0xffe8b8, 1.5], rim: [0xffc070, 0.7],
     // the painting's own life: its clouds and loose leaves were lifted out of
     // the art (public/fx) and drift/fall as sprites; the paddies sway in the shader
-    sign: { x: 1545, y: 935, h: 390 }, fx: {
+    fx: {
       wind: { rect: [0.28, 0.32, 0.68, 0.50], amp: 0.0016 },
       clouds: [
         { tex: "/fx/harvest_cloud1.png", x: 435, y: 162, speed: 5.5 },
@@ -113,20 +113,20 @@ const SCENES = {
       floaters: [{ sprites: ["/fx/leaf1.png", "/fx/leaf2.png", "/fx/leaf3.png"], spawn: [[30, 40, 330, 190, 7], [1500, 300, 1660, 400, 2]], vy: [13, 22], fade: [540, 610], sway: 16, spin: 0.55, size: [0.8, 1.15] }],
     } },
   field: { label: "가을 들판", src: "/world3d-field.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 4.5], xNear: [-2.2, 2.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xfff4d6, 0x9a6a3a, 1.0], sun: [0xfff2cc, 1.6], rim: [0xffd08a, 0.7],
-    sign: { x: 1200, y: 905, h: 380 }, fx: { // its three clouds drift; its four loose leaves fall from the two trees
+    fx: { // its three clouds drift; its four loose leaves fall from the two trees
       clouds: [{ tex: "/fx/field_cloud1.png", x: 422, y: 251, speed: 4.5 }, { tex: "/fx/field_cloud2.png", x: 1104, y: 150, speed: 3.6 }, { tex: "/fx/field_cloud3.png", x: 1324, y: 296, speed: 5.2 }],
       floaters: [{ sprites: ["/fx/field_leaf1.png", "/fx/field_leaf2.png", "/fx/field_leaf3.png", "/fx/field_leaf4.png"], spawn: [[10, 170, 230, 400, 5], [1500, 220, 1672, 470, 3]], vy: [12, 20], fade: [480, 560], sway: 16, spin: 0.55, size: [0.8, 1.15] }],
     } },
   night: { label: "달빛 마을", src: "/world3d-night.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-3, 7], z: [-5, 3.5] }, lift: 0.02, hemi: [0xdfe6ff, 0x5a4a30, 0.85], sun: [0xfff0c8, 1.1],  rim: [0x9fb4ff, 0.8],
     gravity: 0.38, // it's the moon: jumps go higher and hang longer, the walk becomes a slow lope
-    sign: { x: 520, y: 930, h: 380 }, fx: { // the night cloud drifts; the painted stars blink; shooting stars every few seconds
+    fx: { // the night cloud drifts; the painted stars blink; shooting stars every few seconds
       clouds: [{ tex: "/fx/night_cloud1.png", x: 108, y: 169, speed: 2.8 }],
       stars: "/fx/night_stars.json",
       twinkle: { min: 0.18, swell: 0.45, glint: 3.4 }, // a real blink: nearly out → bright, with a four-point glint at the peak
       meteors: { area: [250, 20, 1250, 160], every: [4, 9], len: [180, 260], thick: 9, dist: [220, 360], dur: [0.7, 1.0] },
     } },
   moon:  { label: "보름달 마당", src: "/world3d-moon.png",  aspect: 1672 / 941, px: [1672, 941], ground: { x: [-4.8, 6.5], xNear: [-1.2, 3.0], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffd9a8, 0x5a3a20, 0.9], sun: [0xffc890, 1.25], rim: [0x9fb4ff, 0.9],
-    sign: { x: 1380, y: 930, h: 390 }, fx: { // sky lanterns rise from behind the ridge, the lake shimmers, wall lanterns flicker, maple leaves fall
+    fx: { // sky lanterns rise from behind the ridge, the lake shimmers, wall lanterns flicker, maple leaves fall
       wind: { rect: [0.52, 0.462, 0.87, 0.50], amp: 0.0012 },
       floaters: [
         { sprites: ["/fx/moon_lantern1.png", "/fx/moon_lantern2.png", "/fx/moon_lantern3.png", "/fx/moon_lantern4.png", "/fx/moon_lantern5.png"], spawn: [[560, 430, 1500, 470, 5]], start: [[682, 144], [790, 90], [870, 206], [964, 298], [1456, 260]], vy: [-8, -4.5], fade: [140, 40], sway: 5, spin: 0, size: [1, 1], wait: [4, 16] },
@@ -136,7 +136,7 @@ const SCENES = {
       glows: [{ x: 455, y: 598, r: 34 }, { x: 665, y: 597, r: 34 }, { x: 1005, y: 603, r: 34 }, { x: 1400, y: 607, r: 34 }, { x: 118, y: 142, r: 40 }, { x: 206, y: 208, r: 36 }],
     } },
   market: { label: "가을 장터", src: "/world3d-market.png", aspect: 1672 / 941, px: [1672, 941], ground: { x: [-1.7, 1.9], xNear: [-4.0, 3.8], z: [-6, 4.5] }, lift: 0, cam: { pos: [0, 2.2, 12], look: [0, 2.5, -1.5] }, hemi: [0xffe2b8, 0x8a5a30, 0.95], sun: [0xffcc88, 1.4], rim: [0xffa860, 0.85],
-    sign: { x: 1200, y: 930, h: 390 }, fx: { // its two clouds drift across the sunset; maple leaves fall from its trees (the near one big, the far ones small); the stall lanterns flicker and the sun breathes
+    fx: { // its two clouds drift across the sunset; maple leaves fall from its trees (the near one big, the far ones small); the stall lanterns flicker and the sun breathes
       clouds: [{ tex: "/fx/market_cloud1.png", x: 584, y: 158, speed: 4.6 }, { tex: "/fx/market_cloud2.png", x: 1314, y: 71, speed: 3.4 }],
       floaters: [
         { sprites: ["/fx/market_leaf1.png", "/fx/market_leaf2.png", "/fx/market_leaf3.png"], spawn: [[0, 20, 430, 130, 6]], vy: [14, 24], fade: [650, 750], sway: 18, spin: 0.55, size: [0.55, 0.85] },
@@ -245,52 +245,101 @@ const groundX = (z) => { // painted floors narrow toward the viewer: x range at 
 const ambientGroup = new THREE.Group();
 ambientGroup.position.z = -BACKDROP_D + 0.15;
 camera.add(ambientGroup);
-const ambient = { scene: null, next: null, opacity: 1, build: 0, clouds: [], floaters: [], stars: [], glows: [], signs: [], time: 0 };
+const ambient = { scene: null, next: null, opacity: 1, build: 0, clouds: [], floaters: [], stars: [], glows: [], time: 0 };
 
-// ---- the QR sign: a clay prop of the scene (public/fx/sign_<scene>.png, tools/gen_signs.py) whose blank panel
-// gets the QR code and a label drawn at runtime — the QR from its module matrix (public/fx/qr_matrix.json) on an
-// integer pixel grid at the screen's own scale, so it stays crisp and scannable; the label in the page's font.
-// Each scene places its sign somewhere at the front edge (SCENES[x].sign: centre x, bottom y, height, painting px).
-// ?sign=0 hides them.
-const SIGNS_ON = _q.get("sign") !== "0";
-const SIGN_LABEL = ["몽글키즈", "소식 받기"];
-let signMeta = null, qrMatrix = null;
-if (SIGNS_ON) Promise.all([fetch("/fx/signs.json").then((r) => r.json()), fetch("/fx/qr_matrix.json").then((r) => r.json())])
-  .then(([m, q]) => { signMeta = m; qrMatrix = q; if (ambient.scene) buildSign(ambient.scene, ambient.build); }).catch(() => {});
-async function buildSign(name, build) {
-  const sc = SCENES[name], meta = signMeta?.[name];
-  if (!SIGNS_ON || !sc?.sign || !meta || !qrMatrix) return;
-  const frame = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = `/fx/sign_${name}.png`; });
+// ---- the news banner: two clay magpies (까치 — the bird that brings news) carry a cloth banner
+// across the sky every few minutes, like one more cloud: in from one side, a pause in the
+// middle (long enough to point a phone at it), out the other side. The cloth's blank panel gets
+// the QR code (public/fx/qr_matrix.json, drawn on whole pixels at the screen's own scale so it
+// scans) and a label in the page's font, at runtime. ?banner=0 hides it; ?banner=<seconds>
+// sets how often (default 150); &stay= keeps a demo crowd around to react to it.
+const BANNER_Q = _q.get("banner");
+const BANNER = {
+  on: BANNER_Q !== "0",
+  every: (Number(BANNER_Q) || 150) * 1000,
+  first: Math.min(35000, (Number(BANNER_Q) || 150) * 1000), // ms after the page opens
+  glide: 7000, hover: 14000,    // ms in, ms paused, ms out
+  w: 600,                       // painting px, magpies included
+  at: { harvest: [836, 228], field: [780, 218], night: [640, 232], moon: [700, 238], market: [836, 228] }, // hover centre, painting px (the magpies stay under the top edge)
+  strings: [[218, 44, 242, 186], [700, 44, 678, 186]], // beak → banner corner, sprite px (too thin to survive the cut-out; drawn here)
+  label: ["몽글키즈 소식 받기", "휴대폰으로 찍어 보세요 📷"],
+};
+const banner = { mesh: null, meta: null, qr: null, phase: "hidden", t0: 0, nextAt: performance.now() + BANNER.first, dir: 1, x: 0, y: 0, said: false };
+if (BANNER.on) Promise.all([fetch("/fx/banner.json").then((r) => r.json()), fetch("/fx/qr_matrix.json").then((r) => r.json())])
+  .then(([m, q]) => { banner.meta = m; banner.qr = q; }).catch(() => {});
+async function buildBanner() {
+  const meta = banner.meta, M = banner.qr;
+  if (!meta || !M) return null;
+  const frame = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = "/fx/banner.png"; });
   try { await document.fonts.load('40px "Jua"'); } catch (e) {}
-  if (build !== ambient.build) return; // the scene moved on meanwhile
-  const [PW, PH] = sc.px;
-  const pxScale = Math.max(innerWidth / PW, innerHeight / PH); // painting px → screen px (cover fit)
-  const H = Math.round(sc.sign.h * pxScale), W = Math.round(H * meta.w / meta.h), k = W / meta.w;
+  const [PW, PH] = SCENES[currentScene]?.px || [1672, 941];
+  const pxScale = Math.max(innerWidth / PW, innerHeight / PH);
+  const W = Math.round(BANNER.w * pxScale), k = W / meta.w, H = Math.round(meta.h * k);
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d");
   g.drawImage(frame, 0, 0, W, H);
-  const [px0, py0, px1, py1] = meta.panel.map((v, i) => v * k);
+  g.strokeStyle = "#6a4a2a"; g.lineWidth = Math.max(1.5, 2.6 * k); g.lineCap = "round";
+  for (const [x1, y1, x2, y2] of BANNER.strings) { g.beginPath(); g.moveTo(x1 * k, y1 * k); g.lineTo(x2 * k, y2 * k); g.stroke(); }
+  const [px0, py0, px1, py1] = meta.panel.map((v) => v * k);
   const pw = px1 - px0, ph = py1 - py0;
-  // the QR: as big as the panel's width allows (with a 3-module quiet zone the cream panel supplies), on whole pixels
-  const N = qrMatrix.length, Q = 3;
-  const mod = Math.max(1, Math.floor(Math.min(pw, ph * 0.74) / (N + 2 * Q)));
-  const side = mod * N, qx = Math.round(px0 + (pw - side) / 2), qy = Math.round(py0 + mod * Q);
+  // QR on the left of the cloth, on whole pixels, with a quiet zone the cream supplies; the label to its right
+  const N = M.length, Q = 3;
+  const mod = Math.max(1, Math.floor((ph - 6) / (N + 2 * Q)));
+  const side = mod * N, qx = Math.round(px0 + mod * Q + 4), qy = Math.round(py0 + (ph - side) / 2);
   g.fillStyle = "#fffdf7"; g.fillRect(qx - mod * Q, qy - mod * Q, side + 2 * mod * Q, side + 2 * mod * Q);
   g.fillStyle = "#1b1410";
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (qrMatrix[y][x]) g.fillRect(qx + x * mod, qy + y * mod, mod, mod);
-  // the label, under it
-  const rest = py1 - (qy + side + mod * Q), fs = Math.max(10, Math.min(pw * 0.19, rest * 0.42));
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (M[y][x]) g.fillRect(qx + x * mod, qy + y * mod, mod, mod);
+  const tx0 = qx + side + mod * Q + 6, tw = px1 - tx0 - 6, tcx = tx0 + tw / 2;
+  const fs = Math.min(ph * 0.3, tw / 7.2);
   g.fillStyle = "#6b4a1e"; g.textAlign = "center"; g.textBaseline = "middle";
   g.font = `${fs}px "Jua", "Apple SD Gothic Neo", sans-serif`;
-  g.fillText(SIGN_LABEL[0], (px0 + px1) / 2, qy + side + mod * Q + rest * 0.3);
-  g.font = `${fs * 0.8}px "Jua", "Apple SD Gothic Neo", sans-serif`;
-  g.fillText(SIGN_LABEL[1], (px0 + px1) / 2, qy + side + mod * Q + rest * 0.72);
+  g.fillText(BANNER.label[0], tcx, py0 + ph * 0.38);
+  g.font = `${fs * 0.66}px "Jua", "Apple SD Gothic Neo", sans-serif`;
+  g.fillText(BANNER.label[1], tcx, py0 + ph * 0.7);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }));
-  mesh.position.z = 0.006; // on the painting, behind its clouds and leaves
+  mesh.position.z = 0.09; // in front of everything painted — clouds, stars, leaves, sky lanterns — so nothing drifts over the QR
+  mesh.visible = false;
   ambientGroup.add(mesh);
-  ambient.signs.push({ mesh, x: sc.sign.x, y: sc.sign.y - sc.sign.h / 2, w: sc.sign.h * meta.w / meta.h, h: sc.sign.h });
+  banner.h = BANNER.w * meta.h / meta.w;
+  return mesh;
+}
+const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+function bannerTick(now, f, PW, PH) {
+  if (!BANNER.on) return;
+  if (banner.phase === "hidden") {
+    if (now < banner.nextAt || !banner.meta) return;
+    if (!banner.mesh) { if (!banner.building) { banner.building = buildBanner().then((m) => { banner.mesh = m; }).catch(() => {}); } return; }
+    banner.phase = "in"; banner.t0 = now; banner.dir = -banner.dir; banner.said = false;
+    banner.mesh.visible = true;
+  }
+  const [hx, hy] = BANNER.at[currentScene] || [PW / 2, 170];
+  const offX = banner.dir > 0 ? -BANNER.w : PW + BANNER.w; // where it comes from
+  const el = now - banner.t0;
+  let x = hx, alpha = 1;
+  if (banner.phase === "in") {
+    const k = Math.min(1, el / BANNER.glide); x = offX + (hx - offX) * easeInOut(k);
+    if (k >= 1) { banner.phase = "hover"; banner.t0 = now; }
+  } else if (banner.phase === "hover") {
+    if (!banner.said) { // somebody points it out (anyone on stage, even mid-sentence: this is the moment)
+      banner.said = true;
+      const c = pick([...onStage.values()].filter((o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o)));
+      if (c) { hush(c); say(c, pick(LINES.magpie), 3600, "news"); }
+    }
+    if (el >= BANNER.hover) { banner.phase = "out"; banner.t0 = now; }
+  } else if (banner.phase === "out") {
+    const k = Math.min(1, el / BANNER.glide); x = hx + (hx - offX) * easeInOut(k); // on, in the same direction, until off the far side
+    if (k >= 1) { banner.phase = "hidden"; banner.nextAt = now + BANNER.every; banner.mesh.visible = false; return; }
+  }
+  // a slow bob, and a hint of wingbeat in the tilt
+  const t = now / 1000;
+  const y = hy + Math.sin(t * 1.1) * 7;
+  banner.mesh.scale.set(BANNER.w / PW * f.w, banner.h / PH * f.h, 1);
+  banner.mesh.position.x = (x / PW - 0.5) * f.w;
+  banner.mesh.position.y = (0.5 - y / PH) * f.h + f.lift;
+  banner.mesh.rotation.z = Math.sin(t * 1.1 + 1) * 0.015;
+  banner.mesh.material.opacity = alpha;
 }
 const spriteMat = (tex) => new THREE.MeshBasicMaterial({ map: getTex(tex), transparent: true, depthWrite: false, toneMapped: false, opacity: 1 });
 // a soft round glow (for lantern flicker), drawn once
@@ -348,11 +397,10 @@ function launchMeteor(offset = 0) {
   free.dx = Math.cos(Math.abs(ang)) * d * Math.sign(ang); free.dy = Math.sin(Math.abs(ang)) * d;
 }
 function buildAmbient(name) {
-  for (const o of [...ambient.clouds, ...ambient.floaters, ...ambient.stars, ...ambient.glows, ...ambient.meteors, ...ambient.signs]) { ambientGroup.remove(o.mesh); if (o.glint) ambientGroup.remove(o.glint); }
-  ambient.clouds = []; ambient.floaters = []; ambient.stars = []; ambient.glows = []; ambient.meteors = []; ambient.signs = []; ambient.scene = name; ambient.opacity = 0;
+  for (const o of [...ambient.clouds, ...ambient.floaters, ...ambient.stars, ...ambient.glows, ...ambient.meteors]) { ambientGroup.remove(o.mesh); if (o.glint) ambientGroup.remove(o.glint); }
+  ambient.clouds = []; ambient.floaters = []; ambient.stars = []; ambient.glows = []; ambient.meteors = []; ambient.scene = name; ambient.opacity = 0;
   ambient.meteorNext = Infinity;
   const build = ++ambient.build;
-  buildSign(name, build);
   const fx = SCENES[name]?.fx;
   if (!fx) return;
   let zi = 0;
@@ -495,18 +543,7 @@ function ambientTick(dt) {
     mt.mesh.scale.set(mt.len * Math.min(1, p * 3) / PW * f.w, fx.meteors.thick / PH * f.h, 1);
     mt.mesh.material.opacity = env * ambient.opacity;
   }
-  // whoever ends up standing on the sign (a spot picked before it appeared, a walk that
-  // arrived there, a newcomer) is asked to move on — checked every couple of seconds
-  if (ambient.signs.length && ambient.time > (ambient.signCheckAt || 0)) {
-    ambient.signCheckAt = ambient.time + 1;
-    for (const c of onStage.values()) if (!c.leaving && c.mode !== "walk" && c.mode !== "pop" && c.root.visible && coversSign(c.root.position.x, c.root.position.z, c.height)) { c.target = freeSpot(c); c.mode = "walk"; c.dir = 1; }
-  }
-  for (const sg of ambient.signs) {
-    sg.mesh.scale.set(sg.w / PW * f.w, sg.h / PH * f.h, 1);
-    sg.mesh.position.x = (sg.x / PW - 0.5) * f.w;
-    sg.mesh.position.y = (0.5 - sg.y / PH) * f.h + f.lift;
-    sg.mesh.material.opacity = ambient.opacity;
-  }
+  bannerTick(performance.now(), f, PW, PH);
   for (const g of ambient.glows) {
     const t = ambient.time;
     const flicker = g.calm ? 0.5 + 0.5 * Math.sin(t * 0.55 + g.phase) // a slow breath (the setting sun), not a flame
@@ -751,31 +788,10 @@ function partsFor(entry) {
   };
 }
 
-// the QR sign must stay readable: nobody stands where they would cover it. A spot
-// is judged on SCREEN — the creature's box there (feet to head, ~0.7 × height wide)
-// against the sign's box, with a margin — because the sign lives on the painting,
-// not in the room.
-const _v = new THREE.Vector3();
-const ndcToPx = () => [(_v.x * 0.5 + 0.5) * innerWidth, (-_v.y * 0.5 + 0.5) * innerHeight];
-const toScreen = (x, y, z) => { _v.set(x, y, z).project(camera); return ndcToPx(); };
-// (the sign sits in the camera-glued ambient group: its corners go through localToWorld first)
-const cornerToScreen = (mesh, cx, cy) => { _v.set(cx, cy, 0); mesh.localToWorld(_v); _v.project(camera); return ndcToPx(); };
-function coversSign(x, z, height = 2) {
-  for (const sg of ambient.signs) {
-    if (!sg.mesh.scale.x) continue;
-    const [sx0, sy0] = cornerToScreen(sg.mesh, -0.5, 0.5);
-    const [sx1, sy1] = cornerToScreen(sg.mesh, 0.5, -0.5);
-    const [fx, fy] = toScreen(x, 0, z), [, hy] = toScreen(x, height, z);
-    const hw = (fy - hy) * 0.55, m = 60; // arms out, a jump, a wave: generous
-    if (fx + hw > sx0 - m && fx - hw < sx1 + m && fy > sy0 - m && hy < sy1 + m) return true;
-  }
-  return false;
-}
 function freeSpot(self) {
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 12; i++) {
     const z = rnd(...GROUND.z);
     const s = { x: rnd(...groundX(z)), z };
-    if (coversSign(s.x, s.z, self?.height)) continue;
     const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4);
     if (!crowded) return s;
   }
@@ -833,9 +849,11 @@ const LINES = {
   },
   meteor: ["별똥별이다! ✨", "소원 빌자! 🙏", "우와! 봤어?"],
   // a word for 몽글키즈 now and then — rare, and only ever in passing
-  promo: ["나는 몽글키즈에서 태어났어! 💛", "몽글몽글 가을 놀이터, 재밌지?", "몽글키즈에서 또 만나! 👋", "저기 표지판 봤어? 몽글키즈 소식이래! 📷", "다음 몽글키즈 놀이터도 기대해 줘!"],
+  promo: ["나는 몽글키즈에서 태어났어! 💛", "몽글몽글 가을 놀이터, 재밌지?", "몽글키즈에서 또 만나! 👋", "다음 몽글키즈 놀이터도 기대해 줘!"],
+  // when the magpies arrive with the banner
+  magpie: ["까치가 몽글키즈 소식을 물고 왔어! 📷", "저기 위를 봐! 까치다! 🐦", "까치야, 무슨 소식이야?", "휴대폰으로 찍어 보래~ 📱"],
 };
-const PROMO_EVERY_MS = (Number(_q.get("promo")) || 90) * 1000; // one promo line about this often (?promo=<seconds> for rehearsal)
+const PROMO_EVERY_MS = (Number(_q.get("promo")) || 180) * 1000; // a passing promo line about this often (?promo=<seconds> for rehearsal)
 // Now and then no words at all: one BIG emoji pops out over a head and floats
 // away (no bubble round it). What it is follows what the creature is up to.
 const EMOTES = ["heart", "songpyeon", "moon", "star", "note", "persimmon"]; // the world's own clay icons: /fx/emote_<name>.png (tools/gen_emotes.py) — system emoji looked generic here
@@ -843,13 +861,13 @@ const EMOTE_CHANCE = 0.3; // of the chatter turns
 EMOTES.forEach((n) => { new Image().src = `/fx/emote_${n}.png`; }); // warm, so the first pop isn't late
 const BUBBLES_ON = _q.get("bubbles") !== "0";
 const bubbleLayer = document.getElementById("bubbles");
-const talk = { next: 0, last: null, promoAt: performance.now() - PROMO_EVERY_MS + 45000 }; // (first promo line ~45 s in)
+const talk = { next: 0, last: null, promoAt: performance.now() - PROMO_EVERY_MS + 100000 }; // (first passing promo line ~100 s in; the banner's own line comes with the banner)
 // someone right next to a speaker waits: two bubbles side by side would overlap
 const crowded = (c) => [...onStage.values()].some((o) => o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4);
 function say(c, text, ms = 3200, cls = "") {
   if (!BUBBLES_ON || !c || c.bubble || !c.root.visible || CLOSEUP) return false;
   if (c.emote) { c.emote.el.remove(); c.emote = null; } // words win over a feeling
-  if (cls !== "mine" && cls !== "reply" && crowded(c)) return false;
+  if (cls !== "mine" && cls !== "reply" && cls !== "news" && crowded(c)) return false;
   const el = document.createElement("div");
   el.className = `bubble ${cls}`;
   const inner = document.createElement("div");
@@ -1003,7 +1021,7 @@ function addCreature(entry, isNew) {
   function behave() {
     if (c.leaving) return;
     const r = Math.random();
-    if (r < 0.3) { const z = THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z); const x = THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...groundX(z)); if (!coversSign(x, z, c.height)) { c.target = { x, z }; c.mode = "walk"; } }
+    if (r < 0.3) { const z = THREE.MathUtils.clamp(c.root.position.z + rnd(-1.5, 1.5), ...GROUND.z); c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...groundX(z)), z }; c.mode = "walk"; }
     else if (r < 0.5) { c.mode = "wave"; c.dir = 1; }
     else if (r < 0.72) { c.mode = "jump"; c.modeT = 0; c.dir = 1; }
     else { c.mode = "dance"; c.dir = 1; }
@@ -1016,7 +1034,7 @@ function addCreature(entry, isNew) {
     c.leaving = true;
     c.mode = "wave"; c.dir = 1;
     say(c, pick(LINES.bye), 2600);
-    later(() => { const sx = SCENES[currentScene]?.sign?.x; c.target = { x: sx !== undefined && sx > SCENES[currentScene].px[0] / 2 ? -14 : 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200); // (out the side away from the QR sign)
+    later(() => { c.target = { x: 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200);
   }, Math.max(entry.at + STAY_MS(entry) - Date.now(), DEMO ? 6000 : 15000));
 }
 
@@ -1094,7 +1112,7 @@ function frame() {
     if (c.mode === "walk") {
       const dx = c.target.x - c.root.position.x, dz = c.target.z - c.root.position.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.dir = 1; if (c.leaving && Math.abs(c.root.position.x) > 13) { removeCreature(c); continue; } }
+      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.dir = 1; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
       else {
         const step = Math.min(d, c.speed * dt);
         c.root.position.x += (dx / d) * step; c.root.position.z += (dz / d) * step;
@@ -1109,7 +1127,7 @@ function frame() {
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
 setInterval(() => applyScene(sceneNow()), 10000);
-if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor, ambient, say, emote, EMOTES, buildAmbient }; // rehearse scene changes / a shooting star / poses from the console
+if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor, ambient, say, emote, EMOTES, buildAmbient, banner, BANNER }; // rehearse scene changes / a shooting star / poses from the console
 frame();
 
 addEventListener("resize", () => {

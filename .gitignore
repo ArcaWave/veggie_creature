@@ -21,5 +21,5 @@ tools/figs_src/
 # raw emote renders (regenerable: tools/gen_emotes.py)
 tools/emotes_src/
 
-# raw sign renders (regenerable: tools/gen_signs.py)
-tools/signs_src/
+# raw banner render (regenerable: tools/gen_banner.py)
+tools/banner_src/
