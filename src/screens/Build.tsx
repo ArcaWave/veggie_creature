@@ -305,20 +305,28 @@ function MagicStep({
       narrate("a2_go");
       track("walk_off", { variant: v });
       // the creature leaves this screen — announce it to the Digital World
-      fetch("/api/creatures", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variant: v, parts: partsRef.current }),
-      })
-        .then(async (r) => {
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || !j.uploaded) throw new Error(j.reason || j.error || `http_${r.status}`);
+      // (a department-store Wi-Fi blip must not cost a child their creature on the wall: a few retries,
+      // spread over ~10 s, before the send-off screen admits it)
+      const send = (attempt: number): Promise<void> =>
+        fetch("/api/creatures", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant: v, parts: partsRef.current }),
+          signal: AbortSignal.timeout(8000),
         })
-        .catch((e) => {
-          const reason = String(e?.message || e);
-          track("relay_fail", { reason });
-          if (aliveRef.current) setRelayFail(reason);
-        });
+          .then(async (r) => {
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.uploaded) throw new Error(j.reason || j.error || `http_${r.status}`);
+          })
+          .catch((e) => {
+            if (attempt < 3) return new Promise<void>((res) => window.setTimeout(res, 1500 * attempt)).then(() => send(attempt + 1));
+            throw e;
+          });
+      send(1).catch((e) => {
+        const reason = String(e?.message || e);
+        track("relay_fail", { reason });
+        if (aliveRef.current) setRelayFail(reason);
+      });
       later(() => {
         // it has arrived on the wall: point the child at it for a moment
         setPhase("sendoff");

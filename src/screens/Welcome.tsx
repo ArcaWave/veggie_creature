@@ -53,6 +53,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   const [flash, setFlash] = useState(false);
 
   const countRef = useRef<number | null>(null);
+  const countReason = useRef<"gate" | "button" | "key">("gate"); // a staff start is never cancelled by the gate
   const countTimer = useRef<(() => void) | null>(null); // cancels the voiced countdown
   const gateRef = useRef<ShowGate | null>(null);
   const armedRef = useRef(false);
@@ -93,6 +94,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   function startCountdown(reason: "gate" | "button" | "key") {
     if (countRef.current !== null || doneRef.current) return;
     track("welcome_countdown", { reason });
+    countReason.current = reason;
     setHint("count");
     countRef.current = COUNT_FROM;
     setCount(null);
@@ -123,7 +125,16 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     narrate("w5_snap");
     setHint("snap");
     setFlash(true);
-    const url = snapshot(v);
+    // several people in frame (siblings, friends each holding theirs up): the photo the matcher reads is
+    // the followed child's upper body with the creation in front of it; alone, the whole frame as seen
+    const r = lastRep.current;
+    let focus: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    if (r && r.boxes.length > 1 && r.zone && r.main >= 0) {
+      const z = r.zone, w = r.width;
+      focus = { x0: z.x0 - w * 0.35, x1: z.x1 + w * 0.35, y0: z.y0 - w * 0.9, y1: z.y1 + w * 0.25 };
+    }
+    track("welcome_snap", { people: r?.boxes.length ?? 0, focused: !!focus });
+    const url = snapshot(v, 960, focus);
     window.setTimeout(() => onCaptured(url), clipMs("w5_snap") + 150);
   }
   useEffect(() => () => clearCountTimer(), []);
@@ -136,6 +147,8 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   // hold for a moment before it speaks, so a flickering detection can't
   // stutter, and nothing here ever talks over the countdown.
   const hintRef = useRef<Hint>("come");
+  const seenAt = useRef(0); // when anybody at all was last in the camera
+  const lastRep = useRef<GateReport | null>(null); // the gate's latest view (who is followed, where their hands are)
   const hintSince = useRef(Date.now());
   if (hintRef.current !== hint) { hintRef.current = hint; hintSince.current = Date.now(); }
   const [muted, setMuted] = useState(voiceBlocked());
@@ -144,12 +157,15 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     hush(); // whatever the last session was saying ends here
     preloadVoice();
     const q = Number(new URLSearchParams(location.search).get("hello"));
-    const HELLO_GAP = (Number.isFinite(q) && q >= 3 ? q : 15) * 1000, SHOW_EVERY = 9000;
+    // someone in view (a child walking by, a family looking) → invite them every ~15 s; nobody at
+    // all → every ~45 s, so an empty booth doesn't talk to itself ~2,000 times a day
+    const HELLO_GAP = (Number.isFinite(q) && q >= 3 ? q : 15) * 1000, EMPTY_GAP = HELLO_GAP * 3, SHOW_EVERY = 9000;
     let helloAt = Date.now() + (hadSession ? 4000 : 2500); // the next hello is due then
-    let showAt = 0;
+    let showAt = 0, wasSomeone = false;
     const id = window.setInterval(() => {
       if (doneRef.current || countRef.current !== null) return;
       const now = Date.now(), h = hintRef.current, held = now - hintSince.current;
+      const someone = now - seenAt.current < 2500;
       const saying = narrating();
       if (h === "hold" && held > 700 && now >= showAt && saying !== "w2_show") {
         narrate("w2_show");
@@ -157,8 +173,12 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
         helloAt = now + clipMs("w2_show") + HELLO_GAP;
       } else if (h === "come" && held > 700 && now >= helloAt && !saying) {
         narrate("w1_hello");
-        helloAt = now + clipMs("w1_hello") + HELLO_GAP;
+        helloAt = now + clipMs("w1_hello") + (someone ? HELLO_GAP : EMPTY_GAP);
       }
+      // somebody walks into view after a quiet spell: greet them soon, not in half a minute
+      // (only off the long, nobody-around schedule — a busy corridor flickering in and out of view must not make it chatty)
+      if (someone && !wasSomeone && !saying && helloAt - now > clipMs("w1_hello") + HELLO_GAP) helloAt = now + 1500;
+      wasSomeone = someone;
     }, 300);
     return () => { clearInterval(id); hush(); };
   }, []);
@@ -207,13 +227,17 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
       // pass) before the gate can fire again — no accidental double runs
       if (!armedRef.current && (now - lastNear > COOLDOWN_MS || now - t0 > COOLDOWN_MAX_MS)) armedRef.current = true;
 
+      lastRep.current = rep;
+      if (rep.boxes.length) seenAt.current = now; // anybody at all in view (for how often to call out)
       drawOverlay(v, rep);
       if (DEBUG && frame++ % 4 === 0) setReport(rep);
 
       if (countRef.current === null) {
         setHint(!rep.near ? "come" : !rep.holding ? "hold" : "still");
         if (rep.ready && armedRef.current) startCountdown("gate");
-      } else if (now - lastNear > LOST_MS) {
+      } else if (countReason.current === "gate" && now - lastNear > LOST_MS) {
+        // (only a countdown the GATE started: a staff start — button / Space — is for exactly the child the
+        // gate cannot see, a wheelchair, a very small child, so "nobody near" must not cancel it)
         cancelCountdown(); // walked off mid-count: back to the mirror, quietly
         setHint("come");
       }

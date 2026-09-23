@@ -1,16 +1,23 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { checkLimit, limitKey } from "./_ratelimit.js";
-import { listCreatures, uploadCreature, relayStatus, type CreatureParts } from "./_creaturestore.js";
+import { listCreatures, uploadCreature, relayStatus, creatureStats, type CreatureParts } from "./_creaturestore.js";
 
 export const maxDuration = 30;
 
 // GET  -> newest living creatures [{id, variant, at, parts?}] (polled by world.html)
 //         ?diag=1 adds the relay's health (which store, last list/upload error)
+//         ?stats[&since=2026-09-26] -> the event in numbers: total, per day / hour (KST), per vegetable & sticker
 // POST {variant, parts?} -> the scan station announces a new arrival;
 //         {uploaded:false, reason} says WHY when the store refused it
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     res.setHeader("Cache-Control", "no-store");
+    if ("stats" in (req.query ?? {})) {
+      const since = String(req.query.since ?? "");
+      const t = since ? Date.parse(`${since}T00:00:00+09:00`) : 0;
+      try { return res.status(200).json(await creatureStats(Number.isFinite(t) ? t : 0)); }
+      catch (e: any) { return res.status(500).json({ error: "stats_failed", detail: String(e?.message || e).slice(0, 300) }); }
+    }
     const creatures = await listCreatures();
     const diag = "diag" in (req.query ?? {}) ? { ...relayStatus, listed: creatures.length, now: Date.now() } : undefined;
     return res.status(200).json({ creatures, diag });

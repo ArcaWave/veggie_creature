@@ -124,16 +124,26 @@ export function coverFit(v: HTMLVideoElement, cw: number, ch: number) {
 
 // WYSIWYG snapshot: exactly the region the (object-fit: cover) preview shows,
 // scaled to at most `max` px, as a JPEG data URL for the matcher
-export function snapshot(v: HTMLVideoElement, max = 960): string {
+// `focus` (video-normalised box, optional): with several people in frame, only the region around the
+// child being followed — so the matcher reads THEIR creation, not the one a sibling holds up beside
+// them. The box is clamped into the frame and to a sensible minimum size.
+export function snapshot(v: HTMLVideoElement, max = 960, focus?: { x0: number; y0: number; x1: number; y1: number } | null): string {
   const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
   let cw = v.videoWidth, ch = v.videoHeight;
   if (cw / ch > ratio) cw = Math.round(ch * ratio);
   else ch = Math.round(cw / ratio);
+  let sx = (v.videoWidth - cw) * CAM_FOCUS.x, sy = (v.videoHeight - ch) * CAM_FOCUS.y;
+  if (focus) {
+    const fw = Math.max(0.3, focus.x1 - focus.x0) * v.videoWidth, fh = Math.max(0.35, focus.y1 - focus.y0) * v.videoHeight;
+    const cx = ((focus.x0 + focus.x1) / 2) * v.videoWidth, cy = ((focus.y0 + focus.y1) / 2) * v.videoHeight;
+    cw = Math.min(v.videoWidth, Math.round(fw)); ch = Math.min(v.videoHeight, Math.round(fh));
+    sx = Math.max(0, Math.min(v.videoWidth - cw, cx - cw / 2)); sy = Math.max(0, Math.min(v.videoHeight - ch, cy - ch / 2));
+  }
   const scale = Math.min(1, max / Math.max(cw, ch));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(cw * scale);
   canvas.height = Math.round(ch * scale);
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(v, (v.videoWidth - cw) * CAM_FOCUS.x, (v.videoHeight - ch) * CAM_FOCUS.y, cw, ch, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(v, sx, sy, cw, ch, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", 0.8);
 }

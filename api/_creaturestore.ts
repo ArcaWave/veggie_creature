@@ -169,3 +169,37 @@ export async function listCreatures(): Promise<CreatureEntry[]> {
     return mem.list;
   }
 }
+
+// ---- the event in numbers (for the report / promo: "N children made a veggie friend") ----------
+// Every arrival stays in the store (the wall only reads the latest), so the whole event can be
+// counted: in total, per day and hour (Korean time), per vegetable and per sticker.
+export type CreatureStats = {
+  total: number; first: number | null; last: number | null; source: string;
+  byDay: Record<string, number>; byHour: Record<string, number>;
+  byVariant: Record<string, number>; byHat: Record<string, number>; byArms: Record<string, number>; byLegs: Record<string, number>;
+};
+export function summarize(entries: { variant: string; at: number; parts?: CreatureParts | null }[], source: string): CreatureStats {
+  const s: CreatureStats = { total: 0, first: null, last: null, source, byDay: {}, byHour: {}, byVariant: {}, byHat: {}, byArms: {}, byLegs: {} };
+  const inc = (o: Record<string, number>, k: string | undefined) => { if (k) o[k] = (o[k] ?? 0) + 1; };
+  for (const e of entries) {
+    const kst = new Date(e.at + 9 * 3600_000).toISOString(); // YYYY-MM-DDTHH… in Korean time
+    s.total++;
+    s.first = s.first === null ? e.at : Math.min(s.first, e.at);
+    s.last = s.last === null ? e.at : Math.max(s.last, e.at);
+    inc(s.byDay, kst.slice(0, 10)); inc(s.byHour, kst.slice(11, 13));
+    inc(s.byVariant, e.variant); inc(s.byHat, e.parts?.hat); inc(s.byArms, e.parts?.arms); inc(s.byLegs, e.parts?.legs);
+  }
+  return s;
+}
+export async function creatureStats(since = 0): Promise<CreatureStats> {
+  if (storeKind() === "supabase") {
+    const rows: any[] = [];
+    for (let off = 0; ; off += 1000) { // (the Data API hands out at most 1000 rows a request)
+      const page = (await supa(`creatures?select=variant,at,parts&at=gte.${Math.floor(since)}&order=at.asc&limit=1000&offset=${off}`)) as any[];
+      rows.push(...page);
+      if (page.length < 1000) break;
+    }
+    return summarize(rows.map((r) => ({ variant: String(r.variant), at: Number(r.at), parts: r.parts })), "supabase (all arrivals)");
+  }
+  return summarize((await listCreatures()).filter((e) => e.at >= since), `${storeKind()} (latest ${KEEP} only)`);
+}

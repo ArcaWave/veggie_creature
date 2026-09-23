@@ -76,6 +76,8 @@ const HAND_LINE_AFTER_MS = 3500; // stir: no hand in view this long → "손을 
 const ASSIST_AFTER_MS = 5000; // this long without a recognised move → the quiet assist begins
 const ASSIST_RAMP_MS = 4000;  // …easing in over this long, so its start is imperceptible
 const ASSIST_RATE = 7;        // gauge % per second once fully eased in
+const EMPTY_AFTER_MS = 4000;  // nobody at all in the camera this long → the scene wraps up fast…
+const EMPTY_RATE = 30;        // …at this many % per second (~3 s a scene)
 const POSE_RATE = 46;         // gauge % per second while a pose is held (~2 s to fill)
 const TICK_MS = 100;
 const STIR_TURNS = 2;         // turns of the ladle that fill the pot…
@@ -113,6 +115,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   const lastHitAt = useRef(Date.now()); // last moment the child's own move charged the gauge
   const doneRef = useRef(false);
   const waitSaid = useRef(false);  // "천천히 해도 괜찮아~" was said in this scene
+  const seenAt = useRef(Date.now()); // when anybody at all was last in the camera
   const talkEnd = useRef(Date.now() + clipMs("d0_intro") + 250 + clipMs(MOVES[0].voice)); // when this scene's instruction has been said
   const handSaidAt = useRef(0);    // when "손을 들어 봐!" was last said
   const onFullRef = useRef(onFull);
@@ -244,6 +247,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             }
             view.current.boxes = boxes;
             view.current.main = main;
+            if (poses.length) seenAt.current = now;
 
             if (move.check) {
               const ok = doer >= 0;
@@ -310,7 +314,11 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
           narrate("d_wait");
         }
       }
-      if (idle > ASSIST_AFTER_MS) {
+      // nobody in front of the camera at all (the child walked off; a queue is waiting):
+      // don't hold the station for a minute — each scene wraps up in a few seconds
+      const empty = landmarker && now - seenAt.current > EMPTY_AFTER_MS;
+      if (empty) chargeRef.current(EMPTY_RATE * dt);
+      else if (idle > ASSIST_AFTER_MS) {
         const r = Math.min(1, (idle - ASSIST_AFTER_MS) / ASSIST_RAMP_MS), ease = r * r * (3 - 2 * r);
         const breath = 1 + 0.25 * Math.sin(now / 700) + 0.1 * Math.sin(now / 230);
         chargeRef.current(ASSIST_RATE * ease * breath * dt);

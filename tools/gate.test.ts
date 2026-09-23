@@ -1,5 +1,5 @@
-// Who does the welcome gate follow when several people are in frame? Synthetic BlazePose landmarks;
-// run: npx tsx tools/gate_people.test.ts
+// The welcome gate on synthetic BlazePose landmarks: when does a photo start, and — with several
+// people in frame — who is followed?   run: npx tsx tools/gate.test.ts
 import { ShowGate } from "../src/lib/gate";
 type P = { x: number; y: number; z: number; visibility: number };
 function person(w: number, cx: number, hands: "chest" | "down" | "up", jitter = 0, noseY = 0.30): P[] {
@@ -37,4 +37,15 @@ r.push(run("nobody holds anything (parent + child, hands down)", () => [person(0
 r.push(run("holder is far away in the background, a bystander is close", () => [person(0.25, 0.5, "down"), person(0.09, 0.3, "chest")], "never"));
 r.push(run("holder walks past behind a standing adult", (t) => [person(0.28, 0.5, "down"), person(0.2, (t / 4000) * 1.2 - 0.1, "chest")], "never"));
 r.push(run("holder off to the side (edge of frame)", () => [person(0.28, 0.5, "down"), person(0.2, 0.1, "chest")], "never"));
-console.log(r.every(Boolean) ? "ALL PASS" : `${r.filter((x) => !x).length} FAIL`);
+// one child: distance, position, hands, stillness, and the detector's hiccups
+r.push(run("… with natural jitter (0.02)", () => [person(0.24, 0.5, "chest", 0.02)], "fires"));
+r.push(run("… one-handed hold", () => { const p = person(0.24, 0.5, "chest"); p[16] = { x: 0.74, y: 0.95, z: 0, visibility: 1 }; return [p]; }, "fires"));
+r.push(run("far away (a child running past in the background)", () => [person(0.10, 0.5, "chest")], "never"));
+r.push(run("close but hands down", () => [person(0.24, 0.5, "down")], "never"));
+r.push(run("close, hands UP (만세)", () => [person(0.24, 0.5, "up")], "never"));
+r.push(run("close but off to the side", () => [person(0.24, 0.12, "chest")], "never"));
+r.push(run("walking past (moving fast)", (t) => [person(0.24, (t / 4000) * 1.2 - 0.1, "chest")], "never"));
+r.push(run("fidgeting (0.12 jitter)", () => [person(0.24, 0.5, "chest", 0.12)], "never"));
+r.push(run("one frame lost (grace)", (t) => (t === 1188 ? [] : [person(0.24, 0.5, "chest")]), "fires"));
+r.push(run("steps out for 0.6 s and back (starts over)", (t) => (t > 1000 && t < 1600 ? [] : [person(0.24, 0.5, "chest")]), "fires"));
+console.log(r.every(Boolean) ? `ALL PASS (${r.length})` : `${r.filter((x) => !x).length} FAIL`);

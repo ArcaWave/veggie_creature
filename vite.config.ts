@@ -6,7 +6,7 @@ import path from "node:path";
 import { stylize, startAnimate, animateStatus, matchVariant } from "./api/_gemini";
 import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
-import { listCreatures, uploadCreature, makeEntry, relayStatus, type CreatureEntry } from "./api/_creaturestore";
+import { listCreatures, uploadCreature, makeEntry, relayStatus, creatureStats, summarize, type CreatureEntry } from "./api/_creaturestore";
 import { checkLimit, limitKey } from "./api/_ratelimit";
 
 const ANIMATOR = () => process.env.ANIMATOR_URL || "http://127.0.0.1:8765";
@@ -111,6 +111,9 @@ function devApiPlugin(): Plugin {
           }
         }
         const cloud = await listCreatures();
+        if (/[?&]stats\b/.test(req.url || "")) { // same numbers as production; the disk relay stands in without a store
+          return send(res, 200, cloud.length ? await creatureStats() : summarize(devCreatures, "dev relay (this PC)"));
+        }
         const creatures = cloud.length ? cloud : devCreatures.slice(0, 60);
         // same health report as production (?diag=1); here the in-memory/disk relay stands in without a token
         const diag = /[?&]diag\b/.test(req.url || "") ? { ...relayStatus, listed: creatures.length, now: Date.now(), devRelay: !cloud.length } : undefined;
