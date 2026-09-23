@@ -16,11 +16,15 @@ type Rig = {
 };
 
 let rigPromise: Promise<Rig> | null = null;
-export function loadRig(): Promise<Rig> {
+let rigAt = 0;
+// (fresh=true: read it again — the station has been open since before a deploy that added this part)
+export function loadRig(fresh = false): Promise<Rig> {
+  if (fresh && performance.now() - rigAt > 3000) rigPromise = null;
   if (!rigPromise) {
+    rigAt = performance.now();
     rigPromise = Promise.all([
-      fetch("/parts/rig.json").then((r) => r.json()),
-      fetch("/parts/figures.json").then((r) => r.json()),
+      fetch("/parts/rig.json", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/parts/figures.json", { cache: "no-store" }).then((r) => r.json()),
     ]).then(([rig, figures]) => ({ ...rig, figures }));
     rigPromise.catch(() => (rigPromise = null));
   }
@@ -36,11 +40,17 @@ export async function randomParts(body: string): Promise<Parts> {
 
 export function Figure({ parts, className = "" }: { parts: Parts; className?: string }) {
   const [rig, setRig] = useState<Rig | null>(null);
+  const [bodyShown, setBodyShown] = useState(false); // the hat waits for its body: never a hat on its own
   useEffect(() => {
     let live = true;
-    loadRig().then((r) => { if (live) setRig(r); }).catch(() => {});
+    loadRig().then((r) => {
+      // a part this (long-running) page doesn't know yet: the catalog is read again first
+      if (!r.bodies[parts.body] || !r.figures[`${parts.body}_${parts.arms}_${parts.legs}`]) return loadRig(true);
+      return r;
+    }).then((r) => { if (live) setRig(r); }).catch(() => {});
     return () => { live = false; };
-  }, []);
+  }, [parts.body, parts.arms, parts.legs]);
+  useEffect(() => setBodyShown(false), [parts.body, parts.arms, parts.legs]);
   if (!rig) return <div className={`figure ${className}`} />;
 
   const b = rig.bodies[parts.body] ?? Object.values(rig.bodies)[0];
@@ -59,8 +69,8 @@ export function Figure({ parts, className = "" }: { parts: Parts; className?: st
   return (
     <div className={`figure ${className}`}>
       <div className="figure-body" style={{ aspectRatio: String(aspect) }}>
-        <img src={src} alt="" draggable={false} />
-        {hat && (
+        <img src={src} alt="" draggable={false} onLoad={() => setBodyShown(true)} />
+        {hat && bodyShown && (
           <img
             className="figure-hat"
             src={hat.tex}

@@ -626,20 +626,46 @@ scene.add(rim);
 // scan station: public/parts/rig.json is the one source of truth
 let BODIES = {};
 const PARTS = { hats: { none: null }, arms: {}, legs: {} };
-const rigReady = fetch("/parts/rig.json").then((r) => r.json()).then((rig) => {
+let FIGURES = {}; // "tomato_twig_carrot" -> { aspect, hatY }
+// The wall runs all day while the scan station may be updated (a new vegetable, new figures). A
+// creature the station made with a body this page doesn't know must NOT be turned into some other
+// vegetable (a cabbage came out as corn), and a figure this page expects must not be missing (only
+// its hat showed): so the catalog is re-read — every few minutes, and at once when an arrival
+// names a body it doesn't know.
+let catalogAt = 0;
+const retiredBodies = new Set(); // bodies old records name that the current catalog no longer has
+async function loadCatalog() {
+  const [rig, figs] = await Promise.all([
+    fetch("/parts/rig.json", { cache: "no-store" }).then((r) => r.json()),
+    fetch("/parts/figures.json", { cache: "no-store" }).then((r) => r.json()),
+  ]);
   BODIES = rig.bodies;
+  for (const k of Object.keys(PARTS.hats)) if (k !== "none") delete PARTS.hats[k];
   Object.assign(PARTS.hats, rig.hats);
+  PARTS.arms = {}; PARTS.legs = {};
   for (const k of rig.arms) PARTS.arms[k] = 1;
   for (const k of rig.legs) PARTS.legs[k] = 1;
-}).catch(() => {});
-let FIGURES = {}; // "carrot_twig_carrot" -> { aspect }
-const figuresReady = Promise.all([rigReady, fetch("/parts/figures.json").then((r) => r.json()).then((j) => { FIGURES = j; })]).catch(() => {});
+  FIGURES = figs;
+  catalogAt = performance.now();
+}
+function refreshCatalog(minAgeMs = 60000) {
+  if (performance.now() - catalogAt < minAgeMs) return Promise.resolve();
+  catalogAt = performance.now(); // (one refresh at a time)
+  return loadCatalog().catch(() => {});
+}
+const figuresReady = loadCatalog().catch(() => {});
 const RIG = new URLSearchParams(location.search).has("rig");
-const stickerTex = {};
+const stickerTex = {}, texOk = {}; // url -> texture, url -> Promise<loaded?>
 function getTex(url) {
-  if (!stickerTex[url]) { const t = texLoader.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; stickerTex[url] = t; }
+  if (!stickerTex[url]) {
+    let done;
+    texOk[url] = new Promise((r) => (done = r));
+    const t = texLoader.load(url, () => done(true), undefined, () => { done(false); delete stickerTex[url]; }); // (a failed one may be asked for again)
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; stickerTex[url] = t;
+  }
   return stickerTex[url];
 }
+const texLoaded = (url) => texOk[url] || Promise.resolve(true);
 // an unlit picture plane whose origin is its anchor (ax from the left, ay from the top)
 function sticker(def) {
   const g = new THREE.Group();
@@ -672,6 +698,22 @@ function assemble(parts) {
   const hat = sticker(PARTS.hats[parts.hat]);
   hat.position.set(0, def.h * (1 - (fig?.hatY ?? b.hatY)), 0.03); // each figure carries its own hat socket
   bodyPivot.add(hat);
+  // the hat shows only once its body has — never a hat floating on its own (a slow network, or a
+  // figure that isn't there). A body that fails to load is swapped for another figure of the same
+  // vegetable (the arms or legs may differ; the child's vegetable and hat stay right).
+  hat.visible = false;
+  texLoaded(def.tex).then((ok) => {
+    if (ok) { hat.visible = true; return; }
+    const alt = Object.keys(FIGURES).find((k) => k.startsWith(`${parts.body}_`) && `/parts/fig_${k}.png` !== def.tex)
+      || Object.keys(FIGURES).find((k) => `/parts/fig_${k}.png` !== def.tex);
+    if (!alt) return;
+    const altDef = { tex: `/parts/fig_${alt}.png`, aspect: FIGURES[alt].aspect, h: def.h, ax: 0.5, ay: 1.0 };
+    const repl = sticker(altDef);
+    body.clear();
+    for (const ch of [...repl.children]) body.add(ch);
+    hat.position.y = def.h * (1 - (FIGURES[alt].hatY ?? b.hatY));
+    texLoaded(altDef.tex).then((ok2) => { hat.visible = ok2; });
+  });
   return { root, body, bodyPivot, hat, height: def.h, baseY: 0, dir: 1, t: rnd(0, 10), mode: "idle", modeT: 0 };
 }
 
@@ -1140,6 +1182,11 @@ async function poll(first) {
     const r = await fetch("/api/creatures", { cache: "no-store" });
     const j = await r.json();
     const residents = (j.creatures || []).slice(0, RESIDENTS);
+    // an arrival made on a newer catalog than this page's: read the catalog again before placing it
+    // (bodies still unknown after that are retired ones from old records — not asked about again)
+    const unknown = residents.filter((e) => !onStage.has(e.id) && e.parts?.body && !BODIES[e.parts.body] && !retiredBodies.has(e.parts.body));
+    await refreshCatalog(unknown.length ? 3000 : 300000);
+    for (const e of unknown) if (!BODIES[e.parts.body]) retiredBodies.add(e.parts.body);
     const want = new Set(residents.map((e) => e.id));
     for (const e of [...residents].reverse()) { // oldest first, so the stage keeps arrival order
       if (onStage.has(e.id) || (TIMED && (departed.has(e.id) || gone(e)))) continue;
@@ -1221,6 +1268,24 @@ function frame() {
   document.getElementById("hud").textContent = DEBUG ? `${onStage.size} on stage` : "";
 }
 setInterval(() => applyScene(sceneNow()), 10000);
+// ?autoreload: a wall left running all day picks up a new deploy by itself — at a quiet moment (no
+// newcomer's arrival in the last 30 s, no QR carrier crossing). The residents come straight back from
+// the store. Needs a kiosk Chrome with --autoplay-policy=no-user-gesture-required for the music.
+if (_q.has("autoreload")) {
+  let first = null, changed = false;
+  const check = () => fetch("/world.html", { method: "HEAD", cache: "no-store" }).then((r) => {
+    const tag = r.headers.get("etag") || r.headers.get("last-modified");
+    if (!tag) return;
+    if (first === null) first = tag; else if (tag !== first) changed = true;
+  }).catch(() => {});
+  check();
+  setInterval(() => {
+    check();
+    const now = performance.now();
+    const busy = [...onStage.values()].some((c) => c.bornAt && now - c.bornAt < 30000 && now - c.bornAt > -POP_DELAY) || banner.phase !== "hidden";
+    if (changed && !busy) location.reload();
+  }, 60000);
+}
 if (DEBUG) window.__vc3d = { applyScene, onStage, SCENES, launchMeteor, ambient, say, emote, EMOTES, buildAmbient, banner, BANNER, renderer }; // rehearse scene changes / a shooting star / poses from the console
 frame();
 

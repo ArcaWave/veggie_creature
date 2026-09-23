@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit } from "../lib/camera";
+import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit, attachCamera, onCameraRecovered, cameraHealth } from "../lib/camera";
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
 import { pop, sparkle } from "../lib/sfx";
 import { narrate, hush, narrating, clipMs, voicedCountdown, preloadVoice, voiceBlocked, onVoiceBlocked } from "../lib/narrate";
+import { reloadIfUpdated } from "../lib/autoreload";
 import { track } from "../lib/analytics";
 import { CamFrame } from "../components/CamFrame";
 
@@ -65,14 +66,12 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
     let cancelled = false;
     setCamError(null);
     if (camTry > 0) releaseCamera();
+    let detach = () => {};
     getCamera()
-      .then((stream) => {
+      .then(() => {
         if (cancelled) return;
         const v = videoRef.current;
-        if (v && v.srcObject !== stream) {
-          v.srcObject = stream;
-          v.play?.().catch(() => {});
-        }
+        if (v) detach = attachCamera(v); // (re-bound by the camera watchdog after a dropout)
         setCamOn(true);
       })
       .catch((err) => {
@@ -80,7 +79,9 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
         setCamError(cameraErrorText(err));
         setCamOn(false);
       });
-    return () => { cancelled = true; };
+    // a camera that failed to open at first but comes back later (plugged in late): pick it up
+    const off = onCameraRecovered(() => { if (cancelled) return; const v = videoRef.current; if (v) { detach(); detach = attachCamera(v); } setCamError(null); setCamOn(true); });
+    return () => { cancelled = true; detach(); off(); };
   }, [camTry]);
 
   // -------- countdown → snap --------
@@ -166,6 +167,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
       if (doneRef.current || countRef.current !== null) return;
       const now = Date.now(), h = hintRef.current, held = now - hintSince.current;
       const someone = now - seenAt.current < 2500;
+      if (now - seenAt.current > 15000 && !narrating()) reloadIfUpdated(); // a new deploy waits for an empty booth
       const saying = narrating();
       if (h === "hold" && held > 700 && now >= showAt && saying !== "w2_show") {
         narrate("w2_show");
@@ -376,7 +378,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
             {count !== null && count > 0 && <span className="count-badge">{count}</span>}
             {DEBUG && report && (
               <pre className="gate-hud">
-                {`어깨 ${report.width.toFixed(2)} / ${params.near} ${report.near ? "✓" : "✗"}\n가운데 ${report.centered ? "✓" : "✗"}  손 ${report.holding ? "✓" : "✗"}  정지 ${report.still ? "✓" : "✗"}\n유지 ${(report.dwell / 1000).toFixed(1)}s / ${params.hold / 1000}s  ${armedRef.current ? "준비됨" : "쿨다운"}\n카메라 ${cameraInfo.width}×${cameraInfo.height} ${cameraInfo.mode}${cameraInfo.zoom !== null ? ` zoom ${cameraInfo.zoom}` : ""}`}
+                {`어깨 ${report.width.toFixed(2)} / ${params.near} ${report.near ? "✓" : "✗"}\n가운데 ${report.centered ? "✓" : "✗"}  손 ${report.holding ? "✓" : "✗"}  정지 ${report.still ? "✓" : "✗"}\n유지 ${(report.dwell / 1000).toFixed(1)}s / ${params.hold / 1000}s  ${armedRef.current ? "준비됨" : "쿨다운"}\n카메라 ${cameraInfo.width}×${cameraInfo.height} ${cameraInfo.mode}${cameraInfo.zoom !== null ? ` zoom ${cameraInfo.zoom}` : ""}  재연결 ${cameraHealth.recoveries}회${cameraHealth.lastIssue ? ` (${cameraHealth.lastIssue})` : ""}`}
               </pre>
             )}
           </CamFrame>

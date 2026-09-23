@@ -20,7 +20,9 @@ function fakeStream(src: string): Promise<MediaStream> {
       c.width = 1280;
       c.height = QUERY.has("cam43") ? 960 : 720; // &cam43: rehearse the wide 4:3 stream
       const ctx = c.getContext("2d")!;
+      const W = window as any, myId = (W.__fakeCamSeq = (W.__fakeCamSeq || 0) + 1);
       const draw = () => { // cover-fit, redrawn so the stream keeps producing frames
+        if (W.__fakecamStall === myId) return; // rehearsal: THIS camera session hangs (a re-opened one works)
         const k = Math.max(c.width / img.width, c.height / img.height) * (ORBIT ? 1.25 : 1);
         const a = (performance.now() / 1000) * ORBIT * 2 * Math.PI, r = ORBIT ? c.height * 0.09 : 0;
         ctx.drawImage(img, (c.width - img.width * k) / 2 + r * Math.cos(a), (c.height - img.height * k) / 2 + r * Math.sin(a), img.width * k, img.height * k);
@@ -77,6 +79,7 @@ export function getCamera(): Promise<MediaStream> {
       return getCamera();
     });
   }
+  startWatchdog();
   const md = navigator.mediaDevices;
   if (!md?.getUserMedia) {
     return Promise.reject(new DOMException("no camera", window.isSecureContext ? "NotFoundError" : "SecurityError"));
@@ -90,6 +93,82 @@ export function getCamera(): Promise<MediaStream> {
       throw err;
     });
   return pending;
+}
+
+// ---- keeping the picture alive, unattended, all day ------------------------
+// A webcam can drop out mid-day: a USB hiccup or power-saving, a driver reset,
+// the cable knocked, the camera replugged. The track then ends (or stays "live"
+// but stops delivering frames), every <video> freezes on its last frame or goes
+// black — and with no frames the auto-start can never fire again, so the
+// station would stay dead until someone reloads it. The watchdog notices within
+// ~4 s and re-opens the camera (retrying every few seconds while it is gone),
+// and every <video> attached with attachCamera() is re-bound to the new stream.
+// Health for staff: ?posedebug shows it; window.__camHealth() in the console.
+const attached = new Map<HTMLVideoElement, { frames: number; at: number }>();
+export const cameraHealth = { recoveries: 0, lastIssue: "", lastRecoveryAt: 0, stalledSince: 0 };
+(window as any).__camHealth = () => ({ ...cameraHealth, attached: attached.size });
+
+function bind(v: HTMLVideoElement, s: MediaStream) {
+  if (v.srcObject !== s) v.srcObject = s;
+  if (v.paused) v.play?.().catch(() => {});
+}
+// show the kiosk camera in this <video> (now, and again after any recovery); returns detach
+export function attachCamera(v: HTMLVideoElement): () => void {
+  attached.set(v, { frames: -1, at: performance.now() });
+  pending?.then((s) => { if (attached.has(v)) bind(v, s); }).catch(() => {});
+  return () => { attached.delete(v); };
+}
+
+let watching = false, recovering = false;
+async function recover(reason: string) {
+  if (recovering) return;
+  recovering = true;
+  cameraHealth.lastIssue = `${reason} @ ${new Date().toLocaleTimeString()}`;
+  console.warn("[camera] recovering:", reason);
+  const old = pending;
+  pending = null;
+  old?.then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {});
+  try {
+    const s = await getCamera();
+    cameraHealth.recoveries++;
+    cameraHealth.lastRecoveryAt = Date.now();
+    for (const v of attached.keys()) bind(v, s);
+    for (const f of recoveryListeners) f(s);
+  } catch (e) {
+    cameraHealth.lastIssue = `${reason}; reopen failed: ${(e as Error)?.name || e}`; // tried again on the next tick
+  } finally {
+    recovering = false;
+    for (const rec of attached.values()) { rec.frames = -1; rec.at = performance.now(); }
+  }
+}
+const recoveryListeners = new Set<(s: MediaStream) => void>();
+export function onCameraRecovered(f: (s: MediaStream) => void) { recoveryListeners.add(f); return () => { recoveryListeners.delete(f); }; }
+
+function startWatchdog() {
+  if (watching) return;
+  watching = true;
+  const STALL_MS = 4000;
+  window.setInterval(() => {
+    if (document.hidden || recovering) return; // (a hidden page gets no frames — that's not a fault)
+    if (!pending) { void recover("no stream"); return; }
+    pending.then((s) => {
+      const track = s.getVideoTracks()[0];
+      if (!track || track.readyState === "ended") { void recover("track ended"); return; }
+      // frames actually arriving on screen (a live-but-muted track delivers none)
+      const now = performance.now();
+      let fresh = false, watched = 0;
+      for (const [v, rec] of attached) {
+        if (!v.isConnected) { attached.delete(v); continue; }
+        watched++;
+        if (v.srcObject !== s) bind(v, s); // (a stale binding, e.g. a <video> that remounted mid-recovery)
+        const frames = (v as any).getVideoPlaybackQuality?.().totalVideoFrames ?? -1;
+        if (frames < 0 || frames !== rec.frames || v.readyState < 2 && now - rec.at < STALL_MS) { if (frames !== rec.frames) { rec.frames = frames; rec.at = now; } fresh = true; }
+        else if (now - rec.at < STALL_MS) fresh = true;
+      }
+      cameraHealth.stalledSince = watched && !fresh ? cameraHealth.stalledSince || Date.now() : 0;
+      if (watched && !fresh) void recover(track.muted ? "no frames (track muted)" : "no frames");
+    }).catch(() => void recover("stream failed"));
+  }, 1000);
 }
 
 // stop the stream so the next getCamera() starts fresh (retry after a stall)

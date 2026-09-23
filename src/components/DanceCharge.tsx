@@ -5,7 +5,7 @@ import { narrate, narrating, clipMs, type VoiceId } from "../lib/narrate";
 import { magicDustBurst } from "../lib/dust";
 import { getPoseLandmarker, NOSE, L_WRIST, R_WRIST, L_INDEX, R_INDEX, L_SHOULDER, R_SHOULDER } from "../lib/pose";
 import { StirDetector } from "../lib/stir";
-import { coverFit } from "../lib/camera";
+import { coverFit, attachCamera } from "../lib/camera";
 import { CamFrame } from "./CamFrame";
 
 // The dance mini-game: three "magic moves", ONE PER SCENE — the scene changes
@@ -133,10 +133,8 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
 
   useEffect(() => {
     const v = vRef.current;
-    if (v && stream) {
-      v.srcObject = stream;
-      v.play?.().catch(() => {});
-    }
+    if (!v || !stream) return;
+    return attachCamera(v); // (re-bound by the camera watchdog after a dropout)
   }, [stream, stage]); // the <video> remounts with each scene
 
   function charge(amount: number) {

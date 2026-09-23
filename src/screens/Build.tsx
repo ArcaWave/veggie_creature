@@ -5,7 +5,7 @@ import { magicDustBurst } from "../lib/dust";
 import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import { narrate, hush, clipMs, voicedCountdown } from "../lib/narrate";
-import { getCamera, releaseCamera, cameraErrorText, snapshot } from "../lib/camera";
+import { getCamera, releaseCamera, cameraErrorText, snapshot, attachCamera, onCameraRecovered } from "../lib/camera";
 import { DanceCharge } from "../components/DanceCharge";
 import { Figure, randomParts, type Parts } from "../components/Figure";
 import { CamFrame } from "../components/CamFrame";
@@ -77,11 +77,10 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
   // <video> without camOn ever toggling, and it must be re-bound.
   useEffect(() => {
     const v = videoRef.current;
-    if (camOn && v && streamRef.current && v.srcObject !== streamRef.current) {
-      v.srcObject = streamRef.current;
-      v.play?.().catch(() => {});
-    }
+    if (!camOn || !v) return;
+    return attachCamera(v); // (re-bound by the camera watchdog after a dropout)
   }, [camOn, step, camTry]);
+  useEffect(() => onCameraRecovered((s) => { streamRef.current = s; }), []);
 
   // the camera is live → the voice asks for the creation (first time) or for
   // stillness (a reshoot: the noshow screen already said why), counts
