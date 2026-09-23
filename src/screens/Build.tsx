@@ -218,6 +218,7 @@ function MagicStep({
   onDone: () => void;
 }) {
   type Phase = "match" | "noshow" | "dance" | "alive" | "walk" | "sendoff";
+  const ALIVE_LINE_AT_MS = 350; // into the alive scene: the figure is mid-pop
   const SENDOFF_MS = Math.max(5000, clipMs("a3_look") + 800); // "look at the wall next to you" (the whole line is heard) before the station resets
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
@@ -298,7 +299,8 @@ function MagicStep({
     track("dance_done", { variant: v });
     setPhase("alive");
     sparkle();
-    // ("팡! 마법 완성! 우와~ 채소 친구가 살아났어!" began with the pot's burst and runs on into this scene)
+    // ("팡! 마법 완성!" came with the pot's burst.) As the figure pops up: "우와~" (0.3 s) "채소 친구가 살아났어!"
+    later(() => narrate(["a1_wow", "a1_alive"], undefined, 0.3), ALIVE_LINE_AT_MS);
     later(() => magicDustBurst(frameRef.current), 80); // once the podium is on screen
     later(() => {
       setPhase("walk");

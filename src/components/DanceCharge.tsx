@@ -63,14 +63,15 @@ function handOf(lm: LM, wrist: number, index: number): { x: number; y: number } 
 // the posed moves come with a photo of a child doing them (public/dance/),
 // shown standing on the frame's edge — a real kid to copy beats a diagram.
 // The stir has no `check`: it is followed by the StirDetector instead.
-type Move = { key: string; title: string; prompt: string; cheer: string; voice: VoiceId; cheerVoice?: VoiceId; guide?: string; check?: (lm: LM) => boolean };
+type Move = { key: string; title: string; prompt: string; cheer: string; voice: VoiceId; cheerVoice?: VoiceId | VoiceId[]; guide?: string; check?: (lm: LM) => boolean };
 export const MOVES: Move[] = [
-  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑤욱! 잘했어! ✈️", voice: "d1_airplane", cheerVoice: "d1_cheer", guide: "/dance/guide_airplane.png", check: isAirplane },
+  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑥! 잘했어! ✈️", voice: "d1_airplane", cheerVoice: ["d1_cheer_a", "d1_cheer_b"], guide: "/dance/guide_airplane.png", check: isAirplane },
   { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑을 듬뿍 주었어! 💖", voice: "d2_heart", cheerVoice: "d2_cheer", guide: "/dance/guide_heart.png", check: isHeart },
   { key: "stir", title: "마법 냄비 젓기!", prompt: "국자로 냄비를 빙글빙글 저어 봐! 🥄", cheer: "팡! 마법 완성! ✨", voice: "d3_stir" },
 ];
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes (stretched to the spoken cheer)
+const CHEER_PAUSE_S = 0.2; // "팔이 쑥!" (0.2 s) "잘했어!"
 const WAIT_LINE_AFTER_MS = 6000; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
 const HAND_LINE_AFTER_MS = 3500; // stir: no hand in view this long → "손을 들어 봐!" (at most every 12 s)
 const ASSIST_AFTER_MS = 5000; // this long without a recognised move → the quiet assist begins
@@ -149,7 +150,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
       // scene complete: cheer (spoken — it cuts the instruction if that was
       // still running), then the next move on its own screen
       const said = MOVES[stageRef.current].cheerVoice;
-      if (said) narrate(said);
+      if (said) narrate(said, undefined, CHEER_PAUSE_S);
       setCheer(true);
       window.setTimeout(() => {
         stageRef.current += 1;
@@ -165,12 +166,14 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
         waitSaid.current = false;
         talkEnd.current = Date.now() + clipMs(MOVES[stageRef.current].voice);
         narrate(MOVES[stageRef.current].voice);
-      }, said ? Math.max(CHEER_MS, clipMs(said) + 200) : CHEER_MS);
+      }, said ? Math.max(CHEER_MS, clipMs(said, CHEER_PAUSE_S) + 200) : CHEER_MS);
     } else {
       // the finale: the pot bursts, the screen goes white — and Build's
       // "alive" scene opens out of that same white
       view.current.burstAt = performance.now();
-      narrate("a1_alive"); // "팡! 마법 완성!…" starts WITH the burst and runs on into Build's alive scene
+      // "팡!" (0.2 s) "마법 완성!" with the burst and through the white-out; "우와~ 채소 친구가
+      // 살아났어!" comes once the figure has popped up, in Build's alive scene
+      narrate(["a1_pang", "a1_done"], undefined, 0.2);
       setBurst(true);
       magicDustBurst(potRef.current);
       window.setTimeout(() => setWhite(true), WHITE_AT_MS);

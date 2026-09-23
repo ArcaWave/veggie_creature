@@ -27,13 +27,17 @@ const CLIPS = {
   m2_noshow: { skip: 0.18, ms: 4120, gain: 0.77 },  // 어라? 채소 친구가 잘 안 보여! 조금만 더 가까이 보여 줄래?
   d0_intro: { skip: 0.16, ms: 3650, gain: 0.92 },   // 이제 마법 동작 세 가지로, 친구에게 생명을 불어넣자!
   d1_airplane: { skip: 0.14, ms: 3910, gain: 0.75 },// 첫 번째 마법! 비행기처럼, 양팔을 옆으로 쭉~ 펴 봐!
-  d1_cheer: { skip: 0.19, ms: 1610, gain: 0.56 },   // 팔이 쑤욱! 잘했어!
+  d1_cheer_a: { skip: 0.12, ms: 940, gain: 0.78 },  // 팔이 쑥!
+  d1_cheer_b: { skip: 0.16, ms: 860, gain: 0.64 },  // 잘했어!
   d2_heart: { skip: 0.15, ms: 3940, gain: 0.79 },   // 두 번째 마법! 두 손을 머리 위로 모아서, 하트를 만들어 봐!
   d2_cheer: { skip: 0.14, ms: 1710, gain: 0.65 },   // 사랑을 듬뿍 주었어!
   d3_stir: { skip: 0.19, ms: 4660, gain: 0.76 },    // 마지막 마법! 국자를 잡고, 마법 냄비를 빙글빙글 저어 봐!
   d3_hand: { skip: 0.14, ms: 3150, gain: 0.72 },    // 손을 들어 봐! 국자가 손에 착 붙을 거야!
   d_wait: { skip: 0.11, ms: 3520, gain: 0.6 },      // 천천히 해도 괜찮아~ 마법 가루가 모이고 있어!
-  a1_alive: { skip: 0.19, ms: 3770, gain: 0.72 },   // 팡! 마법 완성! 우와~ 채소 친구가 살아났어!
+  a1_pang: { skip: 0.12, ms: 540, gain: 0.79 },     // 팡!
+  a1_done: { skip: 0.14, ms: 1070, gain: 0.72 },    // 마법 완성!
+  a1_wow: { skip: 0.18, ms: 560, gain: 0.46 },      // 우와~
+  a1_alive: { skip: 0.15, ms: 1510, gain: 0.73 },   // 채소 친구가 살아났어!
   a2_go: { skip: 0.18, ms: 1800, gain: 0.79 },      // 이제 디지털 세계로 출발~!
   a3_look: { skip: 0.19, ms: 4770, gain: 1.0 },     // 옆에 있는 큰 화면에서, 네 친구를 찾아봐! 안녕~ 또 만나!
 } as const;
@@ -97,8 +101,14 @@ function fadeOut(el: HTMLAudioElement, ms: number) {
   if (ms <= 0) el.pause(); else step();
 }
 
-// how long a line takes to say — for timing a screen to it
-export const clipMs = (id: VoiceId) => CLIPS[id].ms;
+// In a sequence, the wait between one line's timer and the next line's start. A clip's `ms` runs 0.12 s
+// past its last word and its `skip` lands 0.06 s before its first, so a requested SILENCE between the
+// words (pauseS, seconds) is that minus 0.18 s. Without pauseS: the house default (0.25 s wait).
+const SEQ_GAP_MS = 250;
+const gapFor = (pauseS?: number) => (pauseS === undefined ? SEQ_GAP_MS : Math.max(0, Math.round(pauseS * 1000) - 180));
+// how long a line (or a sequence of lines, with the pause between them) takes to say — for timing a screen to it
+export const clipMs = (id: VoiceId | VoiceId[], pauseS?: number) =>
+  Array.isArray(id) ? id.reduce((t, x) => t + CLIPS[x].ms, 0) + gapFor(pauseS) * Math.max(0, id.length - 1) : CLIPS[id].ms;
 export const narrating = (): VoiceId | null => current?.id ?? null;
 
 // stop talking, now (scene change with nothing new to say, unmount, mute)
@@ -112,9 +122,10 @@ export function hush(fadeMs = 90) {
 }
 
 // Say a line NOW, cutting whatever is being said. An array is said in order
-// (the rest is dropped the moment anything else speaks). onEnd fires when the
-// (last) line has been said — never if it was cut.
-export function narrate(what: VoiceId | VoiceId[], onEnd?: () => void) {
+// (the rest is dropped the moment anything else speaks), pauseS = the silence
+// between them in seconds. onEnd fires when the (last) line has been said —
+// never if it was cut.
+export function narrate(what: VoiceId | VoiceId[], onEnd?: () => void, pauseS?: number) {
   const [id, ...rest] = Array.isArray(what) ? what : [what];
   hush();
   const mine = ++ticket;
@@ -127,9 +138,9 @@ export function narrate(what: VoiceId | VoiceId[], onEnd?: () => void) {
     log("said", id);
     fadeOut(el, 120); // the words are out: close the clip's silent tail, so the next line never shares the air with it
     current = null;
-    if (rest.length) narrate(rest, onEnd);
+    if (rest.length) narrate(rest, onEnd, pauseS);
     else onEnd?.();
-  }, clip.ms + (rest.length ? 250 : 0));
+  }, clip.ms + (rest.length ? gapFor(pauseS) : 0));
   current = { id, el, timer };
   log("say", id);
   if (VOICE_OFF || !sfxEnabled()) return;
