@@ -239,8 +239,16 @@ function MagicStep({
   }, []);
 
   // 1) which pre-made creature does this creation resemble?
-  // no run-once ref: StrictMode's dev double-mount would strand the live run.
+  // ONE live run: StrictMode's dev double-mount starts this twice, and two answers from the matcher can
+  // disagree ("nothing there" vs "cabbage") — the first run's "nothing there" then sent the child back to
+  // the mirror in the middle of the dance the second run had started. So a run ends with its effect
+  // (live = false, its request aborted) and only the run of the mounted screen acts. (No run-once ref:
+  // that would strand the live run instead.)
   useEffect(() => {
+    let live = true;
+    const ctrl = new AbortController();
+    // a slow answer must never strand a child: past the deadline the show goes on with a random creature
+    const deadline = window.setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS);
     (async () => {
       track("match_start");
       narrate("m1_reading");
@@ -249,22 +257,20 @@ function MagicStep({
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
       let p: Parts | null = null;
       try {
-        // a slow answer must never strand a child: past the deadline the show
-        // goes on with a random creature
         const r = await fetch("/api/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: photo }),
-          signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
+          signal: ctrl.signal,
         });
         const j = await r.json();
         await lineSaid;
+        if (!live) return;
         // nothing visible in the shot? ask the child to hold it closer and
         // reshoot (twice at most — then the show goes on with the best guess)
         // the mirror started on a thing held up (no person seen) and it is no creation: back to the mirror
         // quietly — no reshoots of what may be an empty booth, and the same thing won't start it again
         if (j.none && shownOnly) {
-          if (!aliveRef.current) return;
           track("match_none_shown");
           absorbShownObject();
           narrate("m2_noshow");
@@ -273,7 +279,6 @@ function MagicStep({
           return;
         }
         if (j.none && tries < MAX_RETRIES) {
-          if (!aliveRef.current) return;
           track("match_none", { tries });
           narrate("m2_noshow");
           setPhase("noshow");
@@ -285,17 +290,19 @@ function MagicStep({
         if (j.parts && j.parts.body === v) p = j.parts;
         track("match_done", { variant: v, matched: j.matched ?? false, parts: p });
       } catch {
+        if (!live) return; // (its screen is gone — not a failed match)
         track("match_fail");
       }
       await lineSaid;
-      if (!aliveRef.current) return;
+      if (!live) return;
       if (!p) p = await randomParts(v).catch(() => ({ body: v, hat: "none", arms: "twig", legs: "twig" }));
-      if (!aliveRef.current) return;
+      if (!live) return;
       setVariant(v);
       setParts(p);
       // 2) the dance mini-game: the child's own moves charge the magic
       setPhase("dance");
     })();
+    return () => { live = false; clearTimeout(deadline); ctrl.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

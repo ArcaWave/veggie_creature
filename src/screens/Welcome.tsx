@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit, attachCamera, onCameraRecovered, cameraHealth } from "../lib/camera";
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
-import { ObjectGate, GRID_W, GRID_H, type ObjectReport } from "../lib/showobject";
+import { ObjectGate, GRID_W, GRID_H, MAX_SHOWN_MISSES, shownMisses, type ObjectReport } from "../lib/showobject";
 import { pop, sparkle } from "../lib/sfx";
 import { narrate, hush, narrating, clipMs, voicedCountdown, preloadVoice, voiceBlocked, onVoiceBlocked } from "../lib/narrate";
 import { reloadIfUpdated } from "../lib/autoreload";
@@ -246,8 +246,9 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, s
         obj = objGate.update(tctx.getImageData(0, 0, GRID_W, GRID_H).data, performance.now(), rep.near && rep.armsDown, rep.boxes.length > 0);
         if (obj.center >= 0.08) { objSeenAt = now; seenAt.current = now; }
         // after a session: the booth has to have been clear once (or 8 s pass) — the last child's
-        // creation still held there must not start another round
-        if (!objArmed && (obj.center < 0.08 || now - t0 > COOLDOWN_MAX_MS)) objArmed = true;
+        // creation still held there must not start another round. Two photos in a row of nothing: only a
+        // clear booth re-arms it (someone just standing there is not photographed every 20 s).
+        if (!objArmed && (obj.center < 0.08 || (now - t0 > COOLDOWN_MAX_MS && shownMisses() < MAX_SHOWN_MISSES))) objArmed = true;
       }
       drawOverlay(v, rep, obj);
       if (DEBUG && frame++ % 4 === 0) setReport(rep);
