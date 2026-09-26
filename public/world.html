@@ -229,9 +229,14 @@ function applyScene(name, instant) {
   GROUND = sc.ground || GROUND;
   camGoal = sc.cam || DEFAULT_CAM;
   if (instant) { camera.position.set(...camGoal.pos); camLook.set(...camGoal.look); camera.lookAt(camLook); }
-  else for (const c of onStage.values()) { // anyone now standing on a painted prop strolls back onto the floor
-    const p = c.root.position, [x0, x1] = groundX(p.z);
-    if (!c.leaving && (p.x < x0 || p.x > x1 || p.z < GROUND.z[0] || p.z > GROUND.z[1])) { c.target = freeSpot(c); c.mode = "walk"; }
+  else {
+    if (frontHolder && !frontHolder.leaving) { frontHolder.frontSpot = frontCenter(); frontHolder.target = { ...frontHolder.frontSpot }; frontHolder.mode = "walk"; }
+    for (const c of onStage.values()) { // anyone now standing on a painted prop strolls back onto the floor
+      if (c.leaving || c === frontHolder) continue;
+      const p = c.root.position, [x0, x1] = groundX(p.z);
+      if (p.x < x0 || p.x > x1 || p.z < GROUND.z[0] || p.z > GROUND.z[1]) { c.target = freeSpot(c); c.mode = "walk"; }
+      else if (inFrontZone(p)) { c.target = backSpot(c); c.mode = "walk"; c.mustWalk = true; }
+    }
   }
   fitBackdrop();
 }
@@ -855,14 +860,49 @@ function partsFor(entry) {
   };
 }
 
-// a newcomer's spot: the front half of the stage (nearest the camera = biggest on screen)
-function frontSpot(self) {
-  for (let i = 0; i < 12; i++) {
-    const z = rnd(GROUND.z[0] + (GROUND.z[1] - GROUND.z[0]) * 0.55, GROUND.z[1] - 0.4);
-    const s = { x: rnd(...groundX(z)) * 0.8, z };
-    if (![...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4)) return s;
+// THE FRONT. A newcomer arrives front and centre — the biggest place on the wall, for the family's
+// photo — and keeps it FRONT_S seconds, playing in place with nobody walking in front of it; then it
+// strolls back to a random place further back and leaves the front to the next arrival. (A newer
+// arrival takes the front at once; whoever stands there steps back.) ?front=<s> for rehearsals.
+const FRONT_S = Number(_q.get("front")) || 25;
+const FRONT_SCALE = 1.2; // …and stands a size bigger there (back to 1 as it walks away)
+let frontHolder = null;
+function frontCenter() { // nearest the viewer, as central on screen as this painting's floor allows
+  const z = GROUND.z[1] - 0.3, [x0, x1] = groundX(z);
+  return { x: THREE.MathUtils.clamp(0, x0 + 0.8, x1 - 0.8), z };
+}
+// the newcomer's photo space: the whole front row (nobody else as near the viewer — it is THE front
+// one), and a little more depth right behind it
+function inFrontZone(s) {
+  const f = frontHolder && !frontHolder.leaving ? frontHolder.frontSpot : null;
+  return !!f && !!s && (s.z > f.z - 2.0 || (Math.abs(s.x - f.x) < 2.4 && s.z > f.z - 3.0));
+}
+function backSpot(self) { // somewhere in the back 60 % of the floor, clear of the others and of the front
+  const zFar = GROUND.z[0], zMid = GROUND.z[0] + (GROUND.z[1] - GROUND.z[0]) * 0.6;
+  for (let i = 0; i < 16; i++) {
+    const z = rnd(zFar, zMid), s = { x: rnd(...groundX(z)), z };
+    if (!inFrontZone(s) && ![...onStage.values()].some((o) => o !== self && o.target && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4)) return s;
   }
-  return freeSpot(self);
+  const z = rnd(zFar, zMid);
+  return { x: rnd(...groundX(z)), z };
+}
+function takeFront(c) {
+  if (frontHolder && frontHolder !== c) releaseFront(frontHolder);
+  frontHolder = c;
+  c.front = true;
+  c.frontSpot = frontCenter();
+  for (const o of onStage.values()) { // make room: anyone in (or heading into) the photo space steps back
+    if (o === c || o.leaving) continue;
+    if (inFrontZone(o.root.position) || inFrontZone(o.target)) { o.target = backSpot(o); o.mode = "walk"; o.mustWalk = true; }
+  }
+}
+function releaseFront(c) {
+  if (!c.front) return;
+  c.front = false;
+  if (frontHolder === c) frontHolder = null;
+  if (c.leaving || !onStage.has(c.entry.id)) return;
+  c.target = backSpot(c); c.mode = "walk"; c.speed = 1.8; c.mustWalk = true; // a stroll back, all the way (not a dash)
+  c.timers.push(setTimeout(() => { c.speed = 2.6; }, 6000));
 }
 const SPOTLIGHT_S = 45; // how long a newcomer wears its ring of light
 function spotlight(c) {
@@ -877,6 +917,7 @@ function spotlight(c) {
   fxAdd(g, SPOTLIGHT_S, (p) => {
     if (!onStage.has(c.entry.id) || c.leaving) { g.visible = false; return; }
     g.position.set(c.root.position.x, 0, c.root.position.z);
+    g.scale.set(w * c.root.scale.x, 1, w * 0.8 * c.root.scale.x);
     const t = p * SPOTLIGHT_S, fade = Math.min(1, t / 0.6) * Math.min(1, (1 - p) * SPOTLIGHT_S / 4); // in, then a 4 s fade out
     const breathe = 0.8 + 0.2 * Math.sin(t * 2.4);
     ring.material.opacity = 0.55 * fade * breathe;
@@ -888,8 +929,8 @@ function freeSpot(self) {
   for (let i = 0; i < 12; i++) {
     const z = rnd(...GROUND.z);
     const s = { x: rnd(...groundX(z)), z };
-    const crowded = [...onStage.values()].some((o) => o !== self && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4);
-    if (!crowded) return s;
+    const crowded = [...onStage.values()].some((o) => o !== self && o.target && Math.hypot(o.target.x - s.x, o.target.z - s.z) < 2.4);
+    if (!crowded && !inFrontZone(s)) return s;
   }
   const z = rnd(...GROUND.z);
   return { x: rnd(...groundX(z)), z };
@@ -1120,7 +1161,7 @@ function addCreature(entry, isNew) {
   c.timers = [];
   c.leaving = false;
   const later = (fn, ms) => c.timers.push(setTimeout(fn, ms));
-  const spot = isNew ? frontSpot(c) : freeSpot(c);
+  const spot = isNew ? frontCenter() : freeSpot(c);
   c.target = spot;
   if (isNew) {
     c.root.position.set(spot.x, 0, spot.z);
@@ -1135,13 +1176,24 @@ function addCreature(entry, isNew) {
   c.speed = 2.6;
   scene.add(c.root);
   onStage.set(entry.id, c);
+  if (isNew) { takeFront(c); later(() => releaseFront(c), POP_DELAY + FRONT_S * 1000); }
 
   // life: pick a behaviour every few seconds
   function behave() {
     if (c.leaving) return;
+    if (c.mustWalk && c.mode === "walk") { later(behave, 1200); return; } // (clearing the front: first get there)
     const r = Math.random();
     const fresh = (performance.now() - (c.bornAt || 0)) / 1000 < SPOTLIGHT_S; // (a newcomer stays near the front for a while)
-    if (r < 0.3) { const z = THREE.MathUtils.clamp(c.root.position.z + rnd(fresh ? -0.6 : -1.5, fresh ? 0.6 : 1.5), ...GROUND.z); c.target = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...groundX(z)), z }; c.mode = "walk"; }
+    if (c.front) { // posing for the photo, on the spot (walking back to it first if a scene change moved it)
+      const f = c.frontSpot;
+      if (Math.hypot(c.root.position.x - f.x, c.root.position.z - f.z) > 0.3) { c.target = { ...f }; c.mode = "walk"; }
+      else { c.mode = r < 0.4 ? "wave" : r < 0.7 ? "jump" : "dance"; c.modeT = 0; c.dir = 1; }
+    }
+    else if (r < 0.3) {
+      const z = THREE.MathUtils.clamp(c.root.position.z + rnd(fresh ? -0.6 : -1.5, fresh ? 0.6 : 1.5), ...GROUND.z);
+      const t = { x: THREE.MathUtils.clamp(c.root.position.x + rnd(-2.5, 2.5), ...groundX(z)), z };
+      c.target = inFrontZone(t) ? backSpot(c) : t; c.mode = "walk";
+    }
     else if (r < 0.5) { c.mode = "wave"; c.dir = 1; }
     else if (r < 0.72) { c.mode = "jump"; c.modeT = 0; c.dir = 1; }
     else { c.mode = "dance"; c.dir = 1; }
@@ -1160,13 +1212,19 @@ function leave(c) {
   hush(c);
   c.mode = "wave"; c.dir = 1;
   say(c, pick(LINES.bye), 2600);
-  c.timers.push(setTimeout(() => { c.target = { x: 14, z: c.root.position.z }; c.mode = "walk"; c.speed = 3.2; }, 2200));
+  if (frontHolder === c) { frontHolder = null; c.front = false; }
+  const inFront = inFrontZone(c.root.position);
+  c.timers.push(setTimeout(() => {
+    const z = inFrontZone(c.root.position) ? Math.min(c.root.position.z, frontHolder.frontSpot.z - 3.2) : c.root.position.z; // (behind the newcomer, not across it)
+    c.target = { x: 14, z }; c.mode = "walk"; c.speed = 3.2;
+  }, inFront ? 0 : 2200));
 }
 
 function disposeTree(root) {
   root.traverse((o) => { if (o.geometry && o.geometry !== meteorGeo) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
 }
 function removeCreature(c) {
+  if (frontHolder === c) frontHolder = null;
   hush(c);
   disposeTree(c.root);
   c.timers.forEach(clearTimeout);
@@ -1254,10 +1312,12 @@ function frame() {
     camera.lookAt(camLook);
   }
   for (const c of onStage.values()) {
+    { const goal = c.front ? FRONT_SCALE : 1, k0 = c.root.scale.x; // the newcomer's size at the front, eased
+      if (Math.abs(goal - k0) > 0.002) c.root.scale.setScalar(k0 + (goal - k0) * Math.min(1, dt * (c.front ? 3 : 0.8))); }
     if (c.mode === "walk") {
       const dx = c.target.x - c.root.position.x, dz = c.target.z - c.root.position.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.dir = 1; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
+      if (d < 0.08) { c.mode = c.leaving ? "walk" : "idle"; c.dir = 1; c.mustWalk = false; if (c.leaving && c.root.position.x > 13) { removeCreature(c); continue; } }
       else {
         const step = Math.min(d, c.speed * dt);
         c.root.position.x += (dx / d) * step; c.root.position.z += (dz / d) * step;
