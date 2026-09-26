@@ -14,6 +14,9 @@ const FAKE = QUERY.get("fakecam");
 // &then=/other.jpg&at=6: after `at` seconds the fake camera shows the other picture (an empty booth, then
 // something held up — how the "creation alone" start is rehearsed)
 const FAKE_THEN = QUERY.get("then"), FAKE_AT = Number(QUERY.get("at")) || 6;
+// &over&sway=24: the `then` picture is a cut-out (transparent PNG) laid OVER the booth, and it sways ±24 px
+// (a child standing in front never holds perfectly still: only they move, the booth behind stays put)
+const FAKE_OVER = QUERY.has("over"), FAKE_SWAY = Number(QUERY.get("sway")) || 0;
 const ORBIT = QUERY.has("orbit") ? Number(QUERY.get("orbit")) || 0.6 : 0;
 function fakeStream(src: string): Promise<MediaStream> {
   return new Promise((resolve, reject) => {
@@ -29,15 +32,20 @@ function fakeStream(src: string): Promise<MediaStream> {
       const W = window as any, myId = (W.__fakeCamSeq = (W.__fakeCamSeq || 0) + 1);
       const draw = () => { // cover-fit, redrawn so the stream keeps producing frames
         if (W.__fakecamStall === myId) return; // rehearsal: THIS camera session hangs (a re-opened one works)
-        const pic = img2?.complete && img2.naturalWidth && performance.now() - t0 > FAKE_AT * 1000 ? img2 : img;
+        const second = !!(img2?.complete && img2.naturalWidth && performance.now() - t0 > FAKE_AT * 1000);
+        const pic = second && !FAKE_OVER ? img2! : img;
         const k = Math.max(c.width / pic.width, c.height / pic.height) * (ORBIT ? 1.25 : 1);
         const a = (performance.now() / 1000) * ORBIT * 2 * Math.PI, r = ORBIT ? c.height * 0.09 : 0;
         ctx.drawImage(pic, (c.width - pic.width * k) / 2 + r * Math.cos(a), (c.height - pic.height * k) / 2 + r * Math.sin(a), pic.width * k, pic.height * k);
+        if (second && FAKE_OVER) {
+          const s = performance.now() / 1000, dx = FAKE_SWAY * Math.sin(s * 2.6) + (Math.random() - 0.5) * FAKE_SWAY * 0.15, dy = FAKE_SWAY * 0.3 * Math.sin(s * 1.7);
+          ctx.drawImage(img2!, dx, dy, c.width, c.height);
+        }
         // (a real camera's sensor noise: the booth model must cope with it)
         if (FAKE_THEN) { ctx.fillStyle = `rgba(${Math.random() * 255 | 0},${Math.random() * 255 | 0},${Math.random() * 255 | 0},0.015)`; ctx.fillRect(0, 0, c.width, c.height); }
       };
       draw();
-      setInterval(draw, ORBIT ? 33 : 100);
+      setInterval(draw, ORBIT || FAKE_SWAY ? 33 : 100);
       resolve(c.captureStream(15));
     };
     img.onerror = () => reject(new DOMException("fake camera image missing", "NotFoundError"));

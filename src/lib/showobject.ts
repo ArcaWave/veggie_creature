@@ -29,7 +29,9 @@ const WHOLE_MAX = 0.8;    // …but not (nearly) everything
 const CHANGED_T = 20;     // a cell whose colour moved more than this (per channel) since the last frame "moved"
 const STILL_FRAC = 0.03;  // still = fewer than this share of the middle moved, AND…
 const DRIFT_MAX = 0.025;  // …the shown thing's centre drifted less than this (0~1) over the last 0.6 s
-const CLEAR_MAX = 0.08;   // the middle is (nearly) empty booth — nobody and nothing in front
+// …with a person in view: a child holding their creation up sways and fidgets (±4 cm at arm's length is
+// normal) — still enough, as long as they are not walking past or waving it about
+const STILL_FRAC_PERSON = 0.07, DRIFT_MAX_PERSON = 0.05;
 const HOLD_MS = 1500;
 const GRACE_MS = 400;
 const RELEARN_MS = 3000;  // the whole picture changed and stayed so (lights) → that is the new empty booth
@@ -42,22 +44,15 @@ class SceneModel {
   ignoreNext = false;                   // the matcher found no creation: remember what is in front…
   ignore: Uint8ClampedArray | null = null; // …and don't fire on it again until it goes away or changes
   ignoreMask: Uint8Array | null = null;     // (the cells where it was: what "gone" is measured on)
-  misses = 0;                           // photos in a row that held no creation, the booth never clear in between
 }
 // one model for the whole page: it outlives the welcome screen, so the booth it has learnt is still
 // known when the next child steps up during the send-off
 const model = new SceneModel();
 // the matcher found nothing in a photo this gate took: don't fire again on whatever is in front,
 // until it goes away or changes (the empty booth itself stays as it was learnt)
-export function absorbShownObject() { model.ignoreNext = true; model.misses++; }
-// Someone lingering in front with nothing to show (a parent reading the screen, a child who left their
-// creation at the table) changes enough of the picture by just moving to wear the "not a creation" memory
-// off, and was photographed again every ~20 s. After TWO such photos in a row this gate waits for the
-// booth to be clear before it fires again. (The pose gate still sees a child who holds a creation up.)
-export const MAX_SHOWN_MISSES = 2;
-export const shownMisses = () => model.misses;
+export function absorbShownObject() { model.ignoreNext = true; }
 // forget the learnt booth (tests; a camera that was moved)
-export function resetSceneModel() { model.bg = null; model.prev = null; model.ignore = null; model.ignoreMask = null; model.absorbNext = false; model.ignoreNext = false; model.misses = 0; }
+export function resetSceneModel() { model.bg = null; model.prev = null; model.ignore = null; model.ignoreMask = null; model.absorbNext = false; model.ignoreNext = false; }
 
 export class ObjectGate {
   private dwell = 0;
@@ -110,14 +105,13 @@ export class ObjectGate {
     }
     model.prev = rgba.slice();
     const center = fgC / nC, whole = fgAll / n;
-    if (center < CLEAR_MAX) model.misses = 0; // the booth is clear: whoever was lingering has gone
     // still: little of the middle moved since the last frame, and the shown thing's centre isn't drifting
     // (a slowly waved paper changes only a thin edge each frame — its centre gives it away)
     if (fgC) this.centres.push({ t, x: sx / fgC / GRID_W, y: sy / fgC / GRID_H });
     while (this.centres.length && this.centres[0].t < t - 700) this.centres.shift();
     const old = this.centres.find((c) => c.t <= t - 550), cur = this.centres[this.centres.length - 1];
     const drift = old && cur ? Math.hypot(cur.x - old.x, cur.y - old.y) : 1;
-    const still = moved / nMotion < STILL_FRAC && drift < DRIFT_MAX;
+    const still = peopleInView ? moved / nMotion < STILL_FRAC_PERSON && drift < DRIFT_MAX_PERSON : moved / nMotion < STILL_FRAC && drift < DRIFT_MAX;
     // the remembered not-a-creation: still what is in front? (40 % of where it was looks different = it
     // went away or changed)
     let ignored = false;

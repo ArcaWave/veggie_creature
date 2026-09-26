@@ -1,5 +1,5 @@
 // The "something held up to the camera" gate on synthetic 48x36 frames.   run: npx tsx tools/showobject.test.ts
-import { ObjectGate, GRID_W, GRID_H, absorbShownObject, resetSceneModel, shownMisses, MAX_SHOWN_MISSES } from "../src/lib/showobject.ts";
+import { ObjectGate, GRID_W, GRID_H, absorbShownObject, resetSceneModel } from "../src/lib/showobject.ts";
 type Frame = Uint8ClampedArray;
 const booth = (shade = 0): Frame => { // an empty booth: a wall with a gentle gradient, a floor
   const f = new Uint8ClampedArray(GRID_W * GRID_H * 4);
@@ -46,6 +46,12 @@ r.push(run("someone walking past", (t) => noise(withPaper(booth(), -0.2 + (t / 5
 r.push(run("a small thing far away (a child in the background)", () => noise(withPaper(booth(), 0.5, 0.5, 0.1, 0.18), 3), "never"));
 r.push(run("the store lights change (whole picture brighter)", () => noise(booth(40), 3), "never", { ms: 9000 }));
 r.push(run("a hand over the lens (everything changes)", () => noise(new Uint8ClampedArray(GRID_W * GRID_H * 4).fill(30), 2), "never"));
+// with a person in view the stillness is looser (a child holding their creation sways) — but walking past or
+// waving it about still never counts
+r.push(run("a child holding it up, swaying ±4 cm (person seen)", (t) => noise(withPaper(booth(), 0.5 + Math.sin(t / 380) * 0.03 + (Math.random() - 0.5) * 0.004, 0.55, 0.4, 0.8), 3), "fires", { people: () => true }));
+r.push(run("someone walking past (person seen)", (t) => noise(withPaper(booth(), -0.2 + (t / 5000) * 1.4, 0.55, 0.3, 0.8), 3), "never", { people: () => true }));
+r.push(run("…walking past slowly (person seen)", (t) => noise(withPaper(booth(), -0.2 + (t / 9000) * 1.4, 0.55, 0.3, 0.8), 3), "never", { people: () => true, ms: 9000 }));
+r.push(run("waved around (person seen)", (t) => noise(withPaper(booth(), 0.5 + Math.sin(t / 250) * 0.2, 0.5, 0.36, 0.5), 3), "never", { people: () => true }));
 r.push(run("a person close with arms hanging down (just standing)", () => noise(withPaper(booth(), 0.5, 0.55, 0.4, 0.8), 3), "never", { standing: () => true, people: () => true }));
 // after the matcher found nothing: the thing in front becomes the booth — until it changes
 {
@@ -61,23 +67,6 @@ r.push(run("a person close with arms hanging down (just standing)", () => noise(
   const other = step(noise(withPaper(booth(), 0.45, 0.5, 0.34, 0.5), 3), 90); // then a child shows theirs
   const pass = first && !again && !emptyAfter && other;
   console.log(`${pass ? "PASS" : "FAIL"}  ${"matcher found nothing → not again; empty stays quiet; next one fires".padEnd(64)} first ${first}, again ${again}, empty ${emptyAfter}, next ${other}`);
-  r.push(pass);
-}
-{ // someone lingering: two photos of nothing in a row hold the gate until the booth is clear, then it counts from 0
-  resetSceneModel();
-  const g = new ObjectGate(); let t = 0;
-  const feed = (f: Frame, n: number, people: boolean) => { for (let k = 0; k < n; k++, t += 66) g.update(f, t, false, people); };
-  feed(noise(booth(), 3), 30, false);
-  const person = withPaper(booth(), 0.5, 0.55, 0.4, 0.8); // (a big still shape in the middle)
-  feed(noise(person, 3), 30, true); absorbShownObject();
-  feed(noise(withPaper(booth(), 0.52, 0.55, 0.4, 0.8), 3), 30, true); absorbShownObject();
-  const held = shownMisses() >= MAX_SHOWN_MISSES;
-  feed(noise(withPaper(booth(), 0.47, 0.55, 0.4, 0.8), 3), 30, true);
-  const stillHeld = shownMisses() >= MAX_SHOWN_MISSES; // moving about in front does not clear it
-  feed(noise(booth(), 3), 10, false);
-  const cleared = shownMisses() === 0;
-  const pass = held && stillHeld && cleared;
-  console.log(`${pass ? "PASS" : "FAIL"}  ${"two photos of nothing in a row → held until the booth is clear".padEnd(64)} held ${held}, still ${stillHeld}, cleared ${cleared}`);
   r.push(pass);
 }
 console.log(r.every(Boolean) ? `ALL PASS (${r.length})` : `${r.filter((x) => !x).length} FAIL`);

@@ -10,6 +10,7 @@ import { absorbShownObject } from "../lib/showobject";
 import { DanceCharge } from "../components/DanceCharge";
 import { Figure, randomParts, type Parts } from "../components/Figure";
 import { CamFrame } from "../components/CamFrame";
+import type { StartSource } from "./Welcome";
 
 // "Show it to the camera and it comes alive."
 // The station runs WITHOUT staff: the welcome mirror usually takes the photo
@@ -32,7 +33,7 @@ const PARTICLES = Array.from({ length: 24 }, (_, i) => {
   return { kind, glyph, left: 6 + ((i * 37) % 88), top: 8 + ((i * 53) % 66), delay: (i % 8) * 0.55, dur: 4.5 + (i % 5) * 0.9, size: 18 + (i % 4) * 9 };
 });
 
-export function Build({ onDone, initialPhoto = "", shownOnly = false }: { onDone: () => void; initialPhoto?: string; shownOnly?: boolean }) {
+export function Build({ onDone, initialPhoto = "", source = "person" }: { onDone: () => void; initialPhoto?: string; source?: StartSource }) {
   const [step, setStep] = useState<Step>(initialPhoto ? "magic" : "photo");
   const [photo, setPhoto] = useState(initialPhoto);
   const [tries, setTries] = useState(0);
@@ -152,7 +153,8 @@ export function Build({ onDone, initialPhoto = "", shownOnly = false }: { onDone
         photo={photo}
         stream={streamRef.current}
         tries={tries}
-        shownOnly={shownOnly && tries === 0}
+        shownOnly={source === "object" && tries === 0}
+        noGuess={source !== "person"}
         onRetake={retake}
         onRetryCloser={retryCloser}
         onDone={onDone}
@@ -208,6 +210,7 @@ function MagicStep({
   stream,
   tries,
   shownOnly,
+  noGuess,
   onRetake,
   onRetryCloser,
   onDone,
@@ -216,6 +219,7 @@ function MagicStep({
   stream: MediaStream | null;
   tries: number;
   shownOnly: boolean; // the welcome saw only a thing held up, no person: nothing in it = back to the mirror
+  noGuess: boolean;   // started by a thing held up (not a child's showing pose): still nothing after the reshoots = back to the mirror, no made-up creature
   onRetake: () => void;
   onRetryCloser: () => void;
   onDone: () => void;
@@ -283,6 +287,16 @@ function MagicStep({
           narrate("m2_noshow");
           setPhase("noshow");
           later(onRetryCloser, clipMs("m2_noshow") + 500);
+          return;
+        }
+        // a held-up start (somebody in view, not the showing pose) and still nothing after the reshoots: they
+        // may have nothing to show at all — back to the mirror rather than a made-up creature on the wall
+        if (j.none && noGuess) {
+          track("match_none_held");
+          absorbShownObject();
+          narrate("m2_noshow");
+          setPhase("noshow");
+          later(onDone, clipMs("m2_noshow") + 500);
           return;
         }
         if (typeof j.variant === "string" && j.variant) v = j.variant;

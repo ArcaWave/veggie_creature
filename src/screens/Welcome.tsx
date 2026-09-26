@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit, attachCamera, onCameraRecovered, cameraHealth } from "../lib/camera";
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
-import { ObjectGate, GRID_W, GRID_H, MAX_SHOWN_MISSES, shownMisses, type ObjectReport } from "../lib/showobject";
+import { ObjectGate, GRID_W, GRID_H, type ObjectReport } from "../lib/showobject";
 import { pop, sparkle } from "../lib/sfx";
 import { narrate, hush, narrating, clipMs, voicedCountdown, preloadVoice, voiceBlocked, onVoiceBlocked } from "../lib/narrate";
 import { reloadIfUpdated } from "../lib/autoreload";
@@ -26,6 +26,9 @@ const STEPS: { img: string; emoji: string; caption: string; dir: Dir }[] = [
 
 const q = new URLSearchParams(location.search);
 const DEBUG = q.has("posedebug");
+// how the photo was started: the pose gate / staff ("person"), the held-up-thing gate with somebody in view
+// ("held"), or with nobody in view ("object")
+export type StartSource = "person" | "held" | "object";
 const GATE_ON = !q.has("nogate");
 const COUNT_FROM = 3;
 const COOLDOWN_MS = 1500;      // nobody close for this long before the gate may arm again…
@@ -43,7 +46,7 @@ const HINTS: Record<Hint, string> = {
   snap: "찰칵! ✨",
 };
 
-export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, source: "person" | "object") => void; onStart: () => void }) {
+export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, source: StartSource) => void; onStart: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [camOn, setCamOn] = useState(false);
@@ -135,8 +138,10 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, s
       const z = r.zone, w = r.width;
       focus = { x0: z.x0 - w * 0.35, x1: z.x1 + w * 0.35, y0: z.y0 - w * 0.9, y1: z.y1 + w * 0.25 };
     }
-    const source = countReason.current === "object" ? "object" : "person";
-    if (source === "object") focus = null; // (only the creation was seen: the whole view)
+    // the held-up-thing gate fired: with somebody in view it is a child (or a parent) holding it — "held";
+    // with nobody, the creation alone — "object"
+    const source: StartSource = countReason.current !== "object" ? "person" : r && r.boxes.length ? "held" : "object";
+    if (source !== "person") focus = null; // (the gate saw a thing, not whose it is: the whole view)
     track("welcome_snap", { people: r?.boxes.length ?? 0, focused: !!focus, source });
     const url = snapshot(v, 960, focus);
     window.setTimeout(() => onCaptured(url, source), clipMs("w5_snap") + 150);
@@ -246,12 +251,12 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, s
         obj = objGate.update(tctx.getImageData(0, 0, GRID_W, GRID_H).data, performance.now(), rep.near && rep.armsDown, rep.boxes.length > 0);
         if (obj.center >= 0.08) { objSeenAt = now; seenAt.current = now; }
         // after a session: the booth has to have been clear once (or 8 s pass) — the last child's
-        // creation still held there must not start another round. Two photos in a row of nothing: only a
-        // clear booth re-arms it (someone just standing there is not photographed every 20 s).
-        if (!objArmed && (obj.center < 0.08 || (now - t0 > COOLDOWN_MAX_MS && shownMisses() < MAX_SHOWN_MISSES))) objArmed = true;
+        // creation still held there must not start another round
+        if (!objArmed && (obj.center < 0.08 || now - t0 > COOLDOWN_MAX_MS)) objArmed = true;
       }
       drawOverlay(v, rep, obj);
       if (DEBUG && frame++ % 4 === 0) setReport(rep);
+      if (DEBUG) (window as any).__gateDbg = { people: rep.boxes.length, width: rep.width, near: rep.near, centered: rep.centered, holding: rep.holding, armsDown: rep.armsDown, still: rep.still, dwell: rep.dwell, obj }; // (?posedebug: rehearsal scripts read both gates)
 
       if (countRef.current === null) {
         const showing = !!obj && obj.dwell > 0 && !rep.holding;
