@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCamera, releaseCamera, cameraErrorText, snapshot, cameraInfo, coverFit, attachCamera, onCameraRecovered, cameraHealth } from "../lib/camera";
 import { getPoseLandmarker } from "../lib/pose";
 import { ShowGate, gateParamsFromUrl, type GateReport } from "../lib/gate";
+import { ObjectGate, GRID_W, GRID_H, type ObjectReport } from "../lib/showobject";
 import { pop, sparkle } from "../lib/sfx";
 import { narrate, hush, narrating, clipMs, voicedCountdown, preloadVoice, voiceBlocked, onVoiceBlocked } from "../lib/narrate";
 import { reloadIfUpdated } from "../lib/autoreload";
@@ -42,7 +43,7 @@ const HINTS: Record<Hint, string> = {
   snap: "찰칵! ✨",
 };
 
-export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) => void; onStart: () => void }) {
+export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string, source: "person" | "object") => void; onStart: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [camOn, setCamOn] = useState(false);
@@ -54,7 +55,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   const [flash, setFlash] = useState(false);
 
   const countRef = useRef<number | null>(null);
-  const countReason = useRef<"gate" | "button" | "key">("gate"); // a staff start is never cancelled by the gate
+  const countReason = useRef<"gate" | "object" | "button" | "key">("gate"); // a staff start is never cancelled by the gate
   const countTimer = useRef<(() => void) | null>(null); // cancels the voiced countdown
   const gateRef = useRef<ShowGate | null>(null);
   const armedRef = useRef(false);
@@ -92,7 +93,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   // "좋아! 움직이지 말고 그대로~ 사진 찍을게!" → "셋! 둘! 하나!" with the numbers
   // landing on the spoken ones → snap. countRef marks "in progress" from the
   // first word on; the big number only shows once the voice counts.
-  function startCountdown(reason: "gate" | "button" | "key") {
+  function startCountdown(reason: "gate" | "object" | "button" | "key") {
     if (countRef.current !== null || doneRef.current) return;
     track("welcome_countdown", { reason });
     countReason.current = reason;
@@ -134,9 +135,11 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
       const z = r.zone, w = r.width;
       focus = { x0: z.x0 - w * 0.35, x1: z.x1 + w * 0.35, y0: z.y0 - w * 0.9, y1: z.y1 + w * 0.25 };
     }
-    track("welcome_snap", { people: r?.boxes.length ?? 0, focused: !!focus });
+    const source = countReason.current === "object" ? "object" : "person";
+    if (source === "object") focus = null; // (only the creation was seen: the whole view)
+    track("welcome_snap", { people: r?.boxes.length ?? 0, focused: !!focus, source });
     const url = snapshot(v, 960, focus);
-    window.setTimeout(() => onCaptured(url), clipMs("w5_snap") + 150);
+    window.setTimeout(() => onCaptured(url, source), clipMs("w5_snap") + 150);
   }
   useEffect(() => () => clearCountTimer(), []);
 
@@ -210,6 +213,12 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
       .catch(() => { /* no pose model: the button/keyboard still work */ });
     const gate = new ShowGate(params);
     gateRef.current = gate;
+    // …and the second way in: the creation alone, held up to the camera (lib/showobject)
+    const objGate = new ObjectGate();
+    const thumb = document.createElement("canvas");
+    thumb.width = GRID_W; thumb.height = GRID_H;
+    const tctx = thumb.getContext("2d", { willReadFrequently: true });
+    let objArmed = !hadSession, objSeenAt = 0;
     const t0 = Date.now();
     let lastNear = t0;
     if (!hadSession) armedRef.current = true;
@@ -231,12 +240,27 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
 
       lastRep.current = rep;
       if (rep.boxes.length) seenAt.current = now; // anybody at all in view (for how often to call out)
-      drawOverlay(v, rep);
+      let obj: ObjectReport | null = null;
+      if (tctx) {
+        tctx.drawImage(v, 0, 0, GRID_W, GRID_H);
+        obj = objGate.update(tctx.getImageData(0, 0, GRID_W, GRID_H).data, performance.now(), rep.near && rep.armsDown, rep.boxes.length > 0);
+        if (obj.center >= 0.08) { objSeenAt = now; seenAt.current = now; }
+        // after a session: the booth has to have been clear once (or 8 s pass) — the last child's
+        // creation still held there must not start another round
+        if (!objArmed && (obj.center < 0.08 || now - t0 > COOLDOWN_MAX_MS)) objArmed = true;
+      }
+      drawOverlay(v, rep, obj);
       if (DEBUG && frame++ % 4 === 0) setReport(rep);
 
       if (countRef.current === null) {
-        setHint(!rep.near ? "come" : !rep.holding ? "hold" : "still");
+        const showing = !!obj && obj.dwell > 0 && !rep.holding;
+        setHint(showing ? "still" : !rep.near ? "come" : !rep.holding ? "hold" : "still");
         if (rep.ready && armedRef.current) startCountdown("gate");
+        else if (obj?.ready && objArmed) startCountdown("object");
+      } else if (countReason.current === "object" && now - objSeenAt > LOST_MS) {
+        cancelCountdown(); // it was taken away mid-count
+        objGate.reset();
+        setHint("come");
       } else if (countReason.current === "gate" && now - lastNear > LOST_MS) {
         // (only a countdown the GATE started: a staff start — button / Space — is for exactly the child the
         // gate cannot see, a wheelchair, a very small child, so "nobody near" must not cancel it)
@@ -251,7 +275,7 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
   // the guide silhouette (stand here, this big), the creature spot, the glow
   // around the recognised child — all drawn over the mirrored video, so x is
   // mirrored to match
-  function drawOverlay(v: HTMLVideoElement, rep: GateReport) {
+  function drawOverlay(v: HTMLVideoElement, rep: GateReport, obj: ObjectReport | null = null) {
     const c = overlayRef.current;
     if (!c) return;
     const cw = c.clientWidth, ch = c.clientHeight;
@@ -336,6 +360,21 @@ export function Welcome({ onCaptured, onStart }: { onCaptured: (photo: string) =
       ctx.lineWidth = 2;
       ctx.strokeStyle = "rgba(80, 200, 255, 0.9)";
       ctx.strokeRect(X(rep.zone.x1), Y(rep.zone.y0), X(rep.zone.x0) - X(rep.zone.x1), Y(rep.zone.y1) - Y(rep.zone.y0));
+      ctx.restore();
+    }
+
+    // the creation alone, held up: a glowing frame round it, filling as it holds still
+    if (obj && obj.dwell > 0 && obj.box && !rep.holding) {
+      const b = obj.box, k = Math.min(1, obj.dwell / 1500);
+      const x0 = X(b.x1), x1 = X(b.x0), y0 = Y(b.y0), y1 = Y(b.y1);
+      ctx.save();
+      ctx.lineWidth = 6 + 4 * k;
+      ctx.strokeStyle = `rgba(255, 196, 70, ${0.55 + 0.45 * k})`;
+      ctx.shadowColor = "rgba(255, 190, 60, 0.9)";
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.roundRect(x0 - 12, y0 - 12, x1 - x0 + 24, y1 - y0 + 24, 26);
+      ctx.stroke();
       ctx.restore();
     }
   }

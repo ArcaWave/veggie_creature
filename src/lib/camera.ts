@@ -11,10 +11,16 @@ let pending: Promise<MediaStream> | null = null;
 // "child" in it is then stirring, which is how the magic-pot move is tested.
 const QUERY = new URLSearchParams(location.search);
 const FAKE = QUERY.get("fakecam");
+// &then=/other.jpg&at=6: after `at` seconds the fake camera shows the other picture (an empty booth, then
+// something held up — how the "creation alone" start is rehearsed)
+const FAKE_THEN = QUERY.get("then"), FAKE_AT = Number(QUERY.get("at")) || 6;
 const ORBIT = QUERY.has("orbit") ? Number(QUERY.get("orbit")) || 0.6 : 0;
 function fakeStream(src: string): Promise<MediaStream> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    let img2: HTMLImageElement | null = null;
+    if (FAKE_THEN) { img2 = new Image(); img2.src = FAKE_THEN; }
+    const t0 = performance.now();
     img.onload = () => {
       const c = document.createElement("canvas");
       c.width = 1280;
@@ -23,9 +29,12 @@ function fakeStream(src: string): Promise<MediaStream> {
       const W = window as any, myId = (W.__fakeCamSeq = (W.__fakeCamSeq || 0) + 1);
       const draw = () => { // cover-fit, redrawn so the stream keeps producing frames
         if (W.__fakecamStall === myId) return; // rehearsal: THIS camera session hangs (a re-opened one works)
-        const k = Math.max(c.width / img.width, c.height / img.height) * (ORBIT ? 1.25 : 1);
+        const pic = img2?.complete && img2.naturalWidth && performance.now() - t0 > FAKE_AT * 1000 ? img2 : img;
+        const k = Math.max(c.width / pic.width, c.height / pic.height) * (ORBIT ? 1.25 : 1);
         const a = (performance.now() / 1000) * ORBIT * 2 * Math.PI, r = ORBIT ? c.height * 0.09 : 0;
-        ctx.drawImage(img, (c.width - img.width * k) / 2 + r * Math.cos(a), (c.height - img.height * k) / 2 + r * Math.sin(a), img.width * k, img.height * k);
+        ctx.drawImage(pic, (c.width - pic.width * k) / 2 + r * Math.cos(a), (c.height - pic.height * k) / 2 + r * Math.sin(a), pic.width * k, pic.height * k);
+        // (a real camera's sensor noise: the booth model must cope with it)
+        if (FAKE_THEN) { ctx.fillStyle = `rgba(${Math.random() * 255 | 0},${Math.random() * 255 | 0},${Math.random() * 255 | 0},0.015)`; ctx.fillRect(0, 0, c.width, c.height); }
       };
       draw();
       setInterval(draw, ORBIT ? 33 : 100);

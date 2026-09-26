@@ -24,6 +24,7 @@ export type GateReport = {
   near: boolean;
   centered: boolean;
   holding: boolean;
+  armsDown: boolean;   // both wrists seen, down at the hips: standing there, not showing anything
   still: boolean;
   dwell: number;       // ms all four have held
   ready: boolean;      // dwell reached `hold`
@@ -82,8 +83,9 @@ export class ShowGate {
       const zone: Box = { x0: Math.min(ls.x, rs.x) - width * 0.45, x1: Math.max(ls.x, rs.x) + width * 0.45, y0: nose.y - 0.05, y1: hipY + 0.05 };
       const inZone = (p: NormalizedLandmark) => vis(p) && p.x >= zone.x0 && p.x <= zone.x1 && p.y >= zone.y0 && p.y <= zone.y1;
       const handsIn = (inZone(lm[L_WRIST]) ? 1 : 0) + (inZone(lm[R_WRIST]) ? 1 : 0);
+      const armsDown = vis(lm[L_WRIST]) && vis(lm[R_WRIST]) && lm[L_WRIST].y > hipY - width * 0.25 && lm[R_WRIST].y > hipY - width * 0.25;
       return {
-        i, width, nose, zone,
+        i, width, nose, zone, armsDown,
         near: width >= this.params.near,
         centered: nose.x >= CENTER[0] && nose.x <= CENTER[1],
         holding: handsIn >= this.params.hands,
@@ -108,7 +110,7 @@ export class ShowGate {
       // (the nose history is kept across a lost frame — the stillness window
       // must not restart just because the detector blinked)
       this.tick(false, dt);
-      return { main: -1, boxes, width: 0, near: false, centered: false, holding: false, still: false, dwell: this.dwell, ready: false, zone: null };
+      return { main: -1, boxes, width: 0, near: false, centered: false, holding: false, armsDown: false, still: false, dwell: this.dwell, ready: false, zone: null };
     }
     if (last && !same) this.nose = []; // a different person: their stillness is measured afresh
     this.followed = { x: pick.nose.x, y: pick.nose.y };
@@ -122,7 +124,7 @@ export class ShowGate {
 
     const ok = pick.near && pick.centered && pick.holding && still;
     this.tick(ok, dt);
-    return { main: pick.i, boxes, width: pick.width, near: pick.near, centered: pick.centered, holding: pick.holding, still, dwell: this.dwell, ready: this.dwell >= this.params.hold, zone: pick.zone };
+    return { main: pick.i, boxes, width: pick.width, near: pick.near, centered: pick.centered, holding: pick.holding, armsDown: pick.armsDown, still, dwell: this.dwell, ready: this.dwell >= this.params.hold, zone: pick.zone };
   }
 
   private tick(ok: boolean, dt: number) {

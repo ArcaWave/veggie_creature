@@ -6,6 +6,7 @@ import { track } from "../lib/analytics";
 import { keepAsset } from "../lib/keep";
 import { narrate, hush, clipMs, voicedCountdown } from "../lib/narrate";
 import { getCamera, releaseCamera, cameraErrorText, snapshot, attachCamera, onCameraRecovered } from "../lib/camera";
+import { absorbShownObject } from "../lib/showobject";
 import { DanceCharge } from "../components/DanceCharge";
 import { Figure, randomParts, type Parts } from "../components/Figure";
 import { CamFrame } from "../components/CamFrame";
@@ -31,7 +32,7 @@ const PARTICLES = Array.from({ length: 24 }, (_, i) => {
   return { kind, glyph, left: 6 + ((i * 37) % 88), top: 8 + ((i * 53) % 66), delay: (i % 8) * 0.55, dur: 4.5 + (i % 5) * 0.9, size: 18 + (i % 4) * 9 };
 });
 
-export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initialPhoto?: string }) {
+export function Build({ onDone, initialPhoto = "", shownOnly = false }: { onDone: () => void; initialPhoto?: string; shownOnly?: boolean }) {
   const [step, setStep] = useState<Step>(initialPhoto ? "magic" : "photo");
   const [photo, setPhoto] = useState(initialPhoto);
   const [tries, setTries] = useState(0);
@@ -151,6 +152,7 @@ export function Build({ onDone, initialPhoto = "" }: { onDone: () => void; initi
         photo={photo}
         stream={streamRef.current}
         tries={tries}
+        shownOnly={shownOnly && tries === 0}
         onRetake={retake}
         onRetryCloser={retryCloser}
         onDone={onDone}
@@ -205,6 +207,7 @@ function MagicStep({
   photo,
   stream,
   tries,
+  shownOnly,
   onRetake,
   onRetryCloser,
   onDone,
@@ -212,6 +215,7 @@ function MagicStep({
   photo: string;
   stream: MediaStream | null;
   tries: number;
+  shownOnly: boolean; // the welcome saw only a thing held up, no person: nothing in it = back to the mirror
   onRetake: () => void;
   onRetryCloser: () => void;
   onDone: () => void;
@@ -257,6 +261,17 @@ function MagicStep({
         await lineSaid;
         // nothing visible in the shot? ask the child to hold it closer and
         // reshoot (twice at most — then the show goes on with the best guess)
+        // the mirror started on a thing held up (no person seen) and it is no creation: back to the mirror
+        // quietly — no reshoots of what may be an empty booth, and the same thing won't start it again
+        if (j.none && shownOnly) {
+          if (!aliveRef.current) return;
+          track("match_none_shown");
+          absorbShownObject();
+          narrate("m2_noshow");
+          setPhase("noshow");
+          later(onDone, clipMs("m2_noshow") + 500);
+          return;
+        }
         if (j.none && tries < MAX_RETRIES) {
           if (!aliveRef.current) return;
           track("match_none", { tries });
