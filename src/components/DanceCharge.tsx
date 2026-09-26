@@ -17,10 +17,10 @@ import { CamFrame } from "./CamFrame";
 // and a turn or two of stirring makes the pot burst with light and stars —
 // which is the moment the creature comes alive (Build carries on from the
 // white-out). Forgiving for the special-needs event: doing the move charges
-// fast (~1.2 s), roughly doing it charges too (~2.5 s), arms just moving about
+// fast (~1 s), roughly doing it charges too (~2 s), arms just moving about
 // count a little; and when nothing has been recognised for a moment (a child
 // who doesn't follow, or is just playing around) the dust starts gathering by
-// itself, so every scene completes on its own in about 9 s. Nobody is ever stuck.
+// itself, so every scene completes on its own in about 7 s. Nobody is ever stuck.
 // (Tapping/clicking the stage also charges: a tester's shortcut — the
 // exhibition screen is not a touch screen, so it is not advertised.)
 type LM = NormalizedLandmark[];
@@ -90,20 +90,20 @@ export const MOVES: Move[] = [
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes (stretched to the spoken cheer)
 const CHEER_PAUSE_S = 0.2; // "팔이 쑥!" (0.2 s) "잘했어!"
-const WAIT_LINE_AFTER_MS = 3000; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
+const WAIT_LINE_AFTER_MS = 2400; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
 const HAND_LINE_AFTER_MS = 3500; // stir: no hand in view this long → "손을 들어 봐!" (at most every 12 s)
-const ASSIST_AFTER_MS = 2500; // this long without a recognised move → the quiet assist begins
-const ASSIST_RAMP_MS = 1500;  // …easing in over this long, so its start is soft
-const ASSIST_RATE = 16;       // gauge % per second once fully eased in (a scene nobody manages: ~9 s)
+const ASSIST_AFTER_MS = 2000; // this long without a recognised move → the quiet assist begins
+const ASSIST_RAMP_MS = 1200;  // …easing in over this long, so its start is soft
+const ASSIST_RATE = 20;       // gauge % per second once fully eased in (a scene nobody manages: ~7 s)
 const EMPTY_AFTER_MS = 4000;  // nobody at all in the camera this long → the scene wraps up fast…
 const EMPTY_RATE = 30;        // …at this many % per second (~3 s a scene)
-const POSE_RATE = 85;         // gauge % per second while the pose is held (~1.2 s to fill)
-const LOOSE_RATE = 40;        // …while it is roughly there (~2.5 s)
-const EFFORT_RATE = 14;       // …while the arms are just moving about (on top of the assist)
+const POSE_RATE = 106;        // gauge % per second while the pose is held (~1 s to fill)
+const LOOSE_RATE = 50;        // …while it is roughly there (~2 s)
+const EFFORT_RATE = 18;       // …while the arms are just moving about (on top of the assist)
 const TICK_MS = 100;
-const STIR_TURNS = 1.2;       // turns of the ladle that fill the pot…
-const STIR_TRAVEL = 4;        // …or this much hand travel (frame heights) — scribbles count too
-                              // (together: about one real turn)
+const STIR_TURNS = 0.95;      // turns of the ladle that fill the pot…
+const STIR_TRAVEL = 3.2;      // …or this much hand travel (frame heights) — scribbles count too
+                              // (together: under one real turn)
 const STIR_INTRO_MS = 1700;   // the creation drops into the pot first; stirring counts after
 const BURST_MS = 1500;        // the pot's burst, ending in the white-out Build picks up from
 const WHITE_AT_MS = 950;
@@ -133,7 +133,9 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   const stageRef = useRef(0);
   const cheerRef = useRef(false);
   const stageT0 = useRef(Date.now());
-  const lastHitAt = useRef(Date.now()); // last moment the child's own move charged the gauge
+  const lastHitAt = useRef(Date.now()); // last moment the child's own move charged the gauge (any of it — for the voice)
+  const strongAt = useRef(Date.now());  // …the move itself, fully recognised (only this pauses the assist: a half-read
+                                        // pose flickering on and off must not starve it)
   const doneRef = useRef(false);
   const waitSaid = useRef(false);  // "천천히 해도 괜찮아~" was said in this scene
   const seenAt = useRef(Date.now()); // when anybody at all was last in the camera
@@ -175,6 +177,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
         stageRef.current += 1;
         stageT0.current = Date.now();
         lastHitAt.current = Date.now();
+        strongAt.current = Date.now();
         gaugeRef.current = 0;
         cheerRef.current = false;
         setGauge(0);
@@ -276,7 +279,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             if (move.check) {
               const ok = doer >= 0 || nearly >= 0;
               setHit(ok);
-              if (doer >= 0) { lastHitAt.current = now; chargeRef.current(POSE_RATE * dt); }
+              if (doer >= 0) { lastHitAt.current = strongAt.current = now; chargeRef.current(POSE_RATE * dt); }
               else if (nearly >= 0) { lastHitAt.current = now; chargeRef.current(LOOSE_RATE * dt); }
               else if (main >= 0) { // arms moving about (trying, or just playing): that counts a little too
                 const lw = poses[main][L_WRIST], rw = poses[main][R_WRIST], last = wristsAt.current;
@@ -308,6 +311,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
                 const step = stir.update(smooth.x, smooth.y, now, v.videoWidth / v.videoHeight);
                 if (step.turning) view.current.turningAt = now;
                 if (step.turning || step.moved > 0) lastHitAt.current = now;
+                if (step.turning) strongAt.current = now;
                 if (now - stageT0.current > STIR_INTRO_MS) chargeRef.current((step.turned / STIR_TURNS + step.moved / STIR_TRAVEL) * 100);
               } else {
                 smooth = null;
@@ -326,14 +330,14 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = now; chargeRef.current(40 * dt); }
+            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = now; chargeRef.current(50 * dt); }
           }
           prev = d;
         }
       }
       // never a dead end — and never obvious: idle for a few seconds → the
       // gauge eases into a slow, slightly uneven climb of its own
-      const idle = now - Math.max(stageT0.current, lastHitAt.current);
+      const idle = now - Math.max(stageT0.current, strongAt.current);
       // the gentle lines — only into silence, never over another line, never after the scene is won
       if (!cheerRef.current && !doneRef.current && !narrating()) {
         if (!move.check && now - Math.max(stageT0.current, view.current.handAt) > HAND_LINE_AFTER_MS + clipMs("d3_stir") * (view.current.handAt ? 0 : 1) && now - handSaidAt.current > 12000) {
