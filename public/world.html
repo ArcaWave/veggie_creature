@@ -67,7 +67,7 @@ const DEBUG = new URLSearchParams(location.search).has("debug");
 const CLOSEUP = new URLSearchParams(location.search).get("closeup");
 const POLL_MS = 5000;
 const MAX_ON_STAGE = 12;
-const POP_DELAY = 5000; // a new creature POPS into the village this long after the scan station's signal
+const POP_DELAY = 3000; // a new creature POPS into the village this long after the scan station's signal (as it walks off the station's screen)
 const STAY_S = Number(new URLSearchParams(location.search).get("stay")); // ?stay=<seconds>: rehearsal crowds leave after this
 const TIMED = DEMO || STAY_S > 0;   // rehearsal: creatures leave on a timer. Live: they stay until newer ones replace them
 const RESIDENTS = Math.min(MAX_ON_STAGE, Number(new URLSearchParams(location.search).get("residents")) || 10); // ?residents=<n>
@@ -900,6 +900,7 @@ function freeSpot(self) {
 // time (three on a busy stage), each speaker rests before speaking again.
 // A newcomer announces itself in its own colour — "that one is mine!" — and
 // the nearest friend answers. ?bubbles=0 turns them off.
+const VEG_NAME = { corn: "옥수수", cabbage: "양배추", sweetpotato: "고구마", pumpkin: "호박", tomato: "토마토" };
 const LINES = {
   arrive: ["짠! 내가 왔어! ✨", "안녕! 나 살아났어! 🎉", "우와~ 여기가 디지털 세계!", "얘들아, 나 왔어!", "한가위에 태어났어! 🌕"],
   greet: ["어서 와! 👋", "새 친구다! 반가워!", "우와, 멋지다!", "같이 송편 먹자!", "한가위에 온 걸 환영해!"],
@@ -1023,7 +1024,10 @@ const nearestTo = (c, ok) => [...onStage.values()].filter((o) => o !== c && ok(o
 function welcome(c) {
   hush(c);
   for (const o of onStage.values()) if (o !== c && o.bubble && Math.abs(o.root.position.x - c.root.position.x) < 3.4) hush(o);
-  say(c, pick(LINES.arrive), 4600, "mine");
+  // (named: a family looking over from the station must know THEIR creature at once — not take the
+  // sweet potato that happens to be talking nearby for theirs)
+  const nm = VEG_NAME[c.parts.body];
+  say(c, nm ? pick([`짠! ${nm} 친구 도착! ✨`, `안녕! 나는 ${nm} 친구야! 🎉`, `${nm} 친구가 왔어요!`]) : pick(LINES.arrive), 4600, "mine");
   const friend = nearestTo(c, (o) => o.root.visible && !o.leaving && o.mode !== "pop" && !hidden(o) && Math.abs(o.root.position.x - c.root.position.x) >= 3.4);
   if (friend) setTimeout(() => { hush(friend); if (onStage.has(friend.entry.id)) say(friend, pick(LINES.greet), 3000); }, 1700);
   [...onStage.values()].filter((o) => o !== c && o !== friend && canSpeak(o)).slice(0, 2)

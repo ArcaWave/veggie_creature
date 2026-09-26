@@ -218,17 +218,15 @@ export function coverFit(v: HTMLVideoElement, cw: number, ch: number) {
   return { s, ox: (cw - v.videoWidth * s) * CAM_FOCUS.x, oy: (ch - v.videoHeight * s) * CAM_FOCUS.y };
 }
 
-// WYSIWYG snapshot: exactly the region the (object-fit: cover) preview shows,
-// scaled to at most `max` px, as a JPEG data URL for the matcher
+// The snapshot for the matcher: the WHOLE camera frame, scaled to at most `max` px, as a JPEG data URL.
+// (It used to be exactly what the wide preview window shows — which trims a 4:3 camera's bottom ~20 %,
+// and a paper held low at the waist lost its lower half there. The matcher reads what is held up and
+// ignores the rest, so it gets everything the camera sees.)
 // `focus` (video-normalised box, optional): with several people in frame, only the region around the
 // child being followed — so the matcher reads THEIR creation, not the one a sibling holds up beside
 // them. The box is clamped into the frame and to a sensible minimum size.
 export function snapshot(v: HTMLVideoElement, max = 960, focus?: { x0: number; y0: number; x1: number; y1: number } | null): string {
-  const ratio = v.clientWidth && v.clientHeight ? v.clientWidth / v.clientHeight : 1;
-  let cw = v.videoWidth, ch = v.videoHeight;
-  if (cw / ch > ratio) cw = Math.round(ch * ratio);
-  else ch = Math.round(cw / ratio);
-  let sx = (v.videoWidth - cw) * CAM_FOCUS.x, sy = (v.videoHeight - ch) * CAM_FOCUS.y;
+  let cw = v.videoWidth, ch = v.videoHeight, sx = 0, sy = 0;
   if (focus) {
     const fw = Math.max(0.3, focus.x1 - focus.x0) * v.videoWidth, fh = Math.max(0.35, focus.y1 - focus.y0) * v.videoHeight;
     const cx = ((focus.x0 + focus.x1) / 2) * v.videoWidth, cy = ((focus.y0 + focus.y1) / 2) * v.videoHeight;

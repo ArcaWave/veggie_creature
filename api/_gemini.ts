@@ -87,8 +87,8 @@ export async function stylize(image: string, prompt?: string): Promise<Result> {
   }
 }
 
-// Photo of the child's real veggie creation -> which pre-made character it
-// is: the MAIN BODY vegetable plus the sticker parts stuck on it (hat, arms,
+// Photo of the child's veggie creation (a drawing on paper, or a real vegetable) -> which pre-made
+// character it is: the MAIN BODY vegetable plus the sticker parts stuck on it (hat, arms,
 // legs), so the wall can assemble the very same figure. Accuracy setup:
 // gemini-2.5-flash vision, a reason-first JSON answer whose fields are
 // ENUM-constrained to the part library, and THREE parallel judgements
@@ -98,32 +98,44 @@ export const HAT_IDS = ["none", "leaves", "acorn", "straw"] as const;
 export const LIMB_IDS = ["twig", "cucumber", "carrot"] as const;
 export type Parts = { body: string; hat: string; arms: string; legs: string };
 
+// What the children really show is mostly a DRAWING of a vegetable on paper (with or without the
+// stickers). The first prompt spoke only of "a real vegetable plus stickers", and the model turned
+// every drawing down as "not a real vegetable creation" → "none": the first photo failed, the reshoots
+// failed, and after them the kiosk went on with a guess or a random vegetable (a corn drawing came out
+// a cabbage). On labelled booth photos of drawings: 8/22 and 0/15 right before, 22/22 and 15/15 after.
 const MATCH_PROMPT =
-  "A child built a little creature out of a real vegetable plus printed STICKER parts (photo " +
-  "attached). The creature is assembled as: a MAIN BODY vegetable (the torso — the biggest " +
-  "central piece), one optional HAT sticker on top, two ARM stickers and two LEG stickers. " +
-  "Identify each: " +
-  "`variant` = the kind of the main body vegetable, one of exactly five: " +
-  "pumpkin = a big flattened-round ribbed pumpkin, dull tan-orange or yellowish-brown (a Korean old pumpkin); " +
-  "corn = an ear of corn, yellow kernels, maybe with green or pale husk; " +
-  "sweetpotato = an elongated tapered root with reddish-purple or brownish-purple skin; " +
-  "tomato = a round smooth glossy red fruit with a small green stem; " +
-  "cabbage = a big round head of cabbage: pale green (or whitish-green) leaves wrapped tightly in layers, thick " +
-  "white leaf veins, a matte waxy surface, no ribs and no stem on top (that would be the pumpkin). " +
-  "Pick the closest of the five by shape first, then color. " +
-  "`hat` = the hat sticker on top: leaves = a crown or garland of red, orange and yellow autumn " +
-  "maple leaves with little acorns; acorn = a big brown dome-shaped cap with a scaly acorn-cup / " +
-  "pinecone texture (a few leaves may peek out beside it); straw = a woven yellow straw sun hat " +
-  "with a checked ribbon; none = no hat at all. " +
-  "`arms` and `legs` = the sticker style of the limbs: twig = brown wooden twigs/branches (arms " +
-  "end in twig fingers, legs in round brown feet), cucumber = green bumpy cucumber pieces, " +
-  "carrot = orange carrots with green tops. If the two arms (or the two legs) are of different " +
-  "styles, answer the style that is more clearly visible. " +
-  "Ignore googly eyes, toothpicks, the hands holding it, the table and other decorations. " +
-  "First describe what you see briefly in `reason`, then fill every field. " +
-  "IMPORTANT: if NO vegetable creation is visible at all — an empty scene, only a person or " +
-  "face with nothing held up, or the creation is too far away or fully hidden — answer " +
-  '`variant` "none" instead of guessing.';
+  "A child at a kids' activity booth is showing their VEGETABLE FRIEND to the camera (photo attached). " +
+  "It is usually the child's own DRAWING of a vegetable on a sheet of paper (crayon, marker or pencil — " +
+  "often rough, often with a face drawn on it); it may also be a printed colouring sheet, a craft, or a " +
+  "real vegetable. Printed STICKERS may be stuck on it — one hat on top, two arms, two legs — but very " +
+  "often there are NO stickers at all: a vegetable drawing without any stickers is still the child's " +
+  "creation. A drawing counts exactly like a real vegetable.\n" +
+  "Identify what is held up / shown to the camera:\n" +
+  "`variant` = the body vegetable, exactly one of five. Decide by SHAPE first, then colour:\n" +
+  "corn = an ear of corn: TALL, elongated, covered with rows or a grid of kernels (dots, bumps, little " +
+  "squares), yellow; green husk leaves at its bottom or sides (green leaves on a tall kernelled shape " +
+  "are corn, not cabbage).\n" +
+  "sweetpotato = a sweet potato: long spindle shape with tapered pointy ends, often slightly curved; " +
+  "purple, reddish-purple, pink-purple or brownish-purple skin.\n" +
+  "tomato = a tomato: ROUND, red (or red-orange), a small green star-shaped leafy top.\n" +
+  "cabbage = a cabbage: a ROUND ball in green or light green, drawn as wrapped layered leaves (curved " +
+  "lines, leaf veins); no vertical ribs.\n" +
+  "pumpkin = a Korean old pumpkin: a WIDE, flattened round shape with vertical ribs / segment lines, " +
+  "orange, tan or yellowish-brown, a short stem on top.\n" +
+  "`hat` = a hat sticker (or a drawn hat) on top: leaves = a crown of red/orange/yellow autumn maple " +
+  "leaves with acorns; acorn = a big brown dome-shaped cap with a scaly acorn-cup / pinecone texture; " +
+  "straw = a woven yellow straw sun hat with a checked ribbon; none = no hat.\n" +
+  "`arms` and `legs` = the style of the limb stickers (or drawn limbs): twig = brown wooden " +
+  "twigs/branches (legs end in round brown feet); cucumber = green bumpy cucumber pieces; carrot = " +
+  "orange carrots with green tops. With no limbs at all, answer twig. If the two differ, answer the one " +
+  "more clearly visible.\n" +
+  "Only what is held up or shown counts: ignore people, hands, clothes, the room, and any vegetables on " +
+  "screens, posters or signs in the background.\n" +
+  "First describe briefly in `reason` what is held up — its shape and colour — then fill every field.\n" +
+  "Answer variant \"none\" ONLY when no vegetable creation is shown at all: an empty scene, or only " +
+  "people with empty hands (or holding just a phone or a bag). If a vegetable drawing or a vegetable is " +
+  "visible at all — even small, far away, tilted, partly hidden, blurry or roughly drawn — pick the " +
+  "closest of the five and never answer \"none\".";
 
 type Vote = { variant: string; hat: string; arms: string; legs: string };
 
