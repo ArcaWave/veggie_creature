@@ -17,10 +17,10 @@ import { CamFrame } from "./CamFrame";
 // and a turn or two of stirring makes the pot burst with light and stars —
 // which is the moment the creature comes alive (Build carries on from the
 // white-out). Forgiving for the special-needs event: doing the move charges
-// fast; and when nothing has been recognised for a few seconds (a child who
-// doesn't follow, or is just playing around) the dust quietly starts
-// gathering by itself — easing in, never a visible jump — so every scene
-// completes on its own in about 20 s. Nobody is ever stuck.
+// fast (~1.2 s), roughly doing it charges too (~2.5 s), arms just moving about
+// count a little; and when nothing has been recognised for a moment (a child
+// who doesn't follow, or is just playing around) the dust starts gathering by
+// itself, so every scene completes on its own in about 9 s. Nobody is ever stuck.
 // (Tapping/clicking the stage also charges: a tester's shortcut — the
 // exhibition screen is not a touch screen, so it is not advertised.)
 type LM = NormalizedLandmark[];
@@ -52,6 +52,24 @@ export function isHeart(lm: LM): boolean {
   return up && close && centred;
 }
 
+// "roughly there" — for a child who is trying but whose pose the camera reads only half-way
+// (small arms, a sleeve, a parent's shoulder in the way): these charge too, a little slower
+export function isAirplaneLoose(lm: LM): boolean {
+  const ls = lm[L_SHOULDER], rs = lm[R_SHOULDER], lw = lm[L_WRIST], rw = lm[R_WRIST];
+  if (![ls, rs, lw, rw].every(seen)) return false;
+  const w = Math.abs(ls.x - rs.x);
+  if (w < 0.05) return false;
+  const dirL = Math.sign(ls.x - rs.x), shoulderY = (ls.y + rs.y) / 2;
+  const out = (p: NormalizedLandmark, s: NormalizedLandmark, dir: number) => (p.x - s.x) * dir > w * 0.3;
+  return out(lw, ls, dirL) && out(rw, rs, -dirL) && lw.y < shoulderY + w * 1.1 && rw.y < shoulderY + w * 1.1;
+}
+export function isHeartLoose(lm: LM): boolean {
+  const ls = lm[L_SHOULDER], rs = lm[R_SHOULDER], lw = lm[L_WRIST], rw = lm[R_WRIST];
+  if (![ls, rs, lw, rw].every(seen)) return false;
+  const shoulderY = (ls.y + rs.y) / 2;
+  return lw.y < shoulderY && rw.y < shoulderY; // both arms up
+}
+
 // the hand that holds the ladle: between the wrist and the index knuckle
 // (the wrist alone sits a little up the arm). null when it isn't in view.
 function handOf(lm: LM, wrist: number, index: number): { x: number; y: number } | null {
@@ -63,27 +81,29 @@ function handOf(lm: LM, wrist: number, index: number): { x: number; y: number } 
 // the posed moves come with a photo of a child doing them (public/dance/),
 // shown standing on the frame's edge — a real kid to copy beats a diagram.
 // The stir has no `check`: it is followed by the StirDetector instead.
-type Move = { key: string; title: string; prompt: string; cheer: string; voice: VoiceId; cheerVoice?: VoiceId | VoiceId[]; guide?: string; check?: (lm: LM) => boolean };
+type Move = { key: string; title: string; prompt: string; cheer: string; voice: VoiceId; cheerVoice?: VoiceId | VoiceId[]; guide?: string; check?: (lm: LM) => boolean; loose?: (lm: LM) => boolean };
 export const MOVES: Move[] = [
-  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑥! 잘했어! ✈️", voice: "d1_airplane", cheerVoice: ["d1_cheer_a", "d1_cheer_b"], guide: "/dance/guide_airplane.png", check: isAirplane },
-  { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑을 듬뿍 주었어! 💖", voice: "d2_heart", cheerVoice: "d2_cheer", guide: "/dance/guide_heart.png", check: isHeart },
+  { key: "airplane", title: "비행기 날개!", prompt: "양팔을 옆으로 쭉~ 펴 봐!", cheer: "팔이 쑥! 잘했어! ✈️", voice: "d1_airplane", cheerVoice: ["d1_cheer_a", "d1_cheer_b"], guide: "/dance/guide_airplane.png", check: isAirplane, loose: isAirplaneLoose },
+  { key: "heart", title: "머리 위로 하트!", prompt: "사랑을 주어 생명을 불어 넣어봐요! 💖", cheer: "사랑을 듬뿍 주었어! 💖", voice: "d2_heart", cheerVoice: "d2_cheer", guide: "/dance/guide_heart.png", check: isHeart, loose: isHeartLoose },
   { key: "stir", title: "마법 냄비 젓기!", prompt: "국자로 냄비를 빙글빙글 저어 봐! 🥄", cheer: "팡! 마법 완성! ✨", voice: "d3_stir" },
 ];
 
 const CHEER_MS = 1500; // "참 잘했어요" beat between scenes (stretched to the spoken cheer)
 const CHEER_PAUSE_S = 0.2; // "팔이 쑥!" (0.2 s) "잘했어!"
-const WAIT_LINE_AFTER_MS = 6000; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
+const WAIT_LINE_AFTER_MS = 3000; // this long after the instruction ended, still no move → "천천히 해도 괜찮아~" (once a scene)
 const HAND_LINE_AFTER_MS = 3500; // stir: no hand in view this long → "손을 들어 봐!" (at most every 12 s)
-const ASSIST_AFTER_MS = 5000; // this long without a recognised move → the quiet assist begins
-const ASSIST_RAMP_MS = 4000;  // …easing in over this long, so its start is imperceptible
-const ASSIST_RATE = 7;        // gauge % per second once fully eased in
+const ASSIST_AFTER_MS = 2500; // this long without a recognised move → the quiet assist begins
+const ASSIST_RAMP_MS = 1500;  // …easing in over this long, so its start is soft
+const ASSIST_RATE = 16;       // gauge % per second once fully eased in (a scene nobody manages: ~9 s)
 const EMPTY_AFTER_MS = 4000;  // nobody at all in the camera this long → the scene wraps up fast…
 const EMPTY_RATE = 30;        // …at this many % per second (~3 s a scene)
-const POSE_RATE = 46;         // gauge % per second while a pose is held (~2 s to fill)
+const POSE_RATE = 85;         // gauge % per second while the pose is held (~1.2 s to fill)
+const LOOSE_RATE = 40;        // …while it is roughly there (~2.5 s)
+const EFFORT_RATE = 14;       // …while the arms are just moving about (on top of the assist)
 const TICK_MS = 100;
-const STIR_TURNS = 2;         // turns of the ladle that fill the pot…
-const STIR_TRAVEL = 8;        // …or this much hand travel (frame heights) — scribbles count too
-                              // (together: a little under two real turns)
+const STIR_TURNS = 1.2;       // turns of the ladle that fill the pot…
+const STIR_TRAVEL = 4;        // …or this much hand travel (frame heights) — scribbles count too
+                              // (together: about one real turn)
 const STIR_INTRO_MS = 1700;   // the creation drops into the pot first; stirring counts after
 const BURST_MS = 1500;        // the pot's burst, ending in the white-out Build picks up from
 const WHITE_AT_MS = 950;
@@ -117,6 +137,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   const doneRef = useRef(false);
   const waitSaid = useRef(false);  // "천천히 해도 괜찮아~" was said in this scene
   const seenAt = useRef(Date.now()); // when anybody at all was last in the camera
+  const wristsAt = useRef<number[] | null>(null); // the followed child's wrists last tick (for "arms moving")
   const talkEnd = useRef(Date.now() + clipMs("d0_intro") + 250 + clipMs(MOVES[0].voice)); // when this scene's instruction has been said
   const handSaidAt = useRef(0);    // when "손을 들어 봐!" was last said
   const onFullRef = useRef(onFull);
@@ -237,7 +258,9 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             // frame) or brothers and sisters alongside, the child doing the
             // airplane must not be ignored. The glow follows the one doing it.
             const doer = move.check ? poses.findIndex((lm) => move.check!(lm)) : -1;
+            const nearly = move.loose && doer < 0 ? poses.findIndex((lm) => move.loose!(lm)) : -1;
             if (move.check && doer >= 0) main = doer;
+            else if (nearly >= 0) main = nearly;
             if (!move.check) { // the ladle goes to the biggest person who has a hand in view
               let best = -1, bestArea = 0;
               poses.forEach((lm, i) => {
@@ -251,9 +274,15 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             if (poses.length) seenAt.current = now;
 
             if (move.check) {
-              const ok = doer >= 0;
+              const ok = doer >= 0 || nearly >= 0;
               setHit(ok);
-              if (ok) { lastHitAt.current = now; chargeRef.current(POSE_RATE * dt); }
+              if (doer >= 0) { lastHitAt.current = now; chargeRef.current(POSE_RATE * dt); }
+              else if (nearly >= 0) { lastHitAt.current = now; chargeRef.current(LOOSE_RATE * dt); }
+              else if (main >= 0) { // arms moving about (trying, or just playing): that counts a little too
+                const lw = poses[main][L_WRIST], rw = poses[main][R_WRIST], last = wristsAt.current;
+                if (last && seen(lw) && seen(rw) && Math.hypot(lw.x - last[0], lw.y - last[1]) + Math.hypot(rw.x - last[2], rw.y - last[3]) > 0.04) chargeRef.current(EFFORT_RATE * dt);
+                wristsAt.current = [lw.x, lw.y, rw.x, rw.y];
+              }
             } else {
               const hands = HANDS.map(([w, i]) => (main >= 0 ? handOf(poses[main], w, i) : null));
               hands.forEach((h, k) => {
@@ -297,7 +326,7 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
             for (let i = 0; i < d.length; i += 16) {
               if (Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) > 40) moved++;
             }
-            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = now; chargeRef.current(19 * dt); }
+            if (moved / (d.length / 16) > 0.04) { lastHitAt.current = now; chargeRef.current(40 * dt); }
           }
           prev = d;
         }
