@@ -71,6 +71,11 @@ const POP_DELAY = 3000; // a new creature POPS into the village this long after 
 const STAY_S = Number(new URLSearchParams(location.search).get("stay")); // ?stay=<seconds>: rehearsal crowds leave after this
 const TIMED = DEMO || STAY_S > 0;   // rehearsal: creatures leave on a timer. Live: they stay until newer ones replace them
 const RESIDENTS = Math.min(MAX_ON_STAGE, Number(new URLSearchParams(location.search).get("residents")) || 10); // ?residents=<n>
+// …but when the booth goes quiet the village thins out to a few: past LINGER on the wall, the older ones
+// leave one by one until QUIET_RESIDENTS remain (?floor=<n>, ?linger=<minutes>)
+const QUIET_RESIDENTS = Math.max(1, Math.min(RESIDENTS, Number(new URLSearchParams(location.search).get("floor")) || 3));
+const LINGER_MS = (Number(new URLSearchParams(location.search).get("linger")) || 10) * 60000;
+const QUIET_LEAVE_GAP_MS = 20000; // (one goodbye at a time)
 const STAY_MS = (e) => (STAY_S > 0 ? STAY_S * 1000 : DEMO ? 16000 + (e.at % 8000) : 90000 + (e.at % 60000));
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -1234,16 +1239,21 @@ function removeCreature(c) {
 }
 
 // ---- data ------------------------------------------------------------------
-// The village is never empty: the latest RESIDENTS creations LIVE here. A new arrival pops in with
-// its fanfare and the oldest resident waves goodbye and walks off; nobody leaves on a timer. (At 20
-// children an hour a creature stays ~30 min; at a rush of 40, ~15 — long enough to be found, and the
-// wall is full all day. With a timer of ~2 min it was empty half the day.) A reload — or the next
-// morning — brings the latest residents straight back from the store.
+// The village is never empty: the latest creations LIVE here. While children keep coming, up to
+// RESIDENTS stay — a new arrival pops in with its fanfare and the oldest waves goodbye (at 20 children
+// an hour a creature stays ~30 min; at a rush of 40, ~15 — long enough to be found). When the booth
+// goes quiet, those that have been here LINGER leave one by one until QUIET_RESIDENTS remain — never
+// empty (with a timer of ~2 min it was empty half the day), but no crowd at night either. A reload — or
+// the next morning — brings the latest few straight back from the store.
+let lastQuietLeave = 0;
 async function poll(first) {
   try {
     const r = await fetch("/api/creatures", { cache: "no-store" });
     const j = await r.json();
-    const residents = (j.creatures || []).slice(0, RESIDENTS);
+    const now = Date.now();
+    // who lives here now: the newest QUIET_RESIDENTS always, the others while younger than LINGER
+    const lives = (e, i) => i < QUIET_RESIDENTS || now - e.at < LINGER_MS;
+    const residents = (j.creatures || []).slice(0, RESIDENTS).filter(lives);
     // an arrival made on a newer catalog than this page's: read the catalog again before placing it
     // (bodies still unknown after that are retired ones from old records — not asked about again)
     const unknown = residents.filter((e) => !onStage.has(e.id) && e.parts?.body && !BODIES[e.parts.body] && !retiredBodies.has(e.parts.body));
@@ -1255,7 +1265,12 @@ async function poll(first) {
       addCreature(e, !first);
       onStage.get(e.id).fromStore = true;
     }
-    for (const c of onStage.values()) if (c.fromStore && !want.has(c.entry.id)) leave(c);
+    // pushed out by newer arrivals: at once; thinned out on a quiet booth: the oldest, one at a time
+    const outgoing = [...onStage.values()].filter((c) => c.fromStore && !c.leaving && !want.has(c.entry.id));
+    const pushed = new Set(((j.creatures || []).slice(RESIDENTS)).map((e) => e.id));
+    for (const c of outgoing) if (pushed.has(c.entry.id) || !(j.creatures || []).some((e) => e.id === c.entry.id)) leave(c);
+    const thinning = outgoing.filter((c) => !c.leaving).sort((a, b) => a.entry.at - b.entry.at);
+    if (thinning.length && now - lastQuietLeave >= QUIET_LEAVE_GAP_MS) { lastQuietLeave = now; leave(thinning[0]); }
     // (a rehearsal crowd on top of the residents: the oldest walk off)
     const staying = [...onStage.values()].filter((c) => !c.leaving);
     for (let i = 0; i < staying.length - MAX_ON_STAGE; i++) leave(staying[i]);
