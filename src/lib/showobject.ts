@@ -15,7 +15,7 @@
 export const GRID_W = 48, GRID_H = 36;
 
 export type ObjectReport = {
-  center: number;  // share of the middle of the frame that differs from the empty booth (0~1)
+  center: number;  // share of the middle of the frame that differs from the empty booth and has settled there (0~1)
   whole: number;   // …of the whole frame
   still: boolean;
   dwell: number;   // ms it has been shown and still
@@ -25,7 +25,16 @@ export type ObjectReport = {
 
 const FG_T = 75;          // summed |RGB - empty booth| above this = "something there"
 const CENTER_MIN = 0.16;  // this much of the middle must be something
-const WHOLE_MAX = 0.8;    // …but not (nearly) everything
+// When (nearly) the whole picture changed, what happened? Three different things:
+//   • the store lights changed: the booth is still there, brighter or darker — the picture keeps its
+//     structure (it correlates with the empty booth) → not a creation; relearn the booth;
+//   • a hand over the lens: dark, or featureless → not a creation;
+//   • a paper held right up to the camera (a child shows only their drawing, big): bright, with the
+//     drawing's own lines, the booth behind it gone → a creation, like any other.
+const WHOLE_BIG = 0.8;    // this much of the frame changed = one of the three
+const LIGHTS_R = 0.7;     // correlation with the empty booth above this = the same booth in other light
+const LENS_DARK = 45, LENS_FLAT = 8; // mean / spread of the brightness below these = the lens is covered
+const CLOSE_WHOLE = 0.5;  // a thing this big in the frame is right at the lens: it shakes more (looser stillness)
 const CHANGED_T = 20;     // a cell whose colour moved more than this (per channel) since the last frame "moved"
 const STILL_FRAC = 0.03;  // still = fewer than this share of the middle moved, AND…
 const DRIFT_MAX = 0.025;  // …the shown thing's centre drifted less than this (0~1) over the last 0.6 s
@@ -33,8 +42,14 @@ const DRIFT_MAX = 0.025;  // …the shown thing's centre drifted less than this 
 // normal) — still enough, as long as they are not walking past or waving it about
 const STILL_FRAC_PERSON = 0.07, DRIFT_MAX_PERSON = 0.05;
 const HOLD_MS = 1500;
+// Only what has SETTLED in front of the camera counts — cells that have looked different from the empty
+// booth for this long. At a department store people walk past behind the child all day: each spot they
+// cross is covered for a fraction of a second, so they never settle, and they neither add to "something
+// is shown" nor make the child with their paper look unsteady.
+const SETTLE_MS = 400;
 const GRACE_MS = 400;
-const RELEARN_MS = 3000;  // the whole picture changed and stayed so (lights) → that is the new empty booth
+const RELEARN_MS = 3000;  // the lights changed and stayed so → that is the new empty booth
+const RELEARN_ANY_MS = 9000; // anything else covering the whole picture for this long (the camera was moved)
 const C_X0 = 0.18, C_X1 = 0.82, C_Y0 = 0.08, C_Y1 = 0.96;
 
 class SceneModel {
@@ -60,6 +75,7 @@ export class ObjectGate {
   private lastT = -1;
   private wholeSince = -1;
   private centres: { t: number; x: number; y: number }[] = [];
+  private fgAge = new Float32Array(GRID_W * GRID_H); // ms each cell has been "something there" in a row
   private goneSince = -1;
 
   // rgba: GRID_W x GRID_H pixels; personStanding: a near person with arms down (not showing anything);
@@ -92,10 +108,12 @@ export class ObjectGate {
       const i = y * GRID_W + x, p = i * 4, q = i * 3;
       const d = Math.abs(rgba[p] - bg[q]) + Math.abs(rgba[p + 1] - bg[q + 1]) + Math.abs(rgba[p + 2] - bg[q + 2]);
       const inC = x >= GRID_W * C_X0 && x < GRID_W * C_X1 && y >= GRID_H * C_Y0 && y < GRID_H * C_Y1;
-      if (d > FG_T) { fg[i] = 1; fgAll++; if (inC) { fgC++; sx += x; sy += y; } if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (d > FG_T) { fg[i] = 1; fgAll++; }
+      const age = (this.fgAge[i] = fg[i] ? this.fgAge[i] + dt : 0), settled = fg[i] && age >= SETTLE_MS;
+      if (settled) { if (inC) { fgC++; sx += x; sy += y; } if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
       if (inC) {
         nC++;
-        if ((Math.abs(rgba[p] - prev[p]) + Math.abs(rgba[p + 1] - prev[p + 1]) + Math.abs(rgba[p + 2] - prev[p + 2])) / 3 > CHANGED_T) moved++;
+        if (settled && (Math.abs(rgba[p] - prev[p]) + Math.abs(rgba[p + 1] - prev[p + 1]) + Math.abs(rgba[p + 2] - prev[p + 2])) / 3 > CHANGED_T) moved++;
         nMotion++;
       }
       if (ign && model.ignoreMask![i]) {
@@ -105,13 +123,30 @@ export class ObjectGate {
     }
     model.prev = rgba.slice();
     const center = fgC / nC, whole = fgAll / n;
-    // still: little of the middle moved since the last frame, and the shown thing's centre isn't drifting
-    // (a slowly waved paper changes only a thin edge each frame — its centre gives it away)
+    // the whole picture changed: lights, a covered lens, or a paper right at the camera (see the top)
+    let lights = false, lens = false;
+    if (whole > WHOLE_BIG) {
+      let sc = 0, sb = 0, scc = 0, sbb = 0, scb = 0;
+      for (let i = 0; i < n; i++) {
+        const p = i * 4, q = i * 3;
+        const lc = 0.3 * rgba[p] + 0.59 * rgba[p + 1] + 0.11 * rgba[p + 2], lb = 0.3 * bg[q] + 0.59 * bg[q + 1] + 0.11 * bg[q + 2];
+        sc += lc; sb += lb; scc += lc * lc; sbb += lb * lb; scb += lc * lb;
+      }
+      const mean = sc / n, spread = Math.sqrt(Math.max(0, scc / n - mean * mean));
+      const den = Math.sqrt(Math.max(0, (n * scc - sc * sc) * (n * sbb - sb * sb)));
+      const r = den > 0 ? (n * scb - sc * sb) / den : 0;
+      lens = mean < LENS_DARK || spread < LENS_FLAT;
+      lights = !lens && r > LIGHTS_R;
+    }
+    const closeUp = whole > CLOSE_WHOLE && !lights && !lens;
+    // still: little of what has settled in the middle moved since the last frame, and its centre isn't
+    // drifting (a slowly waved paper changes only a thin edge each frame — its centre gives it away)
     if (fgC) this.centres.push({ t, x: sx / fgC / GRID_W, y: sy / fgC / GRID_H });
     while (this.centres.length && this.centres[0].t < t - 700) this.centres.shift();
     const old = this.centres.find((c) => c.t <= t - 550), cur = this.centres[this.centres.length - 1];
     const drift = old && cur ? Math.hypot(cur.x - old.x, cur.y - old.y) : 1;
-    const still = peopleInView ? moved / nMotion < STILL_FRAC_PERSON && drift < DRIFT_MAX_PERSON : moved / nMotion < STILL_FRAC && drift < DRIFT_MAX;
+    const loose = peopleInView || closeUp; // (a child in view sways; a paper right at the lens shakes)
+    const still = loose ? moved / nMotion < STILL_FRAC_PERSON && drift < DRIFT_MAX_PERSON : moved / nMotion < STILL_FRAC && drift < DRIFT_MAX;
     // the remembered not-a-creation: still what is in front? (40 % of where it was looks different = it
     // went away or changed)
     let ignored = false;
@@ -131,18 +166,19 @@ export class ObjectGate {
       if (!a) continue;
       for (let c = 0; c < 3; c++) bg[i * 3 + c] += (rgba[i * 4 + c] - bg[i * 3 + c]) * a;
     }
-    // the whole picture changed and stays so (store lights, the camera nudged): relearn the booth
-    if (whole > WHOLE_MAX && still) {
+    // the whole picture changed and stays so: new store lights → relearn the booth soon; anything else
+    // (the camera nudged) only after a long while — a paper held up to the lens is never learnt as the booth
+    if (whole > WHOLE_BIG && still) {
       if (this.wholeSince < 0) this.wholeSince = t;
-      else if (t - this.wholeSince > RELEARN_MS) { model.absorbNext = true; this.wholeSince = -1; }
+      else if (t - this.wholeSince > (lights ? RELEARN_MS : RELEARN_ANY_MS)) { model.absorbNext = true; this.wholeSince = -1; }
     } else this.wholeSince = -1;
 
-    const ok = center >= CENTER_MIN && whole <= WHOLE_MAX && still && !personStanding && !ignored;
+    const ok = center >= CENTER_MIN && !lights && !lens && still && !personStanding && !ignored;
     if (ok) { this.miss = 0; this.dwell += dt; }
     else { this.miss += dt; if (this.miss > GRACE_MS) this.dwell = 0; }
     const box = x1 >= 0 ? { x0: x0 / GRID_W, y0: y0 / GRID_H, x1: (x1 + 1) / GRID_W, y1: (y1 + 1) / GRID_H } : null;
     return { center, whole, still, dwell: this.dwell, ready: this.dwell >= HOLD_MS, box };
   }
 
-  reset() { this.dwell = 0; this.miss = 0; this.centres = []; }
+  reset() { this.dwell = 0; this.miss = 0; this.centres = []; this.fgAge.fill(0); }
 }

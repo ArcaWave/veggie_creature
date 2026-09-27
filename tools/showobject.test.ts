@@ -52,6 +52,22 @@ r.push(run("a child holding it up, swaying ±4 cm (person seen)", (t) => noise(w
 r.push(run("someone walking past (person seen)", (t) => noise(withPaper(booth(), -0.2 + (t / 5000) * 1.4, 0.55, 0.3, 0.8), 3), "never", { people: () => true }));
 r.push(run("…walking past slowly (person seen)", (t) => noise(withPaper(booth(), -0.2 + (t / 9000) * 1.4, 0.55, 0.3, 0.8), 3), "never", { people: () => true, ms: 9000 }));
 r.push(run("waved around (person seen)", (t) => noise(withPaper(booth(), 0.5 + Math.sin(t / 250) * 0.2, 0.5, 0.36, 0.5), 3), "never", { people: () => true }));
+// a child shows only the paper, held right up to the camera: it fills (nearly) the whole frame and shakes
+const atLens = (t: number, shake: number) => { // white paper over 90 % of the frame, a drawn vegetable and crayon lines on it
+  const f = new Uint8ClampedArray(GRID_W * GRID_H * 4), dx = Math.sin(t / 170) * shake, dy = Math.cos(t / 230) * shake * 0.6;
+  for (let y = 0; y < GRID_H; y++) for (let x = 0; x < GRID_W; x++) {
+    const i = (y * GRID_W + x) * 4, u = (x - dx) / GRID_W, v = (y - dy) / GRID_H;
+    const onPaper = u > 0.03 && u < 0.97 && v > 0.02 && v < 0.98;
+    const veg = Math.hypot((u - 0.5) / 0.26, (v - 0.52) / 0.36) < 1, line = Math.abs(Math.hypot((u - 0.5) / 0.26, (v - 0.52) / 0.36) - 1) < 0.08;
+    const c = !onPaper ? [120, 110, 100] : line ? [60, 50, 40] : veg ? [226, 206, 120] : [246, 245, 240];
+    f[i] = c[0]; f[i + 1] = c[1]; f[i + 2] = c[2]; f[i + 3] = 255;
+  }
+  return f;
+};
+r.push(run("only the paper, right at the lens (fills 90 %), held still", (t) => noise(atLens(t, 0.2), 3), "fires"));
+r.push(run("…shaking a little in the child's hands", (t) => noise(atLens(t, 1.2), 3), "fires"));
+r.push(run("a hand over the lens, skin-coloured and lit", () => noise(new Uint8ClampedArray(GRID_W * GRID_H * 4).map((_, i) => [205, 160, 135, 255][i % 4]), 4), "never"));
+r.push(run("the store lights dim (whole picture darker)", () => noise(booth(-45), 3), "never", { ms: 9000 }));
 r.push(run("a person close with arms hanging down (just standing)", () => noise(withPaper(booth(), 0.5, 0.55, 0.4, 0.8), 3), "never", { standing: () => true, people: () => true }));
 // after the matcher found nothing: the thing in front becomes the booth — until it changes
 {
