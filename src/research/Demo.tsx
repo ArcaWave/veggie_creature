@@ -85,7 +85,7 @@ export function Demo() {
             <tr key={m.id}><td><code>{m.id}</code></td><td className={cls(m.motion, o?.motion)}>{m.motion.toFixed(1)}</td><td className={cls(m.moving, o?.moving)}>{m.moving.toFixed(1)} s</td>
               <td>{m.visible.toFixed(1)} s</td><td className={cls(m.lum, o?.lum)}>{m.lum}</td><td className={cls(m.sat, o?.sat)}>{m.sat}</td></tr>); })}</tbody>
         </table></div>
-        <p className="rd-note">움직임 양 = 연속 프레임 사이 화면 변화의 합(무늬 없는 배경에서 잼). 같은 Pair 안의 차이가 ±20% 이내면 초록. Pair A는 LOW가 받침대를 가로질러 걷는 것 자체가 움직임이라 HIGH보다 큽니다 — 체험마다 그 아이가 본 영상의 움직임 양을 기록해 공변량으로 씁니다.</p>
+        <p className="rd-note">움직임 양 = 연속 프레임 사이 화면 변화의 합(무늬 없는 배경에서 잼). 같은 Pair 안의 차이가 ±20% 이내면 초록. Pair A는 LOW가 받침대를 가로질러 걷는 것 자체가 움직임이라 HIGH보다 크고, B·C는 HIGH의 마법 효과(빛·반짝이·꽃)만큼 HIGH가 큽니다 — 체험마다 그 아이가 본 영상의 움직임 양을 기록해 공변량으로 씁니다.</p>
       </section>
     </div>
   );

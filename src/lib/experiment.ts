@@ -6,7 +6,7 @@
 // ?exp=0 turns the experiment off on this screen (the plain "살아났다!" scene). The kiosk needs no key: it runs on
 // the plain domain and may write its own sessions; the researchers' console reads them with the research key
 // (given once in its address, ?key=…, and remembered on that device).
-import type { StimulusId } from "../research/stimuli";
+import { STIMULUS_VERSION, type StimulusId } from "../research/stimuli";
 
 export type Assigned = { condition: "HIGH" | "LOW"; pair: "A" | "B" | "C"; animationId: StimulusId };
 export const EXPERIMENT_ON = new URLSearchParams(location.search).get("exp") !== "0";
@@ -57,12 +57,12 @@ export function startSession(source: string) {
   let resolve!: (a: Assigned) => void;
   const c: Current = { pid: null, assigned: new Promise<Assigned>((r) => (resolve = r)), offline: null, queue: Promise.resolve(), ended: false };
   current = c;
-  post({ op: "kStart", source, at }, 2500)
+  post({ op: "kStart", source, at, sv: STIMULUS_VERSION }, 2500)
     .then((j) => { c.pid = j.pid; resolve(j.assigned); flushOutbox(); })
     .catch(() => { // no server answer: draw the cell here and keep the session on this device
       const a = CELLS[Math.floor(Math.random() * CELLS.length)];
       c.offline = { participant_id: `OFF-${at.toString(36)}-${Math.random().toString(36).slice(2, 6)}`, condition: a.condition, animation_pair: a.pair,
-        animation_id: a.animationId, source, times: { session_start_time: iso(at) }, stage_reached: "photo", completed: false, end_reason: "" };
+        animation_id: a.animationId, stimulus_version: STIMULUS_VERSION, source, times: { session_start_time: iso(at) }, stage_reached: "photo", completed: false, end_reason: "" };
       resolve(a);
     });
 }

@@ -122,6 +122,15 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
   check("…and works with it", readOk.status === 200 && (readOk.body as any).sessions.length === 1);
 }
 
+// 7b) every session keeps which version of the clips it saw (they changed during the exhibition)
+{
+  const store = memoryStore();
+  const a = await k(store, "kStart", { source: "person", sv: "2026-10-05-magic" }, T0);
+  const b = await k(store, "kStart", { source: "person" }, T0 + 60_000);
+  const rows = toCsv(await store.listSessions()).split("\n"), head = rows[0].split(","), col = head.indexOf("stimulus_version");
+  check("the clip version is kept per session (blank = before the change) and is a CSV column", a.ok && b.ok && col > 0 && rows[1].split(",")[col] === "2026-10-05-magic" && rows[2].split(",")[col] === "");
+}
+
 // 8) the Google Sheet copy: the real Apps Script (tools/research-sheet.gs) on a pretend sheet, behind a pretend
 //    Google (which answers a POST with a redirect to the result, as Apps Script web apps do)
 {

@@ -41,7 +41,7 @@ export type Flags = {
 export const FLAG_KEYS: (keyof Flags)[] = ["technical_error", "animation_interrupted", "researcher_interruption", "parent_interruption", "child_did_not_watch", "session_aborted"];
 export type Session = {
   participant_id: string; seq: number; offline: boolean;
-  condition: Condition; animation_pair: Pair; animation_id: string; block: number | null; block_pos: number | null; block_size: number | null;
+  condition: Condition; animation_pair: Pair; animation_id: string; stimulus_version?: string; block: number | null; block_pos: number | null; block_size: number | null;
   source: string; variant: string | null; parts: Record<string, string> | null; matched: boolean | null;
   times: Record<string, string>; stage_reached: string; completed: boolean; end_reason: string;
   motion_energy: number | null;
@@ -140,7 +140,7 @@ export async function handle(store: Store, msg: Msg, now = Date.now()): Promise<
     const p = `MK_${String(seq).padStart(4, "0")}`;
     const assigned: Assigned = { condition: cell.condition, pair: cell.pair, animationId: ANIMATION_ID[cell.pair][cell.condition] };
     const s: Session = {
-      participant_id: p, seq, offline: false, condition: cell.condition, animation_pair: cell.pair, animation_id: assigned.animationId,
+      participant_id: p, seq, offline: false, condition: cell.condition, animation_pair: cell.pair, animation_id: assigned.animationId, stimulus_version: str(msg.sv, 40),
       block: cell.block, block_pos: cell.pos, block_size: cell.blockSize, source: str(msg.source, 20), variant: null, parts: null, matched: null,
       times: { session_start_time: at }, stage_reached: "photo", completed: false, end_reason: "", motion_energy: null,
       age: null, q1_answer: "", q2_answer: "", q3_6_answers: "", spontaneous_verbalization: null, spontaneous_verbalization_text: "",
@@ -190,7 +190,7 @@ export async function handle(store: Store, msg: Msg, now = Date.now()): Promise<
     const s: Session = {
       participant_id: id, seq: 1_000_000 + Math.floor(now / 1000) % 1_000_000, offline: true,
       condition: x.condition === "HIGH" ? "HIGH" : "LOW", animation_pair: (["A", "B", "C"].includes(x.animation_pair) ? x.animation_pair : "A") as Pair,
-      animation_id: str(x.animation_id, 40), block: null, block_pos: null, block_size: null, source: str(x.source, 20),
+      animation_id: str(x.animation_id, 40), stimulus_version: str(x.stimulus_version, 40), block: null, block_pos: null, block_size: null, source: str(x.source, 20),
       variant: str(x.variant, 30) || null, parts: x.parts ?? null, matched: typeof x.matched === "boolean" ? x.matched : null,
       times: Object.fromEntries(Object.entries(x.times ?? {}).map(([k, v]) => [str(k, 40), str(v, 40)])), stage_reached: str(x.stage_reached, 20) || "photo",
       completed: x.completed === true, end_reason: str(x.end_reason, 60), motion_energy: Number.isFinite(Number(x.motion_energy)) ? Number(x.motion_energy) : null,
@@ -227,7 +227,7 @@ export async function handle(store: Store, msg: Msg, now = Date.now()): Promise<
 // the sessions as flat rows (CSV / analysis) — one column per field, times in ISO (UTC)
 const TIME_COLS = ["session_start_time", "match_time", "dance_start_time", "ladle_start_time", "ladle_end_time", "reveal_time", "animation_start_time", "animation_end_time", "observation_end_time", "walk_off_time", "session_end_time"];
 export const CSV_COLUMNS = [
-  "participant_id", "seq", "offline", "age", "condition", "animation_pair", "animation_id", "block", "block_pos", "block_size",
+  "participant_id", "seq", "offline", "age", "condition", "animation_pair", "animation_id", "stimulus_version", "block", "block_pos", "block_size",
   "source", "variant", "hat", "arms", "legs", "matched", ...TIME_COLS,
   "spontaneous_verbalization", "spontaneous_verbalization_text", "q1_answer", "q2_answer", "q3_6_answers", "q2_done",
   ...FLAG_KEYS, "researcher_note", "motion_energy", "condition_revealed_early", "completed", "stage_reached", "end_reason",
