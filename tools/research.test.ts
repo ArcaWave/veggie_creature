@@ -1,7 +1,8 @@
 // The experiment's server logic (api/_researchcore.ts) on an in-memory store.   run: npx tsx tools/research.test.ts
 import { makeAllocation, memoryStore, handle, getLive, toCsv, type Store } from "../api/_researchcore.ts";
 import { researchRequest } from "../api/_researchstore.ts";
-import { sheetRow, SHEET_COLUMNS, toSheet } from "../api/_researchsheet.ts";
+import { sheetRow, SHEET_COLUMNS, toSheet, postSheet } from "../api/_researchsheet.ts";
+import { SURVEY_COLUMNS, SURVEY_TAB } from "../api/_survey.ts";
 import fs from "node:fs";
 import http from "node:http";
 let fails = 0;
@@ -125,7 +126,11 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
 //    Google (which answers a POST with a redirect to the result, as Apps Script web apps do)
 {
   type Cell = unknown;
-  const sheet = { cells: [] as Cell[][], maxRows: 3, maxCols: 26, hidden: new Set<number>(), text: new Set<number>(), frozen: 0 };
+  type Tab = { cells: Cell[][]; maxRows: number; maxCols: number; hidden: Set<number>; text: Set<number>; frozen: number; api?: unknown };
+  const tabs = new Map<string, Tab>();
+  const newTab = (maxRows = 1000): Tab => ({ cells: [], maxRows, maxCols: 26, hidden: new Set(), text: new Set(), frozen: 0 });
+  const sheet = newTab(3); tabs.set("sessions", sheet);
+  const tabApi = (sheet: Tab) => {
   const lastCol = () => Math.max(0, ...sheet.cells.map((r) => r.reduce((m: number, v, i) => (v !== "" && v !== undefined ? i + 1 : m), 0)));
   const lastRow = () => sheet.cells.reduce((m: number, r, i) => (r.some((v) => v !== "" && v !== undefined) ? i + 1 : m), 0);
   const range = (r: number, c: number, nr: number, nc: number) => {
@@ -145,8 +150,15 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
     insertColumnsAfter: (_: number, n: number) => { sheet.maxCols += n; }, insertRowsAfter: (_: number, n: number) => { sheet.maxRows += n; },
     setFrozenRows: (n: number) => { sheet.frozen = n; }, hideColumns: (c: number) => { sheet.hidden.add(c); },
   };
+  return { sh, used: () => sheet.cells.length > 0 || lastCol() > 0 };
+  };
+  const book = {
+    getSheetByName: (name: string) => { const t = tabs.get(name); const a = t && tabApi(t); return a && a.used() ? a.sh : null; },
+    insertSheet: (name: string) => { if (!tabs.has(name)) tabs.set(name, newTab()); return tabApi(tabs.get(name)!).sh; },
+    getName: () => "test", getUrl: () => "https://docs.google.com/spreadsheets/d/TEST/edit",
+  };
   const gs = new Function("SpreadsheetApp", "LockService", "ContentService", "Logger", fs.readFileSync(new URL("./research-sheet.gs", import.meta.url), "utf8") + "\nreturn { doPost };")(
-    { getActiveSpreadsheet: () => ({ getSheetByName: () => (sheet.cells.length || lastCol() ? sh : null), insertSheet: () => sh, getName: () => "test" }) },
+    { getActiveSpreadsheet: () => book },
     { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
     { createTextOutput: (t: string) => ({ setMimeType: () => t }), MimeType: { JSON: "json" } },
     { log: () => {} },
@@ -207,6 +219,38 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
   check("the console's re-send needs the key and puts every session back", noKey.status === 401 && (sync.body as any).ok && (sync.body as any).total === 4 && sheet.cells.length === 5 && !!row((s3.body as any).pid), JSON.stringify(sync.body));
   const live = await researchRequest(store, "GET", {}, undefined, KEY, KEY, false, site);
   check("the console is told the sheet is connected", (live.body as any).sheet === true);
+
+  // the field survey (/survey): the tablets' records, with the key; their copy in the "현장 설문" tab
+  const sessionsRows = sheet.cells.length;
+  const T = (m: number) => new Date(T0 + m * 60_000).toISOString();
+  const rec = (over: Record<string, unknown> = {}) => ({ id: "A_x1_ab12", pid: "A-001", device: "A", createdAt: T(0), updatedAt: T(5), status: "진행중", cond: "High", anim: "Fly",
+    q1: { text: "=날 수 있어", follow: true, nr: false, at: T(1) }, q2: { speech: "yes", speechText: "우와", action: null, actionText: "", ai: null, aiText: "" },
+    q3: { text: "", follow: false, nr: false, at: null }, code: { uptake: true }, own: "very", auth: null, enjoy: 5, again: null,
+    parent: { p1: 4, age: 6, gender: "여", doneAt: null }, notes: "", excluded: false, _local: true, ...over });
+  const getSv = (key?: string) => researchRequest(store, "GET", { survey: "" }, undefined, key, KEY, false, site);
+  const noKeyGet = await getSv(), noKeyPut = await req({ op: "surveyPut", record: rec() });
+  check("survey: reading or saving needs the research key", noKeyGet.status === 401 && noKeyPut.status === 401);
+  const put1 = await req({ op: "surveyPut", record: rec() }, KEY); await settle();
+  const sv = tabs.get(SURVEY_TAB), svHead = () => (sv?.cells[0] ?? []).map(String);
+  const svRow = (id: string) => { const h = svHead(), r = sv?.cells.slice(1).find((x) => x[h.indexOf("record_id")] === id); return r && Object.fromEntries(h.map((c, i) => [c, r[i]])); };
+  const listed = (await getSv(KEY)).body as any;
+  check("survey: a saved record is listed for every tablet (without the page-only _local mark)", put1.status === 200 && listed.records.length === 1 && !("_local" in listed.records[0]) && listed.sheet === true);
+  const a1 = svRow("A_x1_ab12");
+  check("survey: …and lands in its own tab of the same sheet, the page's CSV columns + row_version", !!a1 && svHead().join() === SURVEY_COLUMNS.join(), svHead().slice(0, 4).join());
+  check("survey: times in Korea time, a formula-like answer kept as text, nothing hidden", a1?.created_at === "2026-10-05 11:00:00.000" && a1?.q1_pre_text === "'=날 수 있어" && a1?.code_uptake === 1 && (sv?.hidden.size ?? 1) === 0, `${a1?.created_at} ${a1?.q1_pre_text}`);
+  check("survey: the sessions tab is untouched", sheet.cells.length === sessionsRows);
+  await req({ op: "surveyPut", record: rec({ updatedAt: T(9), q3: { text: "구름 위로 날아", follow: false, nr: false, at: T(8) }, status: "완료" }) }, KEY); await settle();
+  const older = await req({ op: "surveyPut", record: rec({ updatedAt: T(7), q3: { text: "OLD", follow: false, nr: false, at: T(6) } }) }, KEY); await settle();
+  const a2 = svRow("A_x1_ab12"), stored = ((await getSv(KEY)).body as any).records[0];
+  check("survey: a later edit updates the same row; a late, older copy changes nothing", (sv?.cells.length ?? 0) === 2 && a2?.q3_post_text === "구름 위로 날아" && a2?.status === "완료" && (older.body as any).stale === true && stored.q3.text === "구름 위로 날아");
+  await req({ op: "surveyPut", record: rec({ id: "B_x2_cd34", pid: "B-001", device: "B", createdAt: T(2), updatedAt: T(3) }) }, KEY); await settle();
+  const bad = await req({ op: "surveyPut", record: { id: "../x" } }, KEY);
+  check("survey: a second tablet's record is a second row; a malformed one is refused", (sv?.cells.length ?? 0) === 3 && bad.status === 400);
+  sv!.cells.splice(1); // (rows lost in the sheet)
+  const again = await req({ op: "surveySheet" }, KEY);
+  check("survey: 시트로 다시 보내기 puts every record back and says where the sheet is", (again.body as any).ok && (again.body as any).total === 2 && (sv?.cells.length ?? 0) === 3 && (again.body as any).url?.includes("docs.google.com"), JSON.stringify(again.body));
+  const malformed = await postSheet({ table: { name: "x", id: "record_id" } });
+  check("the sheet script refuses a payload without columns (nothing written)", malformed.ok === false && !tabs.has("x"));
   delete process.env.RESEARCH_SHEET_URL;
   const off = await req({ op: "sheetSync" }, KEY);
   check("without RESEARCH_SHEET_URL nothing is sent and the console says so", off.status === 409 && (off.body as any).error === "sheet_not_configured");

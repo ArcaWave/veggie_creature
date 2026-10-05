@@ -9,11 +9,13 @@
 // console — given once in its address, ?key=…): children's answers live here.
 // Every finished or annotated session is also copied to the researchers' Google Sheet when RESEARCH_SHEET_URL is
 // set (api/_researchsheet.ts) — after the answer, through `defer` (Vercel's waitUntil), so nobody waits on Google.
+// The field survey's tablets (/survey, api/_survey.ts) read and write their records here too, with the key.
 import fs from "node:fs";
 import path from "node:path";
 import { handle, getLive, toCsv, type Store, type Session } from "./_researchcore.js";
 import { checkLimit } from "./_ratelimit.js";
 import { toSheet, sheetUrl } from "./_researchsheet.js";
+import { surveyRequest } from "./_survey.js";
 
 const supaEnv = () => {
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
@@ -40,6 +42,7 @@ export function supabaseStore(): Store | null {
       const rows = (await supa(`research_state?key=eq.${enc(key)}&rev=eq.${rev}`, { method: "PATCH", body: { rev: rev + 1, data, updated_at: new Date().toISOString() }, prefer: "return=representation" })) as unknown[];
       return rows.length === 1;
     },
+    async listState(prefix) { const rows = (await supa(`research_state?key=like.${enc(prefix)}*&select=key,data&order=key.asc&limit=5000`)) as { key: string; data: any }[]; return rows; },
     async readSession(pid) { const rows = (await supa(`research_sessions?participant_id=eq.${enc(pid)}&select=rev,data`)) as { rev: number; data: Session }[]; return rows[0] ?? null; },
     async writeSession(pid, seq, data, rev) {
       if (rev === null) { const r = await supa("research_sessions", { method: "POST", body: { participant_id: pid, seq, rev: 1, data }, prefer: "return=minimal" }); return !(r && "conflict" in r); }
@@ -55,6 +58,7 @@ export function fileStore(file: string): Store {
   return {
     async readState(key) { return load().state[key] ?? null; },
     async writeState(key, data, rev) { const db = load(); if ((db.state[key]?.rev ?? null) !== rev) return false; db.state[key] = { rev: (rev ?? 0) + 1, data }; save(db); return true; },
+    async listState(prefix) { return Object.entries(load().state as Record<string, { data: any }>).filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, data: v.data })); },
     async readSession(pid) { return load().sessions[pid] ?? null; },
     async writeSession(pid, _seq, data, rev) { const db = load(); if ((db.sessions[pid]?.rev ?? null) !== rev) return false; db.sessions[pid] = { rev: (rev ?? 0) + 1, data }; save(db); return true; },
     async listSessions() { return (Object.values(load().sessions) as { data: Session }[]).map((s) => s.data).sort((a, b) => a.seq - b.seq); },
@@ -89,6 +93,8 @@ export async function researchRequest(store: Store | null, method: string, query
     if (!checkLimit("research-kiosk", caller.ip ?? "unknown")) return { status: 429, body: { error: "rate_limited" } };
   } else if (!keyOk) return { status: requiredKey ? 401 : 503, body: { error: requiredKey ? "research_key_wrong" : "research_not_configured" } };
   try {
+    const sv = await surveyRequest(store, method, query, body, defer);
+    if (sv) return sv;
     if (method === "GET") {
       if ("sessions" in query) {
         const rows = await store.listSessions();

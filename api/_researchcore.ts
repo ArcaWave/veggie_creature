@@ -55,6 +55,7 @@ export type Session = {
 export interface Store {
   readState<T>(key: string): Promise<{ rev: number; data: T } | null>;
   writeState<T>(key: string, data: T, rev: number | null): Promise<boolean>; // rev null = create
+  listState<T>(prefix: string): Promise<{ key: string; data: T }[]>; // (the field survey's records: "survey/<id>")
   readSession(pid: string): Promise<{ rev: number; data: Session } | null>;
   writeSession(pid: string, seq: number, data: Session, rev: number | null): Promise<boolean>;
   listSessions(): Promise<Session[]>;
@@ -65,6 +66,7 @@ export function memoryStore(): Store {
   return {
     async readState<T>(key: string) { const s = state.get(key); return s ? { rev: s.rev, data: clone(s.data) as T } : null; },
     async writeState(key, data, rev) { const s = state.get(key); if ((s?.rev ?? null) !== rev) return false; state.set(key, { rev: (rev ?? 0) + 1, data: clone(data) }); return true; },
+    async listState<T>(prefix: string) { return [...state.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, s]) => ({ key, data: clone(s.data) as T })); },
     async readSession(pid) { const s = sessions.get(pid); return s ? { rev: s.rev, data: clone(s.data) } : null; },
     async writeSession(pid, _seq, data, rev) { const s = sessions.get(pid); if ((s?.rev ?? null) !== rev) return false; sessions.set(pid, { rev: (rev ?? 0) + 1, data: clone(data) }); return true; },
     async listSessions() { return [...sessions.values()].map((s) => clone(s.data)).sort((a, b) => a.seq - b.seq); },

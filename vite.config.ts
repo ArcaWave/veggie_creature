@@ -125,6 +125,8 @@ function devApiPlugin(): Plugin {
       // the suggestiveness experiment (api/research.ts) — locally always a file (never the deployed tables),
       // open without a key unless .env sets RESEARCH_KEY
       const researchDb = fileStore(path.join(process.cwd(), ".data", "research.json"));
+      // the field survey's page (public/survey.html) at /survey, as vercel.json rewrites it
+      server.middlewares.use((req, _res, next) => { if (/^\/survey\/?(\?|$)/.test(req.url ?? "")) req.url = "/survey.html" + (req.url!.split("?")[1] ? "?" + req.url!.split("?")[1] : ""); next(); });
       server.middlewares.use("/api/research", async (req, res) => {
         const query = Object.fromEntries(new URL(req.url ?? "/", "http://local").searchParams);
         let body: unknown;

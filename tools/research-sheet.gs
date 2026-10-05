@@ -2,7 +2,9 @@
 // 시트의 [확장 프로그램 → Apps Script]에 이 파일 전체를 붙여 넣고, [배포 → 새 배포 → 웹 앱]
 // (실행: 나 / 액세스: 모든 사용자)로 배포한 뒤, 웹 앱 URL을 Vercel 환경변수 RESEARCH_SHEET_URL에 넣습니다.
 //
-// 서버가 세션을 보낼 때마다 participant_id 한 줄을 고치거나 새로 붙입니다(시간은 한국 시간).
+// 서버가 보낼 때마다 한 사람 한 줄을 고치거나 새로 붙입니다(시간은 한국 시간).
+// - "sessions" 탭: 체험 화면의 실험 세션 (participant_id 기준)
+// - "현장 설문" 탭: 태블릿 현장 설문 /survey (record_id 기준)
 // - 원본은 서버(Supabase)에 있습니다. 시트는 사본이라, 서버가 보내는 칸을 시트에서 고치면 다음 전송 때 덮어씁니다.
 //   메모·추가 코딩은 콘솔에 쓰거나, 시트 오른쪽에 새 열을 만들어 쓰세요(서버가 모르는 열은 그대로 둡니다).
 // - 조건 열(condition, animation_pair, animation_id, block…)은 처음에 숨겨 둡니다(맹검). 열 머리를 우클릭해 보이게 할 수 있어요.
@@ -15,8 +17,11 @@ function doPost(e) {
   lock.waitLock(30000);
   try {
     const msg = JSON.parse(e.postData.contents);
-    const n = upsert(msg.columns, msg.rows);
-    return json({ ok: true, n: n });
+    // (the sessions come as { columns, rows }; any other tab as { table: { name, id, columns, rows, blind } })
+    const t = msg.table || { name: SHEET_NAME, id: "participant_id", columns: msg.columns, rows: msg.rows, blind: BLIND };
+    if (!t.name || !t.id || !Array.isArray(t.columns) || !Array.isArray(t.rows)) throw new Error("bad_payload");
+    const n = upsert(t);
+    return json({ ok: true, n: n, url: SpreadsheetApp.getActiveSpreadsheet().getUrl() });
   } catch (err) {
     return json({ ok: false, error: String(err && err.message || err).slice(0, 200) });
   } finally {
@@ -24,9 +29,10 @@ function doPost(e) {
   }
 }
 
-function upsert(cols, rows) {
+function upsert(t) {
+  const cols = t.columns, rows = t.rows, blind = t.blind || [];
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  const sh = ss.getSheetByName(t.name) || ss.insertSheet(t.name);
 
   // header: the server's columns, in its order; new ones go on the right
   let head = sh.getLastColumn() ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String) : [];
@@ -39,12 +45,12 @@ function upsert(cols, rows) {
     sh.setFrozenRows(1);
     missing.forEach(function (c, i) {
       const col = first + i;
-      if (/_time$|^participant_id$/.test(c)) sh.getRange(1, col, sh.getMaxRows(), 1).setNumberFormat("@");
-      if (BLIND.indexOf(c) >= 0) sh.hideColumns(col);
+      if (/_time$|_at$/.test(c) || c === t.id) sh.getRange(1, col, sh.getMaxRows(), 1).setNumberFormat("@");
+      if (blind.indexOf(c) >= 0) sh.hideColumns(col);
     });
     sh.getRange(1, 1, 1, head.length).setNumberFormat("@");
   }
-  const idCol = head.indexOf("participant_id"), verCol = head.indexOf("row_version");
+  const idCol = head.indexOf(t.id), verCol = head.indexOf("row_version");
   const W = head.length;
 
   const count = sh.getLastRow() - 1;
@@ -54,7 +60,7 @@ function upsert(cols, rows) {
 
   const changed = [];
   rows.forEach(function (row) {
-    const id = String(row[cols.indexOf("participant_id")]);
+    const id = String(row[cols.indexOf(t.id)]);
     const ver = Number(row[cols.indexOf("row_version")]) || 0;
     let i = at[id];
     if (i === undefined) { i = data.length; at[id] = i; data.push(head.map(function () { return ""; })); }
