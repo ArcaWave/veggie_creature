@@ -169,11 +169,17 @@ input[type=text]:focus,input[type=password]:focus,textarea:focus,select:focus{ou
 .bottom-in .hint{flex:1;font-size:13px;color:var(--warn);font-weight:600;min-width:0}
 
 /* home */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-@media (max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:640px){.stats{grid-template-columns:1fr}}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .stat .k{font-size:13px;color:var(--muted);font-weight:600}
 .stat .v{font-family:var(--font-mono);font-size:28px;font-weight:500}
+.stat .v small{font-family:var(--font-body);font-size:15px;color:var(--muted);margin-left:4px}
+.stat .k small{font-weight:400;margin-left:4px}
+.stat .d{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5}
+.stat .d b{color:var(--ink);font-family:var(--font-mono);font-weight:500}
+.stat.hi .k{color:var(--accent)}
+.stat.lo .k{color:var(--scale)}
 .tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 table{border-collapse:collapse;width:100%;min-width:620px;font-size:14px}
 th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -555,9 +561,12 @@ function renderHome(){
   document.getElementById("bottom").hidden=true;
   document.getElementById("homeBtn").hidden=true;
   const recs=allRecords().filter(r=>!r.excluded||true);
+  // 분석 대상 = 기록을 완료했고 "분석 제외"가 아닌 참여자 — 조건·애니메이션별로 센다
   const valid=recs.filter(r=>!r.excluded);
-  const done=valid.filter(r=>r.status==="완료").length;
-  const hi=valid.filter(r=>r.cond==="High").length, lo=valid.filter(r=>r.cond==="Low").length;
+  const done=valid.filter(r=>r.status==="완료");
+  const inCond=c=>done.filter(r=>r.cond===c);
+  const byAnim=c=>ANIMS[c].map(a=>`${esc(a)} <b>${inCond(c).filter(r=>r.anim===a).length}</b>`).join(" · ");
+  const excl=recs.length-valid.length, prog=valid.length-done.length;
   main.innerHTML=`<div class="stack">
   <div class="row" style="align-items:flex-end"><div style="flex:1;min-width:240px"><div class="eyebrow">팝업 현장 데이터</div><h1>참여자 목록</h1>
   <p class="sub" style="margin:0">여러 태블릿에서 동시에 입력해도 이 목록에 함께 모입니다.</p></div>
@@ -568,10 +577,9 @@ function renderHome(){
     <div class="row" style="flex-wrap:nowrap"><input type="password" id="f-key" autocomplete="off" placeholder="연구 비밀번호"><button class="btn primary" id="keyBtn" style="flex:none">확인</button></div>
     ${keyMsg?`<div class="banner">${esc(keyMsg)}</div>`:""}</div>`:""}
   <div class="stats">
-    <div class="stat"><div class="k">완료</div><div class="v">${done}</div></div>
-    <div class="stat"><div class="k">진행 중</div><div class="v">${valid.length-done}</div></div>
-    <div class="stat"><div class="k">High 조건</div><div class="v">${hi}</div></div>
-    <div class="stat"><div class="k">Low 조건</div><div class="v">${lo}</div></div>
+    <div class="stat"><div class="k">분석 대상 <small>완료 · 제외 아님</small></div><div class="v">${done.length}<small>명</small></div><div class="d">진행 중 <b>${prog}</b> · 분석 제외 <b>${excl}</b></div></div>
+    <div class="stat hi"><div class="k">High 조건</div><div class="v">${inCond("High").length}<small>명</small></div><div class="d">${byAnim("High")}</div></div>
+    <div class="stat lo"><div class="k">Low 조건</div><div class="v">${inCond("Low").length}<small>명</small></div><div class="d">${byAnim("Low")}</div></div>
   </div>
   ${dbState==="on"&&sheetOn?`<div class="card stack" style="gap:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">구글 시트</h2>${sheetLink?`<a class="btn sm" href="${esc(sheetLink)}" target="_blank" rel="noopener">시트 열기</a>`:""}</div>
     <p class="note" style="margin:0">저장된 응답은 연구 시트의 “현장 설문” 탭에도 몇 초 안에 자동으로 들어갑니다. 빠진 게 보이면 다시 보내기를 누르세요.</p>
