@@ -6,6 +6,7 @@ import { TopBar } from "./components/TopBar";
 import { clearProfile, ensureProfile } from "./lib/profile";
 import { track } from "./lib/analytics";
 import { keepAsset } from "./lib/keep";
+import { startSession, endSession } from "./lib/experiment";
 
 // Scan station: welcome -> scan -> the matched creature comes alive, walks off
 // the right edge of the screen (into the Digital World / the display PC), and
@@ -32,6 +33,7 @@ export default function App() {
 
   function reset(reason: string) {
     track("session_reset", { reason });
+    endSession(false, reason); // (a session that reached the wall was closed as completed just before)
     clearProfile(); // next family starts with a fresh profile
     setStaffOpen(false);
     setPhoto("");
@@ -46,6 +48,7 @@ export default function App() {
     // start has no gesture — the ⛶ button covers that once per day)
     document.documentElement.requestFullscreen?.().catch(() => {});
     track("build_start", { auto: !!snap, source: from });
+    startSession(from); // every child is a participant: an ID and a cell for the experiment's clip
     if (snap) {
       track("photo_captured", { auto: true });
       keepAsset("original", snap);

@@ -118,7 +118,8 @@ const PREDICT_MS = 90;        // the ladle leads the last sample by this much (d
 type Box = { x0: number; y0: number; x1: number; y1: number };
 type Spark = { x: number; y: number; vx: number; vy: number; g: number; age: number; life: number; size: number; hue: number };
 
-export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | null; photo?: string | null; onFull: () => void }) {
+// onStage: each move as it begins (its key) — the experiment's step times
+export function DanceCharge({ stream, photo, onFull, onStage }: { stream: MediaStream | null; photo?: string | null; onFull: () => void; onStage?: (move: string) => void }) {
   const vRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const potRef = useRef<HTMLImageElement>(null);
@@ -144,6 +145,9 @@ export function DanceCharge({ stream, photo, onFull }: { stream: MediaStream | n
   const handSaidAt = useRef(0);    // when "손을 들어 봐!" was last said
   const onFullRef = useRef(onFull);
   onFullRef.current = onFull;
+  const onStageRef = useRef(onStage);
+  onStageRef.current = onStage;
+  useEffect(() => { onStageRef.current?.(MOVES[stage].key); }, [stage]);
   // what the last detection saw (video-normalised), for the render loop
   const view = useRef<{ boxes: Box[]; main: number; hand: { x: number; y: number; vx: number; vy: number } | null; handAt: number; turningAt: number; burstAt: number }>(
     { boxes: [], main: -1, hand: null, handAt: 0, turningAt: 0, burstAt: 0 });

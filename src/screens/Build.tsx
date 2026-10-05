@@ -11,6 +11,9 @@ import { DanceCharge } from "../components/DanceCharge";
 import { Figure, randomParts, type Parts } from "../components/Figure";
 import { CamFrame } from "../components/CamFrame";
 import type { StartSource } from "./Welcome";
+import { assignment, mark, endSession } from "../lib/experiment";
+import { composeFigure } from "../research/figure";
+import { DURATION, drawFrame, drawWalkOff, measure, coverTransform, type Sprite, type StimulusId } from "../research/stimuli";
 
 // "Show it to the camera and it comes alive."
 // The station runs WITHOUT staff: the welcome mirror usually takes the photo
@@ -22,6 +25,10 @@ import type { StartSource } from "./Welcome";
 // goes on with the best guess). Small Retake escape hatch only.
 type Step = "photo" | "magic";
 
+// the experiment's clip inside the "살아났다!" scene (docs/RESEARCH.md): it begins once "우와~ 채소 친구가
+// 살아났어!" has been said (the character waits on the podium, breathing), and is followed by the silent
+// observation window; then the walk to the wall
+const STIM_AT_MS = Math.max(2800, 350 + clipMs(["a1_wow", "a1_alive"], 0.3) + 250), OBSERVE_S = 6;
 const MAX_RETRIES = 2; // "hold it closer" loops before we just go with it
 const MATCH_TIMEOUT_MS = 20000; // matcher deadline before the show goes on regardless
 
@@ -226,6 +233,7 @@ function MagicStep({
 }) {
   type Phase = "match" | "noshow" | "dance" | "alive" | "walk" | "sendoff";
   const ALIVE_LINE_AT_MS = 350; // into the alive scene: the figure is mid-pop
+  const [clipOn, setClipOn] = useState(false); // (the experiment's clip is playing: the title steps aside)
   const SENDOFF_MS = Math.max(5000, clipMs("a3_look") + 800); // "look at the wall next to you" (the whole line is heard) before the station resets
   const [phase, setPhase] = useState<Phase>("match");
   const [variant, setVariant] = useState<string | null>(null);
@@ -259,7 +267,7 @@ function MagicStep({
       const lineSaid = new Promise((r) => window.setTimeout(r, clipMs("m1_reading") + 80)); // the question is never cut mid-sentence
       const RANDOM = ["pumpkin", "corn", "sweetpotato", "tomato", "cabbage"];
       let v = RANDOM[Math.floor(Math.random() * RANDOM.length)];
-      let p: Parts | null = null;
+      let p: Parts | null = null, matchedFlag: boolean | null = null;
       try {
         const r = await fetch("/api/match", {
           method: "POST",
@@ -279,7 +287,7 @@ function MagicStep({
           absorbShownObject();
           narrate("m2_noshow");
           setPhase("noshow");
-          later(onDone, clipMs("m2_noshow") + 500);
+          later(() => { endSession(false, "nothing_shown"); onDone(); }, clipMs("m2_noshow") + 500);
           return;
         }
         if (j.none && tries < MAX_RETRIES) {
@@ -296,12 +304,13 @@ function MagicStep({
           absorbShownObject();
           narrate("m2_noshow");
           setPhase("noshow");
-          later(onDone, clipMs("m2_noshow") + 500);
+          later(() => { endSession(false, "nothing_shown"); onDone(); }, clipMs("m2_noshow") + 500);
           return;
         }
         if (typeof j.variant === "string" && j.variant) v = j.variant;
         else if (typeof j.best === "string" && j.best) v = j.best;
         if (j.parts && j.parts.body === v) p = j.parts;
+        matchedFlag = j.matched ?? false;
         track("match_done", { variant: v, matched: j.matched ?? false, parts: p });
       } catch {
         if (!live) return; // (its screen is gone — not a failed match)
@@ -311,6 +320,8 @@ function MagicStep({
       if (!live) return;
       if (!p) p = await randomParts(v).catch(() => ({ body: v, hat: "none", arms: "twig", legs: "twig" }));
       if (!live) return;
+      mark("matched", { variant: v, parts: p, matched: matchedFlag });
+      spriteRef.current = composeFigure(p).catch(() => null); // (ready long before the dance is over)
       setVariant(v);
       setParts(p);
       // 2) the dance mini-game: the child's own moves charge the magic
@@ -327,17 +338,45 @@ function MagicStep({
   const partsRef = useRef<Parts | null>(null);
   partsRef.current = parts;
   const danceDoneRef = useRef(false);
+  const spriteRef = useRef<Promise<Sprite | null> | null>(null);
+  // the experiment (lib/experiment.ts): this session's clip, its character, and when the "살아났다!" scene began
+  const [stim, setStim] = useState<{ id: StimulusId; sprite: Sprite; t0: number } | null>(null);
+  const [walkT0, setWalkT0] = useState(0);
+  const walkedRef = useRef(false);
   function danceDone() {
     if (!aliveRef.current || danceDoneRef.current) return;
     danceDoneRef.current = true;
     const v = variantRef.current ?? "tomato";
     track("dance_done", { variant: v });
+    mark("ladle_end"); mark("reveal");
     setPhase("alive");
     sparkle();
     // ("팡! 마법 완성!" came with the pot's burst.) As the figure pops up: "우와~" (0.3 s) "채소 친구가 살아났어!"
     later(() => narrate(["a1_wow", "a1_alive"], undefined, 0.3), ALIVE_LINE_AT_MS);
     later(() => magicDustBurst(frameRef.current), 80); // once the podium is on screen
-    later(() => {
+    // the experiment: the character pops up where its clip begins, the line is said, then the clip (silent),
+    // then the observation window — and only then the walk. Without a cell or a character in time: as before.
+    const t0 = performance.now(), a = assignment();
+    const ready = a && spriteRef.current ? Promise.all([a, spriteRef.current]) : Promise.resolve(null);
+    Promise.race([ready, new Promise<null>((r) => setTimeout(() => r(null), 700))]).then((r) => {
+      if (!aliveRef.current) return;
+      if (r && r[1]) {
+        setStim({ id: r[0].animationId, sprite: r[1], t0 });
+        later(() => setClipOn(true), STIM_AT_MS - 300); // (the title steps aside just before the clip)
+        later(walk, STIM_AT_MS + (DURATION + OBSERVE_S) * 1000 + 2500); // (a safety net: the scene itself sets off on time)
+      } else {
+        if (a) mark("stimulus_skipped", { why: r ? "character" : "no cell / character in time" });
+        later(walk, 3400);
+      }
+    });
+  }
+  function walk() {
+    if (!aliveRef.current || walkedRef.current) return;
+    walkedRef.current = true;
+    const v = variantRef.current ?? "tomato";
+    setWalkT0(performance.now());
+    mark("walk_off");
+    {
       setPhase("walk");
       narrate("a2_go");
       track("walk_off", { variant: v });
@@ -368,12 +407,16 @@ function MagicStep({
         // it has arrived on the wall: point the child at it for a moment
         setPhase("sendoff");
         narrate("a3_look");
+        later(() => { // (the covariate — how much the clip moved with this child's character — measured now, on a still screen)
+          setStim((st) => { if (st) mark("motion", { motion_energy: measure(st.id, st.sprite).motion }); return st; });
+        }, 400);
         later(() => {
           track("build_done", { variant: v });
+          endSession(true);
           onDone();
         }, SENDOFF_MS);
       }, 5200); // walk duration + a breath
-    }, 3400);
+    }
   }
 
   if (phase === "sendoff") {
@@ -408,7 +451,8 @@ function MagicStep({
   if (phase === "dance") {
     return (
       <div className="screen center-screen" style={{ alignItems: "center" }}>
-        <DanceCharge stream={stream} photo={photo} onFull={danceDone} />
+        <DanceCharge stream={stream} photo={photo} onFull={danceDone}
+          onStage={(m) => { if (m === "airplane") mark("dance_start"); if (m === "stir") mark("ladle_start"); }} />
       </div>
     );
   }
@@ -419,7 +463,7 @@ function MagicStep({
   // (birth-origin marks the podium for the confetti burst.)
   if ((phase === "alive" || phase === "walk") && parts) {
     return (
-      <div className={`birth-stage is-${phase}`}>
+      <div className={`birth-stage is-${phase}${clipOn && phase === "alive" ? " is-clip" : ""}`}>
         <div className="birth-rays" />
         <div className="birth-glow" />
         <div className="birth-particles" aria-hidden="true">
@@ -434,16 +478,22 @@ function MagicStep({
           ))}
         </div>
         <div className="birth-origin" ref={frameRef} />
+        {stim && (
+          <StimulusScene stim={stim} walking={phase === "walk"} walkT0={walkT0}
+            onStep={(ev) => { mark(ev); if (ev === "observation_end") walk(); }} />
+        )}
         {phase === "alive" && (
           <>
             <div className="birth-flash" />
             <div className="birth-ring" />
-            <div className="birth-figure">
-              <Figure parts={parts} className="wave" />
-            </div>
+            {!stim && (
+              <div className="birth-figure">
+                <Figure parts={parts} className="wave" />
+              </div>
+            )}
           </>
         )}
-        {phase === "walk" && (
+        {phase === "walk" && !stim && (
           <div className="walk-stage">
             <div className="walker">
               <Figure parts={parts} />
@@ -467,4 +517,42 @@ function MagicStep({
       <button className="btn-ghost" onClick={onRetake}>📷 다시 찍기</button>
     </div>
   );
+}
+
+// The experiment's clip, drawn over the "살아났다!" scene on a transparent canvas with the scene's own cover fit
+// (so the character's feet land on the painted podium): the reveal at the clip's start pose, the clip, the
+// observation window, then the walk off to the wall. Its steps are reported from the frame they happen in.
+type ClipStep = "animation_start" | "animation_end" | "observation_end";
+function StimulusScene({ stim, walking, walkT0, onStep }: { stim: { id: StimulusId; sprite: Sprite; t0: number }; walking: boolean; walkT0: number; onStep: (ev: ClipStep) => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const onStepRef = useRef(onStep);
+  onStepRef.current = onStep;
+  const walkRef = useRef({ walking, walkT0 });
+  walkRef.current = { walking, walkT0 };
+  useEffect(() => {
+    const c = ref.current!, ctx = c.getContext("2d")!;
+    const fit = () => { const dpr = window.devicePixelRatio || 1; c.width = Math.round(window.innerWidth * dpr); c.height = Math.round(window.innerHeight * dpr); };
+    fit(); window.addEventListener("resize", fit);
+    const said = new Set<ClipStep>(), STIM_S = STIM_AT_MS / 1000;
+    const step = (ev: ClipStep) => { if (!said.has(ev)) { said.add(ev); onStepRef.current(ev); } };
+    let raf = 0;
+    const loop = () => {
+      const now = performance.now(), s = (now - stim.t0) / 1000, { k, ox, oy } = coverTransform(c.width, c.height);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height);
+      ctx.setTransform(k, 0, 0, k, ox, oy);
+      if (walkRef.current.walking) drawWalkOff(ctx, stim.id, stim.sprite, (now - walkRef.current.walkT0) / 1000, DURATION + OBSERVE_S);
+      else if (s < STIM_S) drawFrame(ctx, stim.id, stim.sprite, 0, Math.max(0, Math.min(1, (s - 0.4) / 0.8))); // the pop, then a breath
+      else {
+        const t = s - STIM_S;
+        step("animation_start");
+        drawFrame(ctx, stim.id, stim.sprite, t); // past DURATION: the end pose, breathing (the observation window)
+        if (t >= DURATION) step("animation_end");
+        if (t >= DURATION + OBSERVE_S) step("observation_end");
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", fit); };
+  }, [stim]);
+  return <canvas ref={ref} className="stim-layer" aria-hidden="true" />;
 }

@@ -665,3 +665,7 @@ body.stage-dance .brand { display: none; }
 
 /* fullscreen button (hidden while fullscreen; exit with ESC) */
 .fs-toggle { position: fixed; top: 14px; right: 76px; z-index: 50; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); font-size: 22px; cursor: pointer; color: var(--ink); }
+
+/* the experiment's clip (docs/RESEARCH.md): the character on a canvas over the "살아났다!" scene */
+.stim-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+.birth-stage.is-clip .birth-title { opacity: 0 !important; transition: opacity 0.3s ease; }

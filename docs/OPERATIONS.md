@@ -3,7 +3,8 @@
 ## 매일 아침
 
 1. 두 PC 모두 크롬을 키오스크 모드로 (소리 자동 재생 허용 + 새 배포 자동 반영):
-   - 스캔 스테이션: `open -a "Google Chrome" --args --autoplay-policy=no-user-gesture-required --kiosk "https://veggie-creature.vercel.app/?autoreload"`
+   - 스캔 스테이션: `open -a "Google Chrome" --args --autoplay-policy=no-user-gesture-required --kiosk "https://veggie-creature.vercel.app/?autoreload&key=<연구키>"`
+     (`key`: 실험 기록용 — 처음 한 번만 붙이면 그 PC에 저장된다. 실험을 끄려면 `&exp=0`. docs/RESEARCH.md)
    - 월드: `open -a "Google Chrome" --args --autoplay-policy=no-user-gesture-required --kiosk "https://veggie-creature.vercel.app/world.html?autoreload"`
    - `?autoreload`: 새로 배포하면 1~2분 안에 알아서 새로고침한다 (스테이션은 부스가 비었을 때, 월드는
      새 친구 도착·QR 지나가는 중이 아닐 때). 이게 없으면 **배포 후 두 화면 모두 직접 새로고침**할 것 —

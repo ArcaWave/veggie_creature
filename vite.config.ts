@@ -8,6 +8,7 @@ import { speak, listVoices } from "./api/_typecast";
 import { sendKeepsakes } from "./api/_email";
 import { listCreatures, uploadCreature, makeEntry, relayStatus, creatureStats, summarize, type CreatureEntry } from "./api/_creaturestore";
 import { checkLimit, limitKey } from "./api/_ratelimit";
+import { researchRequest, fileStore } from "./api/_researchstore";
 
 const ANIMATOR = () => process.env.ANIMATOR_URL || "http://127.0.0.1:8765";
 
@@ -121,6 +122,19 @@ function devApiPlugin(): Plugin {
       });
       route("/api/speak", "speak", (b) => speak(b.text, b.seed));
       // setup helper: GET-style voice catalog (POST {} works too) to pick TYPECAST_VOICE_ID
+      // the suggestiveness experiment (api/research.ts) — locally always a file (never the deployed tables),
+      // open without a key unless .env sets RESEARCH_KEY
+      const researchDb = fileStore(path.join(process.cwd(), ".data", "research.json"));
+      server.middlewares.use("/api/research", async (req, res) => {
+        const query = Object.fromEntries(new URL(req.url ?? "/", "http://local").searchParams);
+        let body: unknown;
+        if (req.method === "POST") { try { body = JSON.parse((await readBody(req)) || "{}"); } catch { return send(res, 400, { error: "bad_json" }); } }
+        const k = req.headers["x-research-key"];
+        const out = await researchRequest(researchDb, req.method ?? "GET", query, body, typeof k === "string" ? k : undefined, process.env.RESEARCH_KEY || undefined, !process.env.RESEARCH_KEY);
+        if (out.type) { res.statusCode = out.status; res.setHeader("Content-Type", out.type); res.setHeader("Content-Disposition", 'attachment; filename="research_sessions.csv"'); return res.end(out.body as string); }
+        send(res, out.status, out.body);
+      });
+
       server.middlewares.use("/api/voices", async (_req, res) => {
         const { status, body } = await listVoices();
         send(res, status, body);
@@ -201,6 +215,7 @@ export default defineConfig(({ mode }) => {
   process.env.TYPECAST_API_KEY = env.TYPECAST_API_KEY || "";
   process.env.TYPECAST_VOICE_ID = env.TYPECAST_VOICE_ID || "";
   process.env.TYPECAST_MODEL = env.TYPECAST_MODEL || "";
+  process.env.RESEARCH_KEY = env.RESEARCH_KEY || "";
   // the relay store, if any is configured (otherwise this server relays creatures itself)
   for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "KV_REST_API_URL", "KV_REST_API_TOKEN", "BLOB_READ_WRITE_TOKEN"]) {
     if (env[k]) process.env[k] = env[k];
