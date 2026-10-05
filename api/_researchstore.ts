@@ -7,10 +7,13 @@
 // own sessions (start, steps, end, an offline hand-over), from a page of this site, at a kiosk's pace. Reading
 // anything, and the researchers' notes, need the research key (env RESEARCH_KEY, sent as x-research-key by the
 // console — given once in its address, ?key=…): children's answers live here.
+// Every finished or annotated session is also copied to the researchers' Google Sheet when RESEARCH_SHEET_URL is
+// set (api/_researchsheet.ts) — after the answer, through `defer` (Vercel's waitUntil), so nobody waits on Google.
 import fs from "node:fs";
 import path from "node:path";
 import { handle, getLive, toCsv, type Store, type Session } from "./_researchcore.js";
 import { checkLimit } from "./_ratelimit.js";
+import { toSheet, sheetUrl } from "./_researchsheet.js";
 
 const supaEnv = () => {
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
@@ -60,9 +63,24 @@ export function fileStore(file: string): Store {
 
 export type Out = { status: number; body: unknown; type?: string };
 const KIOSK_OPS = new Set(["kStart", "kEvent", "kEnd", "kOffline"]);
+// the sessions an op leaves worth copying to the sheet (not every step: the end carries them all)
+function touched(body: any, r: any): string[] {
+  switch (body?.op) {
+    case "kStart": return r.superseded ? [r.superseded] : [];
+    case "kEnd": case "note": case "reveal": return body.pid ? [String(body.pid)] : [];
+    case "kOffline": return body.session?.participant_id ? [String(body.session.participant_id)] : [];
+    default: return [];
+  }
+}
+async function mirror(store: Store, pids: string[]) {
+  const rows = (await Promise.all(pids.map((p) => store.readSession(p)))).filter((x) => !!x).map((x) => x!.data);
+  const r = await toSheet(rows);
+  if (!r.ok) console.warn("[research] sheet:", r.error, pids.join(","));
+}
+export type Defer = (p: Promise<unknown>) => void;
 export type Caller = { origin?: string; host?: string; ip?: string };
 const sameSite = (c: Caller) => { try { return !!c.origin && !!c.host && new URL(c.origin).host === c.host; } catch { return false; } };
-export async function researchRequest(store: Store | null, method: string, query: Record<string, unknown>, body: any, key: string | undefined, requiredKey: string | undefined, open = false, caller: Caller = {}): Promise<Out> {
+export async function researchRequest(store: Store | null, method: string, query: Record<string, unknown>, body: any, key: string | undefined, requiredKey: string | undefined, open = false, caller: Caller = {}, defer: Defer = (p) => void p.catch(() => {})): Promise<Out> {
   if (!store) return { status: 503, body: { error: "research_store_missing", hint: "Supabase tables research_state / research_sessions — docs/RESEARCH.md" } };
   const keyOk = open || (!!requiredKey && key === requiredKey);
   const kioskWrite = method === "POST" && KIOSK_OPS.has(String(body?.op ?? ""));
@@ -76,10 +94,23 @@ export async function researchRequest(store: Store | null, method: string, query
         const rows = await store.listSessions();
         return "csv" in query ? { status: 200, body: "﻿" + toCsv(rows), type: "text/csv; charset=utf-8" } : { status: 200, body: { sessions: rows } };
       }
-      return { status: 200, body: { live: await getLive(store), now: Date.now() } };
+      return { status: 200, body: { live: await getLive(store), now: Date.now(), sheet: !!sheetUrl() } };
     }
     if (method !== "POST") return { status: 405, body: { error: "GET or POST" } };
+    if (body?.op === "sheetSync") { // the console: every session to the sheet again (in parts: Apps Script likes them small)
+      if (!sheetUrl()) return { status: 409, body: { ok: false, error: "sheet_not_configured" } };
+      const rows = await store.listSessions();
+      let n = 0;
+      for (let i = 0; i < rows.length; i += 250) {
+        const r = await toSheet(rows.slice(i, i + 250), undefined, 40_000);
+        if (!r.ok) return { status: 502, body: { ok: false, error: r.error, n } };
+        n += r.n ?? 0;
+      }
+      return { status: 200, body: { ok: true, n, total: rows.length } };
+    }
     const r = await handle(store, body ?? {});
+    if (r.ok && sheetUrl()) { const pids = touched(body, r); if (pids.length) defer(mirror(store, pids).catch((e) => console.warn("[research] sheet:", e))); }
+    delete r.superseded; // (the server's business)
     return { status: r.ok ? 200 : 409, body: r };
   } catch (e: any) {
     return { status: 500, body: { ok: false, error: "server_error", detail: String(e?.message || e).slice(0, 300) } };

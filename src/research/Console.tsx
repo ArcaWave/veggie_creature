@@ -3,7 +3,7 @@
 // lets the researchers add what only people see — age, the answers to Q1–Q6, a spontaneous remark, exclusions —
 // to any recent session. A session's condition stays covered until its Q2 is marked done (an earlier look is logged).
 import { useEffect, useRef, useState } from "react";
-import { useLive, send, fetchSessions, downloadCsv, researchKey, setResearchKey, type Live, type Session } from "./api";
+import { useLive, send, fetchSessions, downloadCsv, syncSheet, researchKey, setResearchKey, type Live, type Session } from "./api";
 
 const STEP_NAME: Record<string, string> = {
   idle: "대기", photo: "사진", match: "인식", dance: "동작", ladle: "마법 국자", reveal: "캐릭터 등장",
@@ -22,7 +22,8 @@ const formOf = (s?: Session): Form => ({
 
 export function Console() {
   const [, setKey] = useState(researchKey());
-  const { live, err, skew } = useLive(1000);
+  const { live, err, skew, sheet } = useLive(1000);
+  const [sheetMsg, setSheetMsg] = useState<string | null>(null);
   const [rows, setRows] = useState<Session[] | null>(null);
   const [listErr, setListErr] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null); // a session chosen by hand (else: the live one, or the latest)
@@ -59,7 +60,14 @@ export function Console() {
           <label className="rc-hint"><input id="show-cond" type="checkbox" checked={showCond} onChange={(e) => setShowCond(e.target.checked)} /> 조건 표시 (책임연구자)</label>
           <button className="rc-btn" onClick={load}>새로고침</button>
           <button className="rc-btn" onClick={() => downloadCsv().catch((e) => setListErr(String(e)))}>CSV 다운로드</button>
+          {sheet && (
+            <button className="rc-btn" disabled={sheetMsg === "보내는 중…"} onClick={() => {
+              setSheetMsg("보내는 중…");
+              syncSheet().then((r) => setSheetMsg(r.ok ? `구글 시트에 ${r.total ?? r.n}건 맞춰 놓았어요` : `구글 시트로 못 보냈어요 (${r.error})`)).catch((e) => setSheetMsg(`구글 시트로 못 보냈어요 (${e})`));
+            }}>구글 시트로 다시 보내기</button>
+          )}
         </div>
+        {sheet ? <p className="rc-hint">{sheetMsg ?? "끝난 세션과 콘솔에 적은 내용은 구글 시트에도 자동으로 들어갑니다."}</p> : null}
         {listErr && <p className="rc-warn">{listErr}</p>}
         <div className="rc-table">
           <table>

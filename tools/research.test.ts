@@ -1,6 +1,9 @@
 // The experiment's server logic (api/_researchcore.ts) on an in-memory store.   run: npx tsx tools/research.test.ts
 import { makeAllocation, memoryStore, handle, getLive, toCsv, type Store } from "../api/_researchcore.ts";
 import { researchRequest } from "../api/_researchstore.ts";
+import { sheetRow, SHEET_COLUMNS, toSheet } from "../api/_researchsheet.ts";
+import fs from "node:fs";
+import http from "node:http";
 let fails = 0;
 const check = (name: string, ok: boolean, info = "") => { console.log(`${ok ? "PASS" : "FAIL"}  ${name}${info ? "  — " + info : ""}`); if (!ok) fails++; };
 
@@ -116,6 +119,99 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
   check("reading the sessions or adding notes needs the key", read.status === 401 && note.status === 401);
   const readOk = await researchRequest(store, "GET", { sessions: "" }, undefined, KEY, KEY, false, site);
   check("…and works with it", readOk.status === 200 && (readOk.body as any).sessions.length === 1);
+}
+
+// 8) the Google Sheet copy: the real Apps Script (tools/research-sheet.gs) on a pretend sheet, behind a pretend
+//    Google (which answers a POST with a redirect to the result, as Apps Script web apps do)
+{
+  type Cell = unknown;
+  const sheet = { cells: [] as Cell[][], maxRows: 3, maxCols: 26, hidden: new Set<number>(), text: new Set<number>(), frozen: 0 };
+  const lastCol = () => Math.max(0, ...sheet.cells.map((r) => r.reduce((m: number, v, i) => (v !== "" && v !== undefined ? i + 1 : m), 0)));
+  const lastRow = () => sheet.cells.reduce((m: number, r, i) => (r.some((v) => v !== "" && v !== undefined) ? i + 1 : m), 0);
+  const range = (r: number, c: number, nr: number, nc: number) => {
+    const self = {
+      getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sheet.cells[r - 1 + i]?.[c - 1 + j] ?? "")),
+      setValues: (v: Cell[][]) => {
+        if (r - 1 + nr > sheet.maxRows || c - 1 + nc > sheet.maxCols) throw new Error("The coordinates of the range are outside the dimensions of the sheet.");
+        v.forEach((row, i) => row.forEach((x, j) => { (sheet.cells[r - 1 + i] ??= [])[c - 1 + j] = x; })); return self;
+      },
+      setFontWeight: () => self,
+      setNumberFormat: (f: string) => { if (f === "@" && r === 1 && nr > 1) sheet.text.add(c); return self; },
+    };
+    return self;
+  };
+  const sh = {
+    getLastColumn: lastCol, getLastRow: lastRow, getMaxColumns: () => sheet.maxCols, getMaxRows: () => sheet.maxRows, getRange: range,
+    insertColumnsAfter: (_: number, n: number) => { sheet.maxCols += n; }, insertRowsAfter: (_: number, n: number) => { sheet.maxRows += n; },
+    setFrozenRows: (n: number) => { sheet.frozen = n; }, hideColumns: (c: number) => { sheet.hidden.add(c); },
+  };
+  const gs = new Function("SpreadsheetApp", "LockService", "ContentService", "Logger", fs.readFileSync(new URL("./research-sheet.gs", import.meta.url), "utf8") + "\nreturn { doPost };")(
+    { getActiveSpreadsheet: () => ({ getSheetByName: () => (sheet.cells.length || lastCol() ? sh : null), insertSheet: () => sh, getName: () => "test" }) },
+    { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    { createTextOutput: (t: string) => ({ setMimeType: () => t }), MimeType: { JSON: "json" } },
+    { log: () => {} },
+  ) as { doPost: (e: unknown) => string };
+  let posts = 0;
+  const answers = new Map<string, string>();
+  const google = http.createServer((req, res) => {
+    if (req.method === "POST") {
+      let b = ""; req.on("data", (d) => (b += d)); req.on("end", () => {
+        posts++; const id = String(posts); answers.set(id, gs.doPost({ postData: { contents: b } }));
+        res.writeHead(302, { Location: `/echo?id=${id}` }); res.end();
+      });
+    } else { const id = new URL(req.url ?? "", "http://x").searchParams.get("id") ?? ""; res.writeHead(200, { "Content-Type": "application/json" }); res.end(answers.get(id) ?? "{}"); }
+  });
+  await new Promise<void>((r) => google.listen(0, "127.0.0.1", r));
+  process.env.RESEARCH_SHEET_URL = `http://127.0.0.1:${(google.address() as { port: number }).port}/exec`;
+
+  const store = memoryStore(), KEY = "k3y", site = { origin: "https://veggie-creature.vercel.app", host: "veggie-creature.vercel.app", ip: "2.2.2.2" };
+  const later: Promise<unknown>[] = [];
+  const req = (body: Record<string, unknown>, key?: string) => researchRequest(store, "POST", {}, body, key, KEY, false, site, (p) => later.push(p));
+  const settle = async () => { while (later.length) await later.shift(); };
+  const head = () => (sheet.cells[0] ?? []).map(String);
+  const row = (pid: string) => { const h = head(), r = sheet.cells.slice(1).find((x) => x[h.indexOf("participant_id")] === pid); return r && Object.fromEntries(h.map((c, i) => [c, r[i]])); };
+
+  const s1 = await req({ op: "kStart", source: "person", at: T0 });
+  const pid = (s1.body as any).pid as string;
+  check("the kiosk's answer never names other sessions", !("superseded" in (s1.body as object)));
+  await req({ op: "kEvent", pid, ev: "dance_start", at: T0 + 20_000 }); await settle();
+  check("a step alone writes nothing to the sheet (the end carries it)", posts === 0, `${posts}`);
+  await req({ op: "kEnd", pid, completed: true, at: T0 + 90_000 }); await settle();
+  const a = row(pid);
+  check("the end of a session puts its row in the sheet", !!a && a.completed === true && a.stage_reached === "done");
+  check("…with the CSV's columns, in its order, plus row_version", head().join() === SHEET_COLUMNS.join());
+  check("…times in Korea time", a?.session_start_time === "2026-10-05 11:00:00.000" && a?.dance_start_time === "2026-10-05 11:00:20.000", `${a?.session_start_time}`);
+  const col = (c: string) => head().indexOf(c) + 1;
+  check("…the condition columns hidden (blind), the times kept as text", ["condition", "animation_pair", "animation_id"].every((c) => sheet.hidden.has(col(c))) && sheet.text.has(col("reveal_time")));
+
+  await req({ op: "note", pid, age: 6, q1: "응", note: "웃었음" }, KEY); await settle();
+  sheet.maxCols = Math.max(sheet.maxCols, head().length + 1); sheet.cells[0][head().length] = "coder2"; sheet.cells[1][head().length - 1] = "HIGH-ish"; // (a researcher's own column)
+  await req({ op: "note", pid, q2: "몰라" }, KEY); await settle();
+  const b = row(pid);
+  check("console notes update the same row (no duplicates)", sheet.cells.length === 2 && b?.age === 6 && b?.q1_answer === "응" && b?.q2_answer === "몰라" && b?.researcher_note === "웃었음");
+  check("a column the researchers added is kept", b?.coder2 === "HIGH-ish");
+  const stale = { ...(await store.readSession(pid))!.data, q2_answer: "OLD", events: [] };
+  await toSheet([stale as any]);
+  check("a late, older copy doesn't overwrite a newer row", row(pid)?.q2_answer === "몰라");
+
+  const s2 = await req({ op: "kStart", source: "held", at: T0 + 200_000 });
+  const s3 = await req({ op: "kStart", source: "held", at: T0 + 260_000 }); await settle();
+  const p2 = (s2.body as any).pid;
+  check("a session cut short by the next child still reaches the sheet", row(p2)?.end_reason === "superseded", JSON.stringify(row(p2)?.end_reason));
+  await req({ op: "kOffline", session: { participant_id: "OFF-abc-1", condition: "LOW", animation_pair: "B", animation_id: "PAIR_B_LOW_JUMP", times: { session_start_time: new Date(T0).toISOString() }, completed: true } }); await settle();
+  check("an offline session handed over reaches the sheet; the sheet grows as needed", !!row("OFF-abc-1") && sheet.maxRows > 3, `rows ${sheet.cells.length}, max ${sheet.maxRows}`);
+
+  sheet.cells.splice(2); // (rows lost in the sheet)
+  const noKey = await req({ op: "sheetSync" });
+  const sync = await req({ op: "sheetSync" }, KEY);
+  check("the console's re-send needs the key and puts every session back", noKey.status === 401 && (sync.body as any).ok && (sync.body as any).total === 4 && sheet.cells.length === 5 && !!row((s3.body as any).pid), JSON.stringify(sync.body));
+  const live = await researchRequest(store, "GET", {}, undefined, KEY, KEY, false, site);
+  check("the console is told the sheet is connected", (live.body as any).sheet === true);
+  delete process.env.RESEARCH_SHEET_URL;
+  const off = await req({ op: "sheetSync" }, KEY);
+  check("without RESEARCH_SHEET_URL nothing is sent and the console says so", off.status === 409 && (off.body as any).error === "sheet_not_configured");
+  check("sheetRow: blank times stay blank", sheetRow({ ...(await store.readSession(pid))!.data, times: {} } as any)[SHEET_COLUMNS.indexOf("reveal_time")] === "");
+  google.close();
 }
 console.log(fails ? `${fails} FAIL` : "ALL PASS");
 process.exit(fails ? 1 : 0);

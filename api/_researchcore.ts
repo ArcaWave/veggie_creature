@@ -99,7 +99,7 @@ async function nextCell(store: Store): Promise<{ seq: number; cell: Cell }> {
 
 // ---- the steps ------------------------------------------------------------------------------------------------
 export type Msg = { op: string; by?: string; [k: string]: unknown };
-export type Reply = { ok: boolean; error?: string; pid?: string; assigned?: Assigned; live?: Live };
+export type Reply = { ok: boolean; error?: string; pid?: string; assigned?: Assigned; live?: Live; superseded?: string };
 const IDLE: Live = { pid: null, stage: "idle", assigned: null, times: {} };
 const iso = (t: number) => new Date(t).toISOString();
 const str = (v: unknown, max = 4000) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -146,7 +146,7 @@ export async function handle(store: Store, msg: Msg, now = Date.now()): Promise<
     };
     if (!(await store.writeSession(p, seq, s, null))) return { ok: false, error: "session_exists" };
     await setLive(store, () => ({ pid: p, stage: "photo", assigned, times: { session_start_time: at } }));
-    return { ok: true, pid: p, assigned };
+    return { ok: true, pid: p, assigned, ...(prev.pid ? { superseded: prev.pid } : {}) };
   }
 
   if (op === "kEvent") { // a step of the kiosk session
