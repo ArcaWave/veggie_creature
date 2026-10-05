@@ -1,5 +1,6 @@
 // The experiment's server logic (api/_researchcore.ts) on an in-memory store.   run: npx tsx tools/research.test.ts
 import { makeAllocation, memoryStore, handle, getLive, toCsv, type Store } from "../api/_researchcore.ts";
+import { researchRequest } from "../api/_researchstore.ts";
 let fails = 0;
 const check = (name: string, ok: boolean, info = "") => { console.log(`${ok ? "PASS" : "FAIL"}  ${name}${info ? "  — " + info : ""}`); if (!ok) fails++; };
 
@@ -98,6 +99,23 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
   const st = await k(flaky, "kStart", { source: "x" });
   const ev = await k(flaky, "kEvent", { pid: st.pid, ev: "dance_start" });
   check("a refused write (someone else wrote first) is re-read and retried", ev.ok && !!(await flaky.listSessions())[0].times.dance_start_time);
+}
+// 8) who may do what: the kiosk on the plain domain writes its sessions without the key; reading and notes need it
+{
+  const store = memoryStore(), KEY = "secret", site = { origin: "https://veggie-creature.vercel.app", host: "veggie-creature.vercel.app", ip: "1.2.3.4" };
+  const kiosk = await researchRequest(store, "POST", {}, { op: "kStart", source: "held" }, undefined, KEY, false, site);
+  check("the kiosk starts a session with no key, from the site itself", kiosk.status === 200 && (kiosk.body as any).pid === "MK_0001", `${kiosk.status}`);
+  const pid = (kiosk.body as any).pid;
+  const step = await researchRequest(store, "POST", {}, { op: "kEvent", pid, ev: "dance_start" }, undefined, KEY, false, site);
+  check("…and reports its steps", step.status === 200);
+  const elsewhere = await researchRequest(store, "POST", {}, { op: "kStart" }, undefined, KEY, false, { origin: "https://evil.example", host: "veggie-creature.vercel.app", ip: "9.9.9.9" });
+  const noOrigin = await researchRequest(store, "POST", {}, { op: "kStart" }, undefined, KEY, false, { host: "veggie-creature.vercel.app", ip: "9.9.9.9" });
+  check("…but not from another site, nor from outside a browser", elsewhere.status === 403 && noOrigin.status === 403);
+  const read = await researchRequest(store, "GET", { sessions: "" }, undefined, undefined, KEY, false, site);
+  const note = await researchRequest(store, "POST", {}, { op: "note", pid, q1: "x" }, undefined, KEY, false, site);
+  check("reading the sessions or adding notes needs the key", read.status === 401 && note.status === 401);
+  const readOk = await researchRequest(store, "GET", { sessions: "" }, undefined, KEY, KEY, false, site);
+  check("…and works with it", readOk.status === 200 && (readOk.body as any).sessions.length === 1);
 }
 console.log(fails ? `${fails} FAIL` : "ALL PASS");
 process.exit(fails ? 1 : 0);

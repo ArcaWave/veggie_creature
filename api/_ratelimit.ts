@@ -19,6 +19,7 @@ const LIMITS: Record<string, Cfg> = {
   save: { max: 30, windowMs: 60_000 }, // profile / monster saves
   email: { max: 4, windowMs: 600_000 }, // keepsake emails: 4 / 10 minutes
   speak: { max: 20, windowMs: 60_000 }, // TTS lines (a greeting uses ~4)
+  "research-kiosk": { max: 240, windowMs: 60_000 }, // the kiosk's experiment steps (~12 a child) — sent without the research key
 };
 
 const hits: Record<string, Map<string, number[]>> = {};

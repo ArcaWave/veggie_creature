@@ -3,12 +3,14 @@
 // researchers' console reads them and adds notes.
 //   Vercel: Supabase tables research_state / research_sessions (SQL in docs/RESEARCH.md), service key from env.
 //   dev:    .data/research.json (one process, one machine).
-// Children's answers live here: every request needs the research key (env RESEARCH_KEY; the kiosk and the console
-// send it as x-research-key — given once in their address, ?key=…). Without RESEARCH_KEY the endpoint stays shut
-// (and the kiosk still plays a clip, keeping its sessions on the device until it can hand them over).
+// Who may do what: the kiosk at the site itself (no key — the experiment runs on the plain domain) may only WRITE its
+// own sessions (start, steps, end, an offline hand-over), from a page of this site, at a kiosk's pace. Reading
+// anything, and the researchers' notes, need the research key (env RESEARCH_KEY, sent as x-research-key by the
+// console — given once in its address, ?key=…): children's answers live here.
 import fs from "node:fs";
 import path from "node:path";
 import { handle, getLive, toCsv, type Store, type Session } from "./_researchcore.js";
+import { checkLimit } from "./_ratelimit.js";
 
 const supaEnv = () => {
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
@@ -57,9 +59,17 @@ export function fileStore(file: string): Store {
 }
 
 export type Out = { status: number; body: unknown; type?: string };
-export async function researchRequest(store: Store | null, method: string, query: Record<string, unknown>, body: any, key: string | undefined, requiredKey: string | undefined, open = false): Promise<Out> {
+const KIOSK_OPS = new Set(["kStart", "kEvent", "kEnd", "kOffline"]);
+export type Caller = { origin?: string; host?: string; ip?: string };
+const sameSite = (c: Caller) => { try { return !!c.origin && !!c.host && new URL(c.origin).host === c.host; } catch { return false; } };
+export async function researchRequest(store: Store | null, method: string, query: Record<string, unknown>, body: any, key: string | undefined, requiredKey: string | undefined, open = false, caller: Caller = {}): Promise<Out> {
   if (!store) return { status: 503, body: { error: "research_store_missing", hint: "Supabase tables research_state / research_sessions — docs/RESEARCH.md" } };
-  if (!open && (!requiredKey || key !== requiredKey)) return { status: requiredKey ? 401 : 503, body: { error: requiredKey ? "research_key_wrong" : "research_not_configured" } };
+  const keyOk = open || (!!requiredKey && key === requiredKey);
+  const kioskWrite = method === "POST" && KIOSK_OPS.has(String(body?.op ?? ""));
+  if (kioskWrite && !keyOk) {
+    if (!sameSite(caller)) return { status: 403, body: { error: "not_from_this_site" } };
+    if (!checkLimit("research-kiosk", caller.ip ?? "unknown")) return { status: 429, body: { error: "rate_limited" } };
+  } else if (!keyOk) return { status: requiredKey ? 401 : 503, body: { error: requiredKey ? "research_key_wrong" : "research_not_configured" } };
   try {
     if (method === "GET") {
       if ("sessions" in query) {

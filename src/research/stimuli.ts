@@ -142,8 +142,8 @@ export const STIMULI: Stimulus[] = [
     render(ctx, s, t) { // the same crouch, then a charge-up: trembling harder and harder, rising a little; a spin into a
                         // point — gone — out of a point at the right with the same spin, a bounce, a landing
       if (t < GONE[0]) {
-        const charge = seg(t, 1.0, 2.0), jit = t >= 1.0 && t < 2.0 ? Math.sin(t * Math.PI * 2 * 16) * SW * (0.004 + 0.012 * charge) : 0;
-        const pulse = t >= 1.0 && t < 2.0 ? 0.05 * Math.sin(t * Math.PI * 2 * 7) * charge : 0;
+        const charge = seg(t, 1.0, 2.0), jit = t >= 1.0 && t < 2.0 ? Math.sin(t * Math.PI * 2 * 16) * SW * (0.0025 + 0.0075 * charge) : 0; // (a third gentler after the first look)
+        const pulse = t >= 1.0 && t < 2.0 ? 0.035 * Math.sin(t * Math.PI * 2 * 7) * charge : 0;
         const p = seg(t, 2.0, GONE[0]);
         character(ctx, s, { x: XL + jit, lift: SH * 0.02 * charge * (1 - p), sq: crouch(t, 0.7, 1.0) || pulse || idleSq(t),
           scale: t >= 2.0 ? 1 - easeIn(p) * 0.97 : 1, turn: t >= 2.0 ? Math.cos(p * Math.PI * 4) : 1, alpha: t >= 2.0 ? 1 - Math.pow(p, 3) : 1 });

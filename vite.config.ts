@@ -130,7 +130,8 @@ function devApiPlugin(): Plugin {
         let body: unknown;
         if (req.method === "POST") { try { body = JSON.parse((await readBody(req)) || "{}"); } catch { return send(res, 400, { error: "bad_json" }); } }
         const k = req.headers["x-research-key"];
-        const out = await researchRequest(researchDb, req.method ?? "GET", query, body, typeof k === "string" ? k : undefined, process.env.RESEARCH_KEY || undefined, !process.env.RESEARCH_KEY);
+        const caller = { origin: typeof req.headers.origin === "string" ? req.headers.origin : undefined, host: req.headers.host, ip: req.socket?.remoteAddress };
+        const out = await researchRequest(researchDb, req.method ?? "GET", query, body, typeof k === "string" ? k : undefined, process.env.RESEARCH_KEY || undefined, !process.env.RESEARCH_KEY, caller);
         if (out.type) { res.statusCode = out.status; res.setHeader("Content-Type", out.type); res.setHeader("Content-Disposition", 'attachment; filename="research_sessions.csv"'); return res.end(out.body as string); }
         send(res, out.status, out.body);
       });

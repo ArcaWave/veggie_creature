@@ -3,8 +3,9 @@
 // balanced sequence; the "살아났다!" scene then plays that cell's clip, and each step is reported with this
 // machine's clock. The kiosk never waits for any of it: without an answer in 2.5 s the cell is drawn here, the
 // session is kept on this device and handed over at a later session ("OFF-…", flagged offline).
-// ?exp=0 turns the experiment off on this screen (the plain "살아났다!" scene). The research key is given once
-// in the address (?key=…) and remembered on the device.
+// ?exp=0 turns the experiment off on this screen (the plain "살아났다!" scene). The kiosk needs no key: it runs on
+// the plain domain and may write its own sessions; the researchers' console reads them with the research key
+// (given once in its address, ?key=…, and remembered on that device).
 import type { StimulusId } from "../research/stimuli";
 
 export type Assigned = { condition: "HIGH" | "LOW"; pair: "A" | "B" | "C"; animationId: StimulusId };
