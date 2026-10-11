@@ -29,7 +29,8 @@ export function Console() {
   const [picked, setPicked] = useState<string | null>(null); // a session chosen by hand (else: the live one, or the latest)
   const [showCond, setShowCond] = useState(false);
   useEffect(() => { document.title = "연구자 콘솔 — Veggie Creature"; document.body.classList.add("research-console"); return () => document.body.classList.remove("research-console"); }, []);
-  const load = () => fetchSessions().then((r) => { setRows(r); setListErr(null); }).catch((e) => setListErr(String(e?.message ?? e)));
+  const [total, setTotal] = useState(0);
+  const load = () => fetchSessions().then((r) => { setRows(r.sessions); setTotal(r.total); setListErr(null); }).catch((e) => setListErr(String(e?.message ?? e)));
   useEffect(() => { load(); const t = setInterval(load, 4000); return () => clearInterval(t); }, []);
   useEffect(() => { load(); }, [live?.pid, live?.stage]);
 
@@ -55,15 +56,15 @@ export function Console() {
       <section className="rc-card rc-records">
         <div className="rc-row rc-records-head">
           <h2>기록</h2>
-          <span className="rc-hint">{rows ? `세션 ${rows.length} · 완료 ${rows.filter((r) => r.completed).length}` : ""}</span>
+          <span className="rc-hint">{rows ? `전체 ${total}건 · 아래는 최근 ${rows.length}건 (전체는 CSV)` : ""}</span>
           <span className="rc-grow" />
           <label className="rc-hint"><input id="show-cond" type="checkbox" checked={showCond} onChange={(e) => setShowCond(e.target.checked)} /> 조건 표시 (책임연구자)</label>
           <button className="rc-btn" onClick={load}>새로고침</button>
           <button className="rc-btn" onClick={() => downloadCsv().catch((e) => setListErr(String(e)))}>CSV 다운로드</button>
           {sheet && (
-            <button className="rc-btn" disabled={sheetMsg === "보내는 중…"} onClick={() => {
+            <button className="rc-btn" disabled={!!sheetMsg?.startsWith("보내는 중")} onClick={() => {
               setSheetMsg("보내는 중…");
-              syncSheet().then((r) => setSheetMsg(r.ok ? `구글 시트에 ${r.total ?? r.n}건 맞춰 놓았어요` : `구글 시트로 못 보냈어요 (${r.error})`)).catch((e) => setSheetMsg(`구글 시트로 못 보냈어요 (${e})`));
+              syncSheet((done, all) => setSheetMsg(`보내는 중… ${done}/${all}`)).then((r) => setSheetMsg(r.ok ? `구글 시트에 ${r.total}건 맞춰 놓았어요` : `구글 시트로 못 보냈어요 (${r.error})`)).catch((e) => setSheetMsg(`구글 시트로 못 보냈어요 (${e})`));
             }}>구글 시트로 다시 보내기</button>
           )}
         </div>

@@ -131,6 +131,42 @@ const k = (store: Store, op: string, extra: Record<string, unknown> = {}, at?: n
   check("the clip version is kept per session (blank = before the change) and is a CSV column", a.ok && b.ok && col > 0 && rows[1].split(",")[col] === "2026-10-05-magic" && rows[2].split(",")[col] === "");
 }
 
+// 7c) Supabase answers at most 1000 rows to one request: every listing reads on past it (the first exhibition's
+//     console and CSV stopped at session 1000)
+{
+  const { supabaseStore } = await import("../api/_researchstore.ts");
+  const BASE = "https://fake.supabase.test", N = 2500, M = 1500;
+  const sessions = Array.from({ length: N }, (_, i) => ({ created_at: T0 + i * 1000, data: { participant_id: `MK_${String(i + 1).padStart(4, "0")}`, seq: i + 1, times: { session_start_time: new Date(T0 + i * 1000).toISOString() }, flags: {}, parts: null, events: [] } }));
+  const states = Array.from({ length: M }, (_, i) => ({ key: `survey/A_${String(i).padStart(5, "0")}`, data: { id: `A_${String(i).padStart(5, "0")}` } }));
+  const realFetch = globalThis.fetch; let requests = 0;
+  globalThis.fetch = (async (input: any, init: any = {}) => {
+    const u = new URL(String(input)); if (u.origin !== BASE) return realFetch(input, init);
+    requests++;
+    const q = u.searchParams, limit = Math.min(Number(q.get("limit") ?? 1e9), 1000), offset = Number(q.get("offset") ?? 0); // (the cap)
+    if (u.pathname.endsWith("/research_sessions")) {
+      if (init.method === "HEAD") return new Response(null, { status: 206, headers: { "content-range": `0-0/${N}` } });
+      const rows = (q.get("order") ?? "").startsWith("created_at.desc") ? sessions.slice().reverse() : sessions;
+      return new Response(JSON.stringify(rows.slice(offset, offset + limit).map((r) => ({ data: r.data }))), { status: 200 });
+    }
+    const like = (q.get("key") ?? "").replace(/^like\./, "").replace(/\*$/, "");
+    return new Response(JSON.stringify(states.filter((r) => r.key.startsWith(like)).slice(offset, offset + limit)), { status: 200 });
+  }) as typeof fetch;
+  const before = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  process.env.SUPABASE_URL = BASE; process.env.SUPABASE_SERVICE_ROLE_KEY = "k";
+  const store = supabaseStore()!;
+  const all = await store.listSessions(), recent = await store.listSessions({ recent: 80 }), page = await store.listSessions({ offset: 2250, limit: 250 });
+  check("every session is listed, past the 1000-row page", all.length === N && all[N - 1].participant_id === "MK_2500", `${all.length}`);
+  check("…the console's table asks only for the newest", recent.length === 80 && recent[0].participant_id === "MK_2500" && recent[79].participant_id === "MK_2421");
+  check("…a part of the list for the sheet, and the count without the rows", page.length === 250 && page[0].participant_id === "MK_2251" && (await store.countSessions()) === N);
+  check("…and every survey record too", (await store.listState("survey/")).length === M);
+  const csvOut = await researchRequest(store, "GET", { sessions: "", csv: "" }, undefined, "k", "k");
+  const table = await researchRequest(store, "GET", { sessions: "", recent: "80" }, undefined, "k", "k");
+  check("the CSV has every session; the console is told the total", String(csvOut.body).split("\n").length === N + 1 && (table.body as any).sessions.length === 80 && (table.body as any).total === N);
+  globalThis.fetch = realFetch;
+  if (before.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = before.url;
+  if (before.key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = before.key;
+}
+
 // 8) the Google Sheet copy: the real Apps Script (tools/research-sheet.gs) on a pretend sheet, behind a pretend
 //    Google (which answers a POST with a redirect to the result, as Apps Script web apps do)
 {

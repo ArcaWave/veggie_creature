@@ -19,16 +19,26 @@ export async function send(op: string, data: Record<string, unknown> = {}) {
   return { ok: r.ok && j.ok !== false, error: j.error as string | undefined };
 }
 // every session to the researchers' Google Sheet again (api/_researchsheet.ts)
-export async function syncSheet(): Promise<{ ok: boolean; n?: number; total?: number; error?: string }> {
-  const r = await fetch("/api/research", { method: "POST", headers: headers(), body: JSON.stringify({ op: "sheetSync", by: "console" }) });
-  const j = await r.json().catch(() => ({}));
-  return { ok: r.ok && j.ok !== false, n: j.n, total: j.total, error: j.error ?? (r.ok ? undefined : `http_${r.status}`) };
+// (in parts — the server sends 250 sessions per request and says where the next part starts)
+export async function syncSheet(onProgress?: (done: number, total: number) => void): Promise<{ ok: boolean; total?: number; error?: string }> {
+  let offset: number | null = 0, total = 0;
+  while (offset !== null) {
+    const r: Response = await fetch("/api/research", { method: "POST", headers: headers(), body: JSON.stringify({ op: "sheetSync", by: "console", offset }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false) return { ok: false, total: j.total, error: j.error ?? `http_${r.status}` };
+    total = j.total ?? total;
+    onProgress?.(j.next ?? total, total);
+    offset = typeof j.next === "number" ? j.next : null;
+  }
+  return { ok: true, total };
 }
-export async function fetchSessions(): Promise<Session[]> {
-  const r = await fetch("/api/research?sessions", { headers: headers(), cache: "no-store" });
+// the newest sessions (the console's table) and how many there are in all
+export const RECENT = 80;
+export async function fetchSessions(): Promise<{ sessions: Session[]; total: number }> {
+  const r = await fetch(`/api/research?sessions&recent=${RECENT}`, { headers: headers(), cache: "no-store" });
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error ?? `http_${r.status}`);
-  return j.sessions ?? [];
+  return { sessions: j.sessions ?? [], total: j.total ?? (j.sessions ?? []).length };
 }
 export async function downloadCsv() {
   const r = await fetch("/api/research?sessions&csv", { headers: headers(), cache: "no-store" });

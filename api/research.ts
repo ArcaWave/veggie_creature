@@ -3,7 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { researchRequest, supabaseStore } from "./_researchstore.js";
 import { clientIp } from "./_ratelimit.js";
 
-export const maxDuration = 15;
+export const maxDuration = 60;
 
 // The suggestiveness experiment inside the kiosk (docs/RESEARCH.md). The kiosk (the plain domain) writes its
 // sessions without a key; the console reads and adds notes with RESEARCH_KEY (x-research-key). Supabase tables

@@ -12,7 +12,7 @@
 // The field survey's tablets (/survey, api/_survey.ts) read and write their records here too, with the key.
 import fs from "node:fs";
 import path from "node:path";
-import { handle, getLive, toCsv, type Store, type Session } from "./_researchcore.js";
+import { handle, getLive, toCsv, pick, type Store, type Session } from "./_researchcore.js";
 import { checkLimit } from "./_ratelimit.js";
 import { toSheet, sheetUrl } from "./_researchsheet.js";
 import { surveyRequest } from "./_survey.js";
@@ -32,6 +32,16 @@ async function supa(p: string, init: { method?: string; body?: unknown; prefer?:
   if (!r.ok) throw new Error(`supabase_http_${r.status}: ${(await r.text()).slice(0, 200)}`);
   return r.status === 204 || init.prefer?.includes("return=minimal") ? null : r.json();
 }
+// (PostgREST answers at most 1000 rows to one request, whatever limit is asked: read on until a short page)
+const PAGE = 1000;
+async function supaAll<T>(p: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let o = 0; ; o += PAGE) {
+    const rows = (await supa(`${p}&limit=${PAGE}&offset=${o}`)) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
 export function supabaseStore(): Store | null {
   if (!supaEnv()) return null;
   const enc = encodeURIComponent;
@@ -42,14 +52,27 @@ export function supabaseStore(): Store | null {
       const rows = (await supa(`research_state?key=eq.${enc(key)}&rev=eq.${rev}`, { method: "PATCH", body: { rev: rev + 1, data, updated_at: new Date().toISOString() }, prefer: "return=representation" })) as unknown[];
       return rows.length === 1;
     },
-    async listState(prefix) { const rows = (await supa(`research_state?key=like.${enc(prefix)}*&select=key,data&order=key.asc&limit=5000`)) as { key: string; data: any }[]; return rows; },
+    async listState(prefix) { return supaAll<{ key: string; data: any }>(`research_state?key=like.${enc(prefix)}*&select=key,data&order=key.asc`); },
     async readSession(pid) { const rows = (await supa(`research_sessions?participant_id=eq.${enc(pid)}&select=rev,data`)) as { rev: number; data: Session }[]; return rows[0] ?? null; },
     async writeSession(pid, seq, data, rev) {
       if (rev === null) { const r = await supa("research_sessions", { method: "POST", body: { participant_id: pid, seq, rev: 1, data }, prefer: "return=minimal" }); return !(r && "conflict" in r); }
       const rows = (await supa(`research_sessions?participant_id=eq.${enc(pid)}&rev=eq.${rev}`, { method: "PATCH", body: { rev: rev + 1, data, updated_at: new Date().toISOString() }, prefer: "return=representation" })) as unknown[];
       return rows.length === 1;
     },
-    async listSessions() { const rows = (await supa("research_sessions?select=data&order=seq.asc&limit=5000")) as { data: Session }[]; return rows.map((r) => r.data); },
+    async listSessions(o = {}) {
+      const ordered = "research_sessions?select=data&order=seq.asc,participant_id.asc";
+      const rows = o.recent ? ((await supa(`research_sessions?select=data&order=created_at.desc&limit=${Math.min(o.recent, PAGE)}`)) as { data: Session }[])
+        : o.limit ? ((await supa(`${ordered}&limit=${Math.min(o.limit, PAGE)}&offset=${o.offset ?? 0}`)) as { data: Session }[])
+        : await supaAll<{ data: Session }>(ordered);
+      return rows.map((r) => r.data);
+    },
+    async countSessions() { // (a count without the rows)
+      const env = supaEnv()!;
+      const r = await fetch(`${env.url}/rest/v1/research_sessions?select=participant_id`, { method: "HEAD", headers: { apikey: env.key, Authorization: `Bearer ${env.key}`, Prefer: "count=exact", Range: "0-0" } });
+      const m = /\/(\d+)$/.exec(r.headers.get("content-range") ?? "");
+      if (!m) throw new Error(`supabase_count_${r.status}`);
+      return Number(m[1]);
+    },
   };
 }
 export function fileStore(file: string): Store {
@@ -61,7 +84,8 @@ export function fileStore(file: string): Store {
     async listState(prefix) { return Object.entries(load().state as Record<string, { data: any }>).filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, data: v.data })); },
     async readSession(pid) { return load().sessions[pid] ?? null; },
     async writeSession(pid, _seq, data, rev) { const db = load(); if ((db.sessions[pid]?.rev ?? null) !== rev) return false; db.sessions[pid] = { rev: (rev ?? 0) + 1, data }; save(db); return true; },
-    async listSessions() { return (Object.values(load().sessions) as { data: Session }[]).map((s) => s.data).sort((a, b) => a.seq - b.seq); },
+    async listSessions(o) { return pick((Object.values(load().sessions) as { data: Session }[]).map((s) => s.data), o); },
+    async countSessions() { return Object.keys(load().sessions).length; },
   };
 }
 
@@ -96,23 +120,24 @@ export async function researchRequest(store: Store | null, method: string, query
     const sv = await surveyRequest(store, method, query, body, defer);
     if (sv) return sv;
     if (method === "GET") {
-      if ("sessions" in query) {
-        const rows = await store.listSessions();
-        return "csv" in query ? { status: 200, body: "﻿" + toCsv(rows), type: "text/csv; charset=utf-8" } : { status: 200, body: { sessions: rows } };
+      if ("sessions" in query) { // &csv: every session as a CSV · &recent=N: the newest N (the console's table) · else every session
+        if ("csv" in query) return { status: 200, body: "﻿" + toCsv(await store.listSessions()), type: "text/csv; charset=utf-8" };
+        const recent = Math.floor(Number(query.recent));
+        if (recent > 0) { const [sessions, total] = await Promise.all([store.listSessions({ recent: Math.min(recent, 500) }), store.countSessions()]); return { status: 200, body: { sessions, total } }; }
+        const sessions = await store.listSessions();
+        return { status: 200, body: { sessions, total: sessions.length } };
       }
       return { status: 200, body: { live: await getLive(store), now: Date.now(), sheet: !!sheetUrl() } };
     }
     if (method !== "POST") return { status: 405, body: { error: "GET or POST" } };
-    if (body?.op === "sheetSync") { // the console: every session to the sheet again (in parts: Apps Script likes them small)
+    if (body?.op === "sheetSync") { // the console: every session to the sheet again — one part per request ({ offset }),
+      // the console asking for the next until `next` is null (thousands of sessions don't fit one request's time)
       if (!sheetUrl()) return { status: 409, body: { ok: false, error: "sheet_not_configured" } };
-      const rows = await store.listSessions();
-      let n = 0;
-      for (let i = 0; i < rows.length; i += 250) {
-        const r = await toSheet(rows.slice(i, i + 250), undefined, 40_000);
-        if (!r.ok) return { status: 502, body: { ok: false, error: r.error, n } };
-        n += r.n ?? 0;
-      }
-      return { status: 200, body: { ok: true, n, total: rows.length } };
+      const offset = Math.max(0, Math.floor(Number(body.offset) || 0)), PART = 250;
+      const [rows, total] = await Promise.all([store.listSessions({ offset, limit: PART }), store.countSessions()]);
+      const r = await toSheet(rows, undefined, 45_000);
+      if (!r.ok) return { status: 502, body: { ok: false, error: r.error, offset, total } };
+      return { status: 200, body: { ok: true, n: r.n ?? 0, total, next: offset + rows.length < total && rows.length ? offset + rows.length : null } };
     }
     const r = await handle(store, body ?? {});
     if (r.ok && sheetUrl()) { const pids = touched(body, r); if (pids.length) defer(mirror(store, pids).catch((e) => console.warn("[research] sheet:", e))); }

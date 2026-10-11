@@ -58,7 +58,16 @@ export interface Store {
   listState<T>(prefix: string): Promise<{ key: string; data: T }[]>; // (the field survey's records: "survey/<id>")
   readSession(pid: string): Promise<{ rev: number; data: Session } | null>;
   writeSession(pid: string, seq: number, data: Session, rev: number | null): Promise<boolean>;
-  listSessions(): Promise<Session[]>;
+  // every session in order (no options) · the newest `recent` · or one page of the ordered list (offset, limit)
+  listSessions(o?: ListOpts): Promise<Session[]>;
+  countSessions(): Promise<number>;
+}
+export type ListOpts = { recent?: number; offset?: number; limit?: number };
+const started = (s: Session) => String(s.times?.session_start_time ?? "");
+export function pick(all: Session[], o: ListOpts = {}): Session[] { // (the stores that hold everything in memory)
+  const bySeq = all.slice().sort((a, b) => a.seq - b.seq || a.participant_id.localeCompare(b.participant_id));
+  if (o.recent) return all.slice().sort((a, b) => started(b).localeCompare(started(a))).slice(0, o.recent);
+  return o.limit ? bySeq.slice(o.offset ?? 0, (o.offset ?? 0) + o.limit) : bySeq;
 }
 export function memoryStore(): Store {
   const state = new Map<string, { rev: number; data: unknown }>(), sessions = new Map<string, { rev: number; data: Session }>();
@@ -69,7 +78,8 @@ export function memoryStore(): Store {
     async listState<T>(prefix: string) { return [...state.entries()].filter(([k]) => k.startsWith(prefix)).map(([key, s]) => ({ key, data: clone(s.data) as T })); },
     async readSession(pid) { const s = sessions.get(pid); return s ? { rev: s.rev, data: clone(s.data) } : null; },
     async writeSession(pid, _seq, data, rev) { const s = sessions.get(pid); if ((s?.rev ?? null) !== rev) return false; sessions.set(pid, { rev: (rev ?? 0) + 1, data: clone(data) }); return true; },
-    async listSessions() { return [...sessions.values()].map((s) => clone(s.data)).sort((a, b) => a.seq - b.seq); },
+    async listSessions(o) { return pick([...sessions.values()].map((s) => clone(s.data)), o); },
+    async countSessions() { return sessions.size; },
   };
 }
 

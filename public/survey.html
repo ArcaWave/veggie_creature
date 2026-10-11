@@ -201,6 +201,9 @@ tbody tr:hover{background:var(--surface-2)}
 .sum dd{margin:0;min-width:0;overflow-wrap:anywhere}
 @media (max-width:520px){.sum{grid-template-columns:1fr}.sum dd{margin-bottom:8px}}
 .danger{color:var(--warn)}
+.alarm{background:#b3261e;color:#fff;font-weight:700;font-size:15px;line-height:1.4;padding:10px 20px}
+.alarm small{display:block;font-weight:500;opacity:.92}
+.card.lock{border:2px solid #b3261e}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -216,6 +219,7 @@ tbody tr:hover{background:var(--surface-2)}
     <span id="sync" class="pill"><span class="dot"></span><span id="syncTxt">연결 확인 중</span></span>
     <button id="homeBtn" class="btn sm" hidden>참여자 목록</button>
   </div>
+  <div class="alarm" id="alarm" role="alert" hidden></div>
   <nav class="rail" id="rail" hidden></nav>
 </header>
 
@@ -268,7 +272,31 @@ const fmtTime=iso=>{if(!iso)return"";const d=new Date(iso);return d.toLocaleStri
 const rid=()=>Math.random().toString(36).slice(2,8);
 
 let device=LS.get("mk_device","");
-let outbox=LS.get("mk_outbox",{}); // id -> record (unsynced)
+// 서버에 아직 올라가지 않은 기록은 이 브라우저에 한 건씩 따로 보관한다("mk_rec_<id>"). 탭이 여러 개 열려 있어도
+// 각 탭은 자기가 고친 그 한 건만 쓰고 지우므로 다른 탭이 모은 기록을 덮어쓰지 못한다. (예전에는 보관함 전체를 한
+// 덩어리 "mk_outbox"로 써서, 오래 열려 있던 탭에서 한 번 누르면 그 사이 다른 탭이 모은 기록이 지워졌다.)
+const BOX="mk_rec_";
+const unsaved=new Set(); // (records this browser could not write down at all: they live in this tab only)
+function boxLoad(){
+  const m={};
+  try{
+    const old=localStorage.getItem("mk_outbox"); // the old single lump: split it once (never over a newer entry)
+    if(old){const o=JSON.parse(old)||{};for(const id in o){if(!localStorage.getItem(BOX+id))localStorage.setItem(BOX+id,JSON.stringify(o[id]))}localStorage.removeItem("mk_outbox")}
+  }catch(e){}
+  try{
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k.indexOf(BOX)!==0)continue;
+      try{const r=JSON.parse(localStorage.getItem(k));if(r&&r.id)m[r.id]=r}catch(e){}}
+  }catch(e){}
+  return m;
+}
+function boxPut(r){try{localStorage.setItem(BOX+r.id,JSON.stringify(r));return localStorage.getItem(BOX+r.id)!=null}catch(e){return false}}
+function boxDrop(id,updatedAt){try{const v=localStorage.getItem(BOX+id);if(v==null)return;const r=JSON.parse(v);if(!r||r.updatedAt===updatedAt)localStorage.removeItem(BOX+id)}catch(e){}}
+let outbox=boxLoad(); // id -> record (unsynced), this tab's view of the store
+function boxSync(){ // what other tabs have collected joins this tab's view; what they have sent leaves it
+  const st=boxLoad();
+  for(const id in st){if(!outbox[id]||String(st[id].updatedAt||"")>String(outbox[id].updatedAt||""))outbox[id]=st[id]}
+  for(const id in outbox){if(!st[id]&&!unsaved.has(id)&&!(cur&&cur.id===id))delete outbox[id]}
+}
 let remote={}; // id -> record from db
 let dbState="pending"; // pending | on | off (서버에 닿지 않음: 이 기기에 보관) | key (연구 비밀번호 필요)
 let sheetOn=false, sheetMsg="", keyMsg="", sheetLink=LS.get("vc-survey-sheet-url","");
@@ -315,6 +343,8 @@ async function api(method,body){
 let pulling=false,lastSig="";
 async function pull(){
   if(pulling)return;pulling=true;
+  if(dbState==="key"||!researchKey){try{const k=localStorage.getItem(KEY_STORE)||"";if(k)researchKey=k}catch(e){}} // (given in another tab)
+  boxSync();
   try{const j=await api("GET");const m={};for(const r of j.records||[])m[r.id]=r;remote=m;dbState="on";sheetOn=!!j.sheet}
   catch(e){dbState=e.code==="key"?"key":"off"}
   pulling=false;refreshSyncPill();homeIfChanged();
@@ -327,11 +357,34 @@ function homeIfChanged(){
 }
 setInterval(()=>{if(document.visibilityState==="visible")pull()},6000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")pull()});
+window.addEventListener("storage",e=>{ // another tab of this browser wrote something down, sent it, or was given the password
+  if(e.key&&e.key!==KEY_STORE&&e.key!=="mk_outbox"&&e.key.indexOf(BOX)!==0)return;
+  if(e.key===KEY_STORE&&e.newValue){researchKey=e.newValue;pull();return}
+  boxSync();refreshSyncPill();homeIfChanged();
+});
+// may this tablet start a new participant? Not before the research password is in: without it nothing reaches the server
+const locked=()=>dbState==="key"||(!researchKey&&dbState!=="on");
 
 /* ---------- sync ---------- */
 function setSync(kind,txt){const el=document.getElementById("sync");el.className="pill "+(kind||"");document.getElementById("syncTxt").textContent=txt}
+let unsentSince=0;
+function refreshAlarm(n){
+  const el=document.getElementById("alarm");
+  if(!n){unsentSince=0;el.hidden=true;return}
+  if(!unsentSince)unsentSince=Date.now();
+  const stuck=Date.now()-unsentSince>30000;
+  if(!(locked()||dbState==="off"||stuck||unsaved.size)){el.hidden=true;return}
+  const why=unsaved.size?"이 브라우저가 저장 공간을 쓰지 못하고 있어요. 이 탭을 닫거나 새로고침하지 말고 CSV 내보내기를 해 주세요."
+    :locked()?"연구 비밀번호가 없어서예요. 참여자 목록 화면에서 비밀번호를 넣으면 바로 올라갑니다."
+    :dbState==="off"?"인터넷에 연결되지 않았어요. 와이파이를 확인해 주세요 — 연결되면 자동으로 올라갑니다."
+    :"서버가 받지 않고 있어요. 참여자 목록에서 CSV 내보내기를 해 두고 담당자에게 알려 주세요.";
+  el.innerHTML=`⚠ 서버에 저장되지 않은 기록 ${n}건 — 지금은 이 태블릿에만 있어요<small>${why}</small>`;
+  el.hidden=false;
+}
+setInterval(()=>refreshAlarm(Object.keys(outbox).length),5000);
 function refreshSyncPill(){
   const n=Object.keys(outbox).length;
+  refreshAlarm(n);
   if(dbState==="pending"){setSync("","연결 확인 중");return}
   if(dbState==="key"){setSync("warn",n?`비밀번호 필요 · 보관 ${n}건`:"비밀번호 필요");return}
   if(dbState==="off"){setSync("warn",n?`이 기기에만 저장 · ${n}건`:"이 기기에만 저장");return}
@@ -341,8 +394,9 @@ let saveTimer=null, saving=false, saveAgain=false;
 function touch(){
   if(!cur)return;
   cur.updatedAt=nowISO();
-  outbox[cur.id]=JSON.parse(JSON.stringify(cur));
-  LS.set("mk_outbox",outbox);
+  const copy=JSON.parse(JSON.stringify(cur));
+  outbox[cur.id]=copy;
+  if(boxPut(copy))unsaved.delete(cur.id);else unsaved.add(cur.id);
   refreshSyncPill();
   clearTimeout(saveTimer);saveTimer=setTimeout(flush,700);
 }
@@ -350,12 +404,14 @@ async function flush(){
   if(dbState==="key")return;
   if(saving){saveAgain=true;return}
   saving=true;
+  boxSync();
   const ids=Object.keys(outbox);
   for(const id of ids){
     const rec=outbox[id];
     try{
       await api("POST",{op:"surveyPut",by:"survey",record:rec});
-      if(outbox[id]&&outbox[id].updatedAt===rec.updatedAt){delete outbox[id]}
+      boxDrop(id,rec.updatedAt); // (only if it hasn't been edited since — here or in another tab)
+      if(outbox[id]&&outbox[id].updatedAt===rec.updatedAt){delete outbox[id];unsaved.delete(id)}
       remote[id]=rec;if(dbState!=="on"){dbState="on"}
     }catch(e){
       if(e.code==="key"){dbState="key";break}
@@ -363,7 +419,6 @@ async function flush(){
       dbState="off";break; // (the server is out of reach: again in a moment)
     }
   }
-  LS.set("mk_outbox",outbox);
   saving=false;refreshSyncPill();homeIfChanged();
   if(saveAgain){saveAgain=false;flush()}
 }
@@ -371,6 +426,7 @@ setInterval(()=>{if(Object.keys(outbox).length)flush()},15000);
 window.addEventListener("online",()=>flush());
 
 function allRecords(){
+  boxSync();
   const m=Object.assign({},remote);
   for(const id in outbox){m[id]=Object.assign({},outbox[id],{_local:true})}
   return Object.values(m).sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
@@ -570,10 +626,10 @@ function renderHome(){
   main.innerHTML=`<div class="stack">
   <div class="row" style="align-items:flex-end"><div style="flex:1;min-width:240px"><div class="eyebrow">팝업 현장 데이터</div><h1>참여자 목록</h1>
   <p class="sub" style="margin:0">여러 태블릿에서 동시에 입력해도 이 목록에 함께 모입니다.</p></div>
-  <div class="row"><button class="btn" id="csvBtn">CSV 내보내기</button><button class="btn primary" id="newBtn">새 참여자 시작</button></div></div>
+  <div class="row"><button class="btn" id="csvBtn">CSV 내보내기</button><button class="btn primary" id="newBtn"${locked()&&dbState!=="pending"?" disabled":""}>새 참여자 시작</button></div></div>
   ${dbState==="off"?`<div class="banner">지금은 서버에 연결되지 않아 이 기기에만 저장됩니다. 연결되면 자동으로 전송됩니다.</div>`:""}
-  ${dbState==="key"?`<div class="card stack" style="gap:12px"><h2 style="margin:0">연구 비밀번호</h2>
-    <p class="note" style="margin:0">이 태블릿에서 처음 한 번만 넣으면 기억합니다(연구자 콘솔과 같은 비밀번호). 넣기 전에 입력한 응답도 이 태블릿에 보관됐다가 함께 저장됩니다.</p>
+  ${locked()&&dbState!=="pending"?`<div class="card stack lock" style="gap:12px"><h2 style="margin:0">🔒 연구 비밀번호를 넣어야 시작할 수 있어요</h2>
+    <p class="note" style="margin:0">비밀번호가 없으면 응답이 서버에 저장되지 않습니다. 이 태블릿에서 처음 한 번만 넣으면 기억합니다(연구자 콘솔과 같은 비밀번호 — 담당 연구자에게 물어보세요).${Object.keys(outbox).length?` <b>이 태블릿에 보관된 ${Object.keys(outbox).length}건은 비밀번호를 넣는 즉시 서버로 올라갑니다.</b>`:""}${dbState==="off"?" 지금은 인터넷 연결도 확인해 주세요.":""}</p>
     <div class="row" style="flex-wrap:nowrap"><input type="password" id="f-key" autocomplete="off" placeholder="연구 비밀번호"><button class="btn primary" id="keyBtn" style="flex:none">확인</button></div>
     ${keyMsg?`<div class="banner">${esc(keyMsg)}</div>`:""}</div>`:""}
   <div class="stats">
@@ -620,7 +676,7 @@ function go(i){
 /* ---------- events ---------- */
 document.addEventListener("click",e=>{
   const t=e.target.closest("button,tr[data-open]");if(!t)return;
-  if(t.id==="newBtn"){newRecord();return}
+  if(t.id==="newBtn"){if(locked()&&dbState!=="pending"){const k=document.getElementById("f-key");if(k)k.focus();return}newRecord();return}
   if(t.id==="homeBtn"){flush();renderHome();return}
   if(t.id==="csvBtn"){exportCSV();return}
   if(t.id==="keyBtn"){saveKey();return}
@@ -708,6 +764,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 
 /* ---------- boot ---------- */
 renderHome();refreshSyncPill();
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 pull();
 })();
 </script>
